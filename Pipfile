@@ -5,11 +5,13 @@ name = "pypi"
 
 [packages]
 ortools = "*"
+pyyaml = "*"
 
 [dev-packages]
 hypothesis = "*"
 ruff = "*"
 mypy = "*"
+types-pyyaml = "*"
 
 [requires]
-python_version = "3.13"
+python_version = "3.14"

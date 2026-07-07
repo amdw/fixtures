@@ -3,7 +3,7 @@
 line-length = 88
 indent-width = 4
 
-target-version = "py313"
+target-version = "py314"
 
 [tool.ruff.lint]
 # Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
@@ -46,10 +46,12 @@ known-first-party = ["fmodel", "genfixtures"]
 [tool.ruff.lint.per-file-ignores]
 "*_test.py" = ["S101", "PT"]  # Allow assert statements and unittest-style assertions in test files
 "genfixtures.py" = ["T201"]  # Allow print statements in fixtures generator
+"run.py" = ["T201"]  # Allow print statements in run CLI
+"build_indexes.py" = ["T201"]  # Allow print statements in index-rebuild CLI
 
 [tool.mypy]
 # Basic configuration
-python_version = "3.13"
+python_version = "3.14"
 warn_return_any = true
 warn_unused_configs = true
 

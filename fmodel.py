@@ -1,4 +1,4 @@
-# Copyright 2025 Andrew Medworth
+# Copyright 2025, 2026 Andrew Medworth
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,10 +28,18 @@ class Team:
     division: int
     club: str
     index: int
+    name_override: str | None = None
 
     @property
     def name(self) -> str:
-        return f"{self.club} {self.index}"
+        """A display name usable when no richer club/team metadata is available.
+
+        Reports built from a fixturespec.Spec should prefer resolving names via
+        its clubs mapping (so club display names and name_override are used
+        consistently); this is a fallback for contexts (e.g. genfixtures.py)
+        where `club` already doubles as a display name.
+        """
+        return self.name_override if self.name_override else f"{self.club} {self.index}"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -47,6 +55,16 @@ class ScheduledFixture:
 
 
 ClubT = str
+
+
+@dataclasses.dataclass(frozen=True)
+class Club:
+    """Reporting metadata for a club. Not used by the solver itself."""
+
+    name: str
+    home_venue: str
+    home_start_time: str
+    home_time_limit: str  # chess time control, e.g. "75+15" for 75 min + 15 sec/move
 
 
 @dataclasses.dataclass(frozen=True)
