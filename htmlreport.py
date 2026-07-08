@@ -164,6 +164,29 @@ def _rows(
     return rows
 
 
+def _team_rows(
+    team: fmodel.Team,
+    fixtures: Collection[fmodel.ScheduledFixture],
+    clubs: Mapping[str, fmodel.Club],
+) -> list[list[str]]:
+    rows = []
+    for sf in _by_date(fixtures, clubs):
+        is_home = sf.fixture.home_team == team
+        opponent = sf.fixture.away_team if is_home else sf.fixture.home_team
+        home_club = clubs[sf.fixture.home_team.club]
+        rows.append(
+            [
+                _fmt_date(sf.date),
+                _team_name(opponent, clubs),
+                "Home" if is_home else "Away",
+                home_club.home_venue,
+                home_club.home_start_time,
+                home_club.home_time_limit,
+            ]
+        )
+    return rows
+
+
 def _nav(links: list[tuple[str, str]]) -> str:
     items = "".join(
         f'<li><a href="{href}">{html.escape(text)}</a></li>\n' for href, text in links
@@ -176,6 +199,7 @@ def _division_number(path: Path) -> int:
 
 
 _MATCH_HEADERS = ["Date", "Home", "Away", "Venue", "Start", "Time Limit"]
+_TEAM_MATCH_HEADERS = ["Date", "Opponent", "Home/Away", "Venue", "Start", "Time Limit"]
 _MATCH_HEADERS_WITH_DIVISION = [
     "Date",
     "Division",
@@ -244,7 +268,8 @@ def generate_report(
                 if sf.fixture.home_team == team or sf.fixture.away_team == team
             ]
             body += f"<h2>{html.escape(_team_name(team, clubs))}</h2>\n"
-            body += _table(_MATCH_HEADERS, _rows(team_fixtures, clubs))
+            body += f"<h3>Division {team.division}</h3>\n"
+            body += _table(_TEAM_MATCH_HEADERS, _team_rows(team, team_fixtures, clubs))
         (output_dir / f"club-{slugify(club_id)}.html").write_text(
             _page(club_name, body)
         )
