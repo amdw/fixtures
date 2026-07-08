@@ -39,7 +39,7 @@ _STYLE = """
            margin: 2rem; color: #1a1a1a; }
     h1 { margin-top: 0; }
     .table-scroll { overflow-x: auto; margin-bottom: 2rem; }
-    table { border-collapse: collapse; width: 100%; max-width: 60rem; }
+    table { border-collapse: collapse; width: 100%; max-width: 80rem; }
     th, td { border: 1px solid #ccc; padding: 0.4rem 0.8rem; text-align: left; }
     th { background: #f0f0f0; }
     tr:nth-child(even) { background: #fafafa; }
@@ -164,12 +164,17 @@ def _rows(
     return rows
 
 
+def _days_since_previous(prev_date: date | None, this_date: date) -> str:
+    return "" if prev_date is None else str((this_date - prev_date).days)
+
+
 def _team_rows(
     team: fmodel.Team,
     fixtures: Collection[fmodel.ScheduledFixture],
     clubs: Mapping[str, fmodel.Club],
 ) -> list[list[str]]:
     rows = []
+    prev_date: date | None = None
     for sf in _by_date(fixtures, clubs):
         is_home = sf.fixture.home_team == team
         opponent = sf.fixture.away_team if is_home else sf.fixture.home_team
@@ -182,8 +187,10 @@ def _team_rows(
                 home_club.home_venue,
                 home_club.home_start_time,
                 home_club.home_time_limit,
+                _days_since_previous(prev_date, sf.date),
             ]
         )
+        prev_date = sf.date
     return rows
 
 
@@ -199,7 +206,15 @@ def _division_number(path: Path) -> int:
 
 
 _MATCH_HEADERS = ["Date", "Home", "Away", "Venue", "Start", "Time Limit"]
-_TEAM_MATCH_HEADERS = ["Date", "Opponent", "Home/Away", "Venue", "Start", "Time Limit"]
+_TEAM_MATCH_HEADERS = [
+    "Date",
+    "Opponent",
+    "Home/Away",
+    "Venue",
+    "Start",
+    "Time Limit",
+    "Days Since Last",
+]
 _MATCH_HEADERS_WITH_DIVISION = [
     "Date",
     "Div",
