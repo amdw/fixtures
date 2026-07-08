@@ -38,13 +38,19 @@ _STYLE = """
     body { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
            margin: 2rem; color: #1a1a1a; }
     h1 { margin-top: 0; }
-    table { border-collapse: collapse; margin-bottom: 2rem; width: 100%; max-width: 60rem; }
+    .table-scroll { overflow-x: auto; margin-bottom: 2rem; }
+    table { border-collapse: collapse; width: 100%; max-width: 60rem; }
     th, td { border: 1px solid #ccc; padding: 0.4rem 0.8rem; text-align: left; }
     th { background: #f0f0f0; }
     tr:nth-child(even) { background: #fafafa; }
     a { color: #0645ad; }
     nav ul { list-style: none; padding: 0; }
     nav li { margin-bottom: 0.3rem; }
+
+    @media (max-width: 40rem) {
+        body { margin: 1rem; }
+        th, td { padding: 0.4rem 0.5rem; white-space: nowrap; }
+    }
 """
 
 _TITLE_RE = re.compile(r"<title>(.*?)</title>", re.DOTALL)
@@ -66,6 +72,7 @@ def _page(title: str, body: str) -> str:
         '<html lang="en">\n'
         "<head>\n"
         '<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>{html.escape(title)}</title>\n"
         f"<style>{_STYLE}</style>\n"
         "</head>\n"
@@ -95,10 +102,12 @@ def _table(headers: list[str], rows: list[list[str]]) -> str:
     else:
         body_html = f'<tr><td colspan="{len(headers)}"><em>No matches</em></td></tr>\n'
     return (
+        '<div class="table-scroll">\n'
         "<table>\n"
         f"<thead><tr>{head_html}</tr></thead>\n"
         f"<tbody>\n{body_html}</tbody>\n"
         "</table>\n"
+        "</div>\n"
     )
 
 

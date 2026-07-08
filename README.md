@@ -16,6 +16,11 @@ pipenv install --dev
 pipenv shell
 ```
 
+Alternatively, prefix individual commands with `pipenv run` (e.g. `pipenv run
+python run_tests.py`) instead of entering a `pipenv shell` session — useful
+in non-interactive contexts, since the venv already exists once
+`pipenv install --dev` has been run.
+
 ## Generating fixtures
 
 Describe the clubs, teams, divisions and constraints in a YAML specification
