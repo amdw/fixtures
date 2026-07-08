@@ -63,7 +63,7 @@ def slugify(value: str) -> str:
 
 
 def _fmt_date(d: date) -> str:
-    return f"{d.strftime('%a')} {d.isoformat()}"
+    return d.strftime("%a %d %b %Y")
 
 
 def _page(title: str, body: str) -> str:
@@ -202,7 +202,7 @@ _MATCH_HEADERS = ["Date", "Home", "Away", "Venue", "Start", "Time Limit"]
 _TEAM_MATCH_HEADERS = ["Date", "Opponent", "Home/Away", "Venue", "Start", "Time Limit"]
 _MATCH_HEADERS_WITH_DIVISION = [
     "Date",
-    "Division",
+    "Div",
     "Home",
     "Away",
     "Venue",
