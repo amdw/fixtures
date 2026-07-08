@@ -40,6 +40,8 @@ class Spec:
 
     parameters: fmodel.Parameters
     clubs: Mapping[str, fmodel.Club]
+    name: str = ""
+    draft: bool = False
 
 
 def _require_mapping(value: Any, context: str) -> dict[str, Any]:
@@ -57,6 +59,12 @@ def _require_str(value: Any, context: str) -> str:
 def _require_int(value: Any, context: str) -> int:
     if not isinstance(value, int):
         raise SpecError(f"{context} must be an integer, got {value!r}")
+    return value
+
+
+def _require_bool(value: Any, context: str) -> bool:
+    if not isinstance(value, bool):
+        raise SpecError(f"{context} must be a boolean, got {value!r}")
     return value
 
 
@@ -262,4 +270,6 @@ def load_spec(spec_path: str | Path) -> Spec:
         unavailable_away_dates=unavailable_away_dates,
         **kwargs,
     )
-    return Spec(parameters=parameters, clubs=clubs)
+    name = _require_str(data.get("name", ""), f"{path}: 'name'")
+    draft = _require_bool(data.get("draft", False), f"{path}: 'draft'")
+    return Spec(parameters=parameters, clubs=clubs, name=name, draft=draft)

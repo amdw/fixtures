@@ -1,3 +1,5 @@
+name: "2025-26 Season"
+draft: true
 min_gap_days: 7
 max_concurrent_home_matches: 2
 clubs:

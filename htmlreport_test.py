@@ -200,6 +200,47 @@ class TestGenerateReport(unittest.TestCase):
         content = (out2 / "club-lonely-fc.html").read_text()
         self.assertIn("No matches", content)
 
+    def test_no_name_or_draft_by_default(self):
+        for filename in ["all-matches.html", "division-1.html", "club-harrow.html"]:
+            content = (self.output_dir / filename).read_text()
+            self.assertNotIn('class="banner"', content)
+            self.assertNotIn('class="draft-label"', content)
+        self.assertNotIn('class="banner"', self.index_path.read_text())
+
+    def test_run_name_and_draft_shown_on_every_page(self):
+        out2 = Path(self._tmpdir.name) / "out-named"
+        index_path = htmlreport.generate_report(
+            self.fixtures,
+            self.teams,
+            self.clubs,
+            out2,
+            name="2025-26 Season",
+            draft=True,
+        )
+        for filename in [
+            "all-matches.html",
+            "division-1.html",
+            "club-harrow.html",
+            index_path.name,
+        ]:
+            content = (out2 / filename).read_text()
+            self.assertIn('<div class="banner draft">', content)
+            self.assertIn('<span class="draft-label">DRAFT</span>', content)
+            self.assertIn('<span class="run-name">2025-26 Season</span>', content)
+
+    def test_index_recovers_name_and_draft_from_disk_alone(self):
+        """Rebuilding index.html from scratch must recover the run name/draft status
+        from the other report files, since build_run_index has no other source for them."""
+        out2 = Path(self._tmpdir.name) / "out-rebuilt"
+        index_path = htmlreport.generate_report(
+            self.fixtures, self.teams, self.clubs, out2, name="Test Run", draft=True
+        )
+        index_path.unlink()
+        rebuilt_path = htmlreport.build_run_index(out2)
+        content = rebuilt_path.read_text()
+        self.assertIn('<span class="draft-label">DRAFT</span>', content)
+        self.assertIn('<span class="run-name">Test Run</span>', content)
+
 
 class TestWriteRunsIndex(unittest.TestCase):
     def setUp(self):

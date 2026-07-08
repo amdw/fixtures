@@ -38,6 +38,8 @@ so it's safe to rerun after editing the spec.
 ### Spec file format
 
 ```yaml
+name: "2025-26 Season"           # optional, defaults to "" (no subtitle shown)
+draft: false                    # optional, defaults shown here
 min_gap_days: 7                 # optional, defaults shown here
 max_concurrent_home_matches: 2  # optional, defaults shown here
 
@@ -107,6 +109,11 @@ Each run's folder contains:
 
 Venue, start time and time limit on each match are always the *home* team's
 club's values.
+
+If the spec sets `name`, every page shows it in a banner above the page
+title (including `index.html`, which recovers it from one of the other
+report files rather than needing the spec re-read). If `draft: true` is
+also set, that banner is made prominent and prefixed "DRAFT".
 
 ## Generating synthetic test fixtures
 

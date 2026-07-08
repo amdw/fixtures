@@ -105,6 +105,24 @@ class TestLoadSpec(unittest.TestCase):
         self.assertEqual(spec.parameters.unavailable_away_dates["hackney"], [])
         self.assertEqual(spec.parameters.min_gap_days, 7)
         self.assertEqual(spec.parameters.max_concurrent_home_matches, 2)
+        self.assertEqual(spec.name, "")
+        self.assertFalse(spec.draft)
+
+    def test_run_name_and_draft(self):
+        path = self._write(_MINIMAL_SPEC + '\nname: "2025-26 Season"\ndraft: true\n')
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.name, "2025-26 Season")
+        self.assertTrue(spec.draft)
+
+    def test_draft_must_be_a_boolean(self):
+        path = self._write(_MINIMAL_SPEC + "\ndraft: notabool\n")
+        with self.assertRaisesRegex(fixturespec.SpecError, "draft"):
+            fixturespec.load_spec(path)
+
+    def test_name_must_be_a_string(self):
+        path = self._write(_MINIMAL_SPEC + "\nname: [1, 2]\n")
+        with self.assertRaisesRegex(fixturespec.SpecError, "name"):
+            fixturespec.load_spec(path)
 
     def test_name_override(self):
         path = self._write(

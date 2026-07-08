@@ -38,7 +38,12 @@ def run(spec_path: Path, output_dir: Path) -> Path:
     spec = fixturespec.load_spec(spec_path)
     fixtures = fmodel.solve(spec.parameters)
     return htmlreport.generate_report(
-        fixtures, spec.parameters.teams, spec.clubs, output_dir
+        fixtures,
+        spec.parameters.teams,
+        spec.clubs,
+        output_dir,
+        name=spec.name,
+        draft=spec.draft,
     )
 
 
