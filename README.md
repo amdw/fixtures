@@ -41,7 +41,6 @@ so it's safe to rerun after editing the spec.
 name: "2025-26 Season"           # optional, defaults to "" (no subtitle shown)
 draft: false                    # optional, defaults shown here
 min_gap_days: 7                 # optional, defaults shown here
-max_concurrent_home_matches: 2  # optional, defaults shown here
 
 clubs:
   albany:                       # club ID: stable, referenced from teams/home_dates/etc.
@@ -82,17 +81,31 @@ home_dates:
 unavailable_away_dates:
   clubs:
     albany: [2025-12-25]
+
+max_concurrent_home_matches:
+  default: 2                      # optional; applies to any club not listed below
+  clubs:
+    albany: 3                     # shorthand for {default: 3}
+    hackney:
+      default: 2
+      overrides:                  # per-date overrides of that club's default
+        2025-09-08: 3
 ```
+
+If `max_concurrent_home_matches.default` is omitted, every club must have an
+explicit entry under `max_concurrent_home_matches.clubs` — there's no
+built-in fallback value.
 
 Club and team IDs are your own stable keys (letters/digits/hyphens are safest,
 since they're also used to build report filenames) — used to cross-reference
 clubs from teams, teams from `divisions`, and clubs from `home_dates`/
-`unavailable_away_dates`. Every team's `division` must match the division
-list it's listed under in `divisions`, and every team must appear in exactly
-one division list. Dates are plain ISO8601 (`yyyy-mm-dd`), quoted or
-unquoted. `home_dates`/`unavailable_away_dates` only support a `clubs` child
-section today (a `teams` child section for per-team date overrides is
-planned). New constraint types can be added to `fixturespec.py` and
+`unavailable_away_dates`/`max_concurrent_home_matches`. Every team's
+`division` must match the division list it's listed under in `divisions`,
+and every team must appear in exactly one division list. Dates are plain
+ISO8601 (`yyyy-mm-dd`), quoted or unquoted. `home_dates`/
+`unavailable_away_dates` only support a `clubs` child section today (a
+`teams` child section for per-team overrides
+is planned). New constraint types can be added to `fixturespec.py` and
 `fmodel.Parameters` as they're needed.
 
 ### HTML report

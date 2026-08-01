@@ -1,4 +1,4 @@
-# Copyright 2025 Andrew Medworth
+# Copyright 2025, 2026 Andrew Medworth
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -153,7 +153,9 @@ _UNAVAILABLE_AWAY_DATES = {
     ),
 }
 
-_MAX_CONCURRENT_HOME_MATCHES = 2
+_MAX_CONCURRENT_HOME_MATCHES = {
+    club: fmodel.MaxConcurrentHomeMatches(default=2) for club in _HOME_DATES
+}
 _MIN_MATCH_GAP_DAYS = 7
 
 

@@ -68,12 +68,27 @@ class Club:
 
 
 @dataclasses.dataclass(frozen=True)
+class MaxConcurrentHomeMatches:
+    """A club's home-match concurrency limit: a default, overridable for specific dates."""
+
+    default: int
+    overrides: Mapping[date, int] = dataclasses.field(default_factory=dict)
+
+    def for_date(self, d: date) -> int:
+        return self.overrides.get(d, self.default)
+
+
+@dataclasses.dataclass(frozen=True)
 class Parameters:
     teams: Collection[Team]
     home_dates: Mapping[ClubT, list[date]]
     unavailable_away_dates: Mapping[ClubT, list[date]]
+    max_concurrent_home_matches: Mapping[ClubT, MaxConcurrentHomeMatches]
     min_gap_days: int = 7
-    max_concurrent_home_matches: int = 2
+
+    def max_concurrent_home_matches_for(self, club: ClubT, d: date) -> int:
+        """The most home matches `club` may host on date `d`."""
+        return self.max_concurrent_home_matches[club].for_date(d)
 
 
 def date_windows(dates: Collection[date], window_days: int) -> list[frozenset[date]]:
@@ -145,12 +160,10 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
             window_vars = [v for d in window for v in team_vars_by_date[d]]
             model.add(cp_model.LinearExpr.Sum(window_vars) <= 1)
 
-    for club_home_date_vars in vars_by_club_home_date.values():
+    for (club, match_date), club_home_date_vars in vars_by_club_home_date.items():
         # Each club can host at most max_concurrent_home_matches matches per date
-        model.add(
-            cp_model.LinearExpr.Sum(club_home_date_vars)
-            <= params.max_concurrent_home_matches
-        )
+        max_matches = params.max_concurrent_home_matches_for(club, match_date)
+        model.add(cp_model.LinearExpr.Sum(club_home_date_vars) <= max_matches)
 
     solver = cp_model.CpSolver()
     status = solver.Solve(model)

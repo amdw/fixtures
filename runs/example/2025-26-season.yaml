@@ -1,7 +1,6 @@
 name: "2025-26 Season"
 draft: true
 min_gap_days: 7
-max_concurrent_home_matches: 2
 clubs:
   albany:
     name: Albany
@@ -646,4 +645,10 @@ unavailable_away_dates:
     - '2026-05-07'
     - '2026-05-21'
     - '2026-05-28'
-
+max_concurrent_home_matches:
+  default: 2
+  clubs:
+    hammersmith:
+      default: 2
+      overrides:
+        '2025-11-13': 3

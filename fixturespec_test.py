@@ -22,7 +22,11 @@ from pathlib import Path
 import fixturespec
 import fmodel
 
-_MINIMAL_SPEC = """
+# A valid spec minus 'max_concurrent_home_matches', for tests that need to append
+# their own version of that section (appending a second copy on top of _MINIMAL_SPEC's
+# own would create a duplicate top-level YAML key, which PyYAML resolves by silently
+# letting the later one clobber the earlier one).
+_MINIMAL_SPEC_NO_MCHM = """
 clubs:
   albany:
     name: Albany
@@ -57,6 +61,8 @@ unavailable_away_dates:
   clubs:
     albany: [2025-12-25]
 """
+
+_MINIMAL_SPEC = _MINIMAL_SPEC_NO_MCHM + "max_concurrent_home_matches:\n  default: 1\n"
 
 
 class TestLoadSpec(unittest.TestCase):
@@ -104,7 +110,16 @@ class TestLoadSpec(unittest.TestCase):
         # hackney has no unavailable_away_dates entry, should default to empty
         self.assertEqual(spec.parameters.unavailable_away_dates["hackney"], [])
         self.assertEqual(spec.parameters.min_gap_days, 7)
-        self.assertEqual(spec.parameters.max_concurrent_home_matches, 2)
+        # Neither club has its own entry, so both inherit _MINIMAL_SPEC's top-level
+        # max_concurrent_home_matches.default (1).
+        self.assertEqual(
+            spec.parameters.max_concurrent_home_matches["albany"],
+            fmodel.MaxConcurrentHomeMatches(default=1),
+        )
+        self.assertEqual(
+            spec.parameters.max_concurrent_home_matches["hackney"],
+            fmodel.MaxConcurrentHomeMatches(default=1),
+        )
         self.assertEqual(spec.name, "")
         self.assertFalse(spec.draft)
 
@@ -137,12 +152,100 @@ class TestLoadSpec(unittest.TestCase):
         self.assertEqual(team.name_override, "Hackney Herons")
 
     def test_overridden_constraints(self):
-        path = self._write(
-            _MINIMAL_SPEC + "\nmin_gap_days: 10\nmax_concurrent_home_matches: 3\n"
-        )
+        path = self._write(_MINIMAL_SPEC + "\nmin_gap_days: 10\n")
         spec = fixturespec.load_spec(path)
         self.assertEqual(spec.parameters.min_gap_days, 10)
-        self.assertEqual(spec.parameters.max_concurrent_home_matches, 3)
+
+    def test_duplicate_top_level_key_rejected(self):
+        path = self._write(_MINIMAL_SPEC + "\nmin_gap_days: 7\nmin_gap_days: 10\n")
+        with self.assertRaisesRegex(fixturespec.SpecError, "duplicate key"):
+            fixturespec.load_spec(path)
+
+    def test_duplicate_nested_key_rejected(self):
+        path = self._write(
+            _MINIMAL_SPEC_NO_MCHM + "max_concurrent_home_matches:\n"
+            "  clubs:\n"
+            "    albany: 1\n"
+            "    albany: 2\n"
+            "    hackney: 1\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "duplicate key"):
+            fixturespec.load_spec(path)
+
+    # These tests write standalone specs rather than extending _MINIMAL_SPEC, since
+    # _MINIMAL_SPEC already has a top-level max_concurrent_home_matches section and
+    # YAML silently lets a later duplicate top-level key clobber the earlier one.
+
+    def test_max_concurrent_home_matches_shorthand_int(self):
+        path = self._write(
+            _MINIMAL_SPEC_NO_MCHM + "max_concurrent_home_matches:\n"
+            "  default: 1\n"
+            "  clubs:\n"
+            "    albany: 3\n"
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(
+            spec.parameters.max_concurrent_home_matches["albany"],
+            fmodel.MaxConcurrentHomeMatches(default=3),
+        )
+        # hackney wasn't given its own entry, so it inherits the section-level default
+        self.assertEqual(
+            spec.parameters.max_concurrent_home_matches["hackney"],
+            fmodel.MaxConcurrentHomeMatches(default=1),
+        )
+
+    def test_max_concurrent_home_matches_default_and_overrides(self):
+        path = self._write(
+            _MINIMAL_SPEC_NO_MCHM + "max_concurrent_home_matches:\n"
+            "  clubs:\n"
+            "    albany:\n"
+            "      default: 2\n"
+            "      overrides:\n"
+            "        2025-09-01: 3\n"
+            "    hackney: 1\n"
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(
+            spec.parameters.max_concurrent_home_matches["albany"],
+            fmodel.MaxConcurrentHomeMatches(default=2, overrides={date(2025, 9, 1): 3}),
+        )
+
+    def test_max_concurrent_home_matches_missing_default(self):
+        path = self._write(
+            _MINIMAL_SPEC_NO_MCHM + "max_concurrent_home_matches:\n"
+            "  clubs:\n"
+            "    albany:\n"
+            "      overrides:\n"
+            "        2025-09-01: 3\n"
+            "    hackney: 1\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "default"):
+            fixturespec.load_spec(path)
+
+    def test_max_concurrent_home_matches_unknown_club(self):
+        path = self._write(
+            _MINIMAL_SPEC_NO_MCHM + "max_concurrent_home_matches:\n"
+            "  clubs:\n"
+            "    albany: 1\n"
+            "    hackney: 1\n"
+            "    nonexistent: 3\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
+            fixturespec.load_spec(path)
+
+    def test_max_concurrent_home_matches_missing_club_without_section_default(self):
+        path = self._write(
+            _MINIMAL_SPEC_NO_MCHM + "max_concurrent_home_matches:\n"
+            "  clubs:\n"
+            "    albany: 1\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "hackney"):
+            fixturespec.load_spec(path)
+
+    def test_max_concurrent_home_matches_section_omitted_entirely(self):
+        path = self._write(_MINIMAL_SPEC_NO_MCHM)
+        with self.assertRaisesRegex(fixturespec.SpecError, "albany.*hackney"):
+            fixturespec.load_spec(path)
 
     def test_missing_clubs(self):
         path = self._write("teams: {}\ndivisions: {}\n")

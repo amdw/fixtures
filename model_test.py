@@ -1,4 +1,4 @@
-# Copyright 2025 Andrew Medworth
+# Copyright 2025, 2026 Andrew Medworth
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -101,10 +101,11 @@ class TestSolve(unittest.TestCase):
             home_fixtures_by_club_date[key] += 1
 
         for (club, fixture_date), count in home_fixtures_by_club_date.items():
+            limit = self.params.max_concurrent_home_matches_for(club, fixture_date)
             self.assertLessEqual(
                 count,
-                self.params.max_concurrent_home_matches,
-                f"Club {club} has {count} home matches on {fixture_date}, exceeding limit of {self.params.max_concurrent_home_matches}",
+                limit,
+                f"Club {club} has {count} home matches on {fixture_date}, exceeding limit of {limit}",
             )
 
     def test_unavailable_away_dates(self):
@@ -222,7 +223,10 @@ class TestSolve(unittest.TestCase):
                 ],  # B can't play away on Jan 1 (when A is home)
             },
             min_gap_days=7,
-            max_concurrent_home_matches=1,
+            max_concurrent_home_matches={
+                "Test Club A": fmodel.MaxConcurrentHomeMatches(default=1),
+                "Test Club B": fmodel.MaxConcurrentHomeMatches(default=1),
+            },
         )
 
         # This should be impossible to schedule any fixtures due to conflicting constraints
