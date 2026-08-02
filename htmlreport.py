@@ -61,6 +61,7 @@ _STYLE = """
 
 _TITLE_RE = re.compile(r"<title>(.*?)</title>", re.DOTALL)
 _RUN_NAME_RE = re.compile(r'<span class="run-name">(.*?)</span>', re.DOTALL)
+_DESCRIPTION_RE = re.compile(r'<p class="description">(.*?)</p>', re.DOTALL)
 _DRAFT_MARKER = 'class="draft-label"'
 
 
@@ -74,7 +75,13 @@ def _fmt_date(d: date) -> str:
     return d.strftime("%a %d %b %Y")
 
 
-def _page(title: str, body: str, run_name: str = "", draft: bool = False) -> str:
+def _page(
+    title: str,
+    body: str,
+    run_name: str = "",
+    draft: bool = False,
+    description: str = "",
+) -> str:
     banner_html = ""
     if run_name or draft:
         parts = []
@@ -84,6 +91,9 @@ def _page(title: str, body: str, run_name: str = "", draft: bool = False) -> str
             parts.append(f'<span class="run-name">{html.escape(run_name)}</span>')
         classes = "banner draft" if draft else "banner"
         banner_html = f'<div class="{classes}">{" ".join(parts)}</div>\n'
+    description_html = ""
+    if description:
+        description_html = f'<p class="description">{html.escape(description)}</p>\n'
     return (
         "<!DOCTYPE html>\n"
         '<html lang="en">\n'
@@ -95,6 +105,7 @@ def _page(title: str, body: str, run_name: str = "", draft: bool = False) -> str
         "</head>\n"
         "<body>\n"
         f"{banner_html}"
+        f"{description_html}"
         f"<h1>{html.escape(title)}</h1>\n"
         f"{body}"
         "</body>\n"
@@ -117,6 +128,12 @@ def _page_run_name(path: Path) -> str:
 def _page_is_draft(path: Path) -> bool:
     """Recover whether a page previously written by _page() carried a draft banner."""
     return _DRAFT_MARKER in path.read_text()
+
+
+def _page_description(path: Path) -> str:
+    """Recover the description of a page previously written by _page(), if any."""
+    match = _DESCRIPTION_RE.search(path.read_text())
+    return html.unescape(match.group(1)) if match else ""
 
 
 def _table(headers: list[str], rows: list[list[str]]) -> str:
@@ -262,6 +279,7 @@ def generate_report(
     output_dir: Path,
     name: str = "",
     draft: bool = False,
+    description: str = "",
 ) -> Path:
     """Write all HTML report pages for a solved fixture list into output_dir.
 
@@ -290,6 +308,7 @@ def generate_report(
             _table(_MATCH_HEADERS_WITH_DIVISION, _rows_with_division(fixtures, clubs)),
             name,
             draft,
+            description,
         )
     )
 
@@ -301,6 +320,7 @@ def generate_report(
                 _table(_MATCH_HEADERS, _rows(fixtures_by_division[division], clubs)),
                 name,
                 draft,
+                description,
             )
         )
 
@@ -321,7 +341,7 @@ def generate_report(
             body += f"<h3>Division {team.division}</h3>\n"
             body += _table(_TEAM_MATCH_HEADERS, _team_rows(team, team_fixtures, clubs))
         (output_dir / f"club-{slugify(club_id)}.html").write_text(
-            _page(club_name, body, name, draft)
+            _page(club_name, body, name, draft, description)
         )
 
     return build_run_index(output_dir)
@@ -349,9 +369,10 @@ def build_run_index(run_dir: Path) -> Path:
     )
     run_name = _page_run_name(reference_page) if reference_page else ""
     draft = _page_is_draft(reference_page) if reference_page else False
+    description = _page_description(reference_page) if reference_page else ""
 
     index_path = run_dir / "index.html"
-    index_path.write_text(_page("Fixtures", body, run_name, draft))
+    index_path.write_text(_page("Fixtures", body, run_name, draft, description))
     return index_path
 
 

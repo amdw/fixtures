@@ -207,6 +207,12 @@ class TestGenerateReport(unittest.TestCase):
             self.assertNotIn('class="draft-label"', content)
         self.assertNotIn('class="banner"', self.index_path.read_text())
 
+    def test_no_description_by_default(self):
+        for filename in ["all-matches.html", "division-1.html", "club-harrow.html"]:
+            content = (self.output_dir / filename).read_text()
+            self.assertNotIn('class="description"', content)
+        self.assertNotIn('class="description"', self.index_path.read_text())
+
     def test_run_name_and_draft_shown_on_every_page(self):
         out2 = Path(self._tmpdir.name) / "out-named"
         index_path = htmlreport.generate_report(
@@ -240,6 +246,40 @@ class TestGenerateReport(unittest.TestCase):
         content = rebuilt_path.read_text()
         self.assertIn('<span class="draft-label">DRAFT</span>', content)
         self.assertIn('<span class="run-name">Test Run</span>', content)
+
+    def test_description_shown_on_every_page(self):
+        out2 = Path(self._tmpdir.name) / "out-described"
+        index_path = htmlreport.generate_report(
+            self.fixtures,
+            self.teams,
+            self.clubs,
+            out2,
+            description="Final schedule; refer to ECF LMS for authoritative dates.",
+        )
+        for filename in [
+            "all-matches.html",
+            "division-1.html",
+            "club-harrow.html",
+            index_path.name,
+        ]:
+            content = (out2 / filename).read_text()
+            self.assertIn('<p class="description">', content)
+            self.assertIn("Final schedule", content)
+
+    def test_index_recovers_description_from_disk_alone(self):
+        """Rebuilding index.html must recover the description from the other report files."""
+        out2 = Path(self._tmpdir.name) / "out-desc-rebuilt"
+        index_path = htmlreport.generate_report(
+            self.fixtures,
+            self.teams,
+            self.clubs,
+            out2,
+            description="Test description.",
+        )
+        index_path.unlink()
+        rebuilt_path = htmlreport.build_run_index(out2)
+        content = rebuilt_path.read_text()
+        self.assertIn('<p class="description">Test description.</p>', content)
 
 
 class TestWriteRunsIndex(unittest.TestCase):

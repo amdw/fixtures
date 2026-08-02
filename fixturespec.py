@@ -66,6 +66,7 @@ class Spec:
     clubs: Mapping[str, fmodel.Club]
     name: str = ""
     draft: bool = False
+    description: str = ""
 
 
 def _require_mapping(value: Any, context: str) -> dict[str, Any]:
@@ -395,4 +396,11 @@ def load_spec(spec_path: str | Path) -> Spec:
     )
     name = _require_str(data.get("name", ""), f"{path}: 'name'")
     draft = _require_bool(data.get("draft", False), f"{path}: 'draft'")
-    return Spec(parameters=parameters, clubs=clubs, name=name, draft=draft)
+    description = _require_str(data.get("description", ""), f"{path}: 'description'")
+    return Spec(
+        parameters=parameters,
+        clubs=clubs,
+        name=name,
+        draft=draft,
+        description=description,
+    )
