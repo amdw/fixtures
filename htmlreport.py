@@ -75,7 +75,13 @@ def _fmt_date(d: date) -> str:
     return d.strftime("%a %d %b %Y")
 
 
-def _page(title: str, body: str, run_name: str = "", draft: bool = False, description: str = "") -> str:
+def _page(
+    title: str,
+    body: str,
+    run_name: str = "",
+    draft: bool = False,
+    description: str = "",
+) -> str:
     banner_html = ""
     if run_name or draft:
         parts = []

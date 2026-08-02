@@ -130,9 +130,15 @@ class TestLoadSpec(unittest.TestCase):
         self.assertTrue(spec.draft)
 
     def test_description(self):
-        path = self._write(_MINIMAL_SPEC + '\ndescription: "Final schedule; refer to ECF LMS for authoritative dates."\n')
+        path = self._write(
+            _MINIMAL_SPEC
+            + '\ndescription: "Final schedule; refer to ECF LMS for authoritative dates."\n'
+        )
         spec = fixturespec.load_spec(path)
-        self.assertEqual(spec.description, "Final schedule; refer to ECF LMS for authoritative dates.")
+        self.assertEqual(
+            spec.description,
+            "Final schedule; refer to ECF LMS for authoritative dates.",
+        )
 
     def test_description_defaults_to_empty(self):
         path = self._write(_MINIMAL_SPEC)

@@ -397,4 +397,10 @@ def load_spec(spec_path: str | Path) -> Spec:
     name = _require_str(data.get("name", ""), f"{path}: 'name'")
     draft = _require_bool(data.get("draft", False), f"{path}: 'draft'")
     description = _require_str(data.get("description", ""), f"{path}: 'description'")
-    return Spec(parameters=parameters, clubs=clubs, name=name, draft=draft, description=description)
+    return Spec(
+        parameters=parameters,
+        clubs=clubs,
+        name=name,
+        draft=draft,
+        description=description,
+    )
