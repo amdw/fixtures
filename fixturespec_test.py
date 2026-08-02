@@ -129,6 +129,16 @@ class TestLoadSpec(unittest.TestCase):
         self.assertEqual(spec.name, "2025-26 Season")
         self.assertTrue(spec.draft)
 
+    def test_description(self):
+        path = self._write(_MINIMAL_SPEC + '\ndescription: "Final schedule; refer to ECF LMS for authoritative dates."\n')
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.description, "Final schedule; refer to ECF LMS for authoritative dates.")
+
+    def test_description_defaults_to_empty(self):
+        path = self._write(_MINIMAL_SPEC)
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.description, "")
+
     def test_draft_must_be_a_boolean(self):
         path = self._write(_MINIMAL_SPEC + "\ndraft: notabool\n")
         with self.assertRaisesRegex(fixturespec.SpecError, "draft"):

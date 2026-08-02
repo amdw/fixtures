@@ -44,6 +44,7 @@ def run(spec_path: Path, output_dir: Path) -> Path:
         output_dir,
         name=spec.name,
         draft=spec.draft,
+        description=spec.description,
     )
 
 
