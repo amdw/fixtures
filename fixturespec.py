@@ -360,35 +360,27 @@ def _parse_max_concurrent_home_matches(
 
 def _parse_max_home_dates_used(
     data: Mapping[str, Any], clubs: Mapping[str, fmodel.Club], path: Path
-) -> dict[str, int] | None:
+) -> dict[str, int]:
     """Parse the optional 'max_home_dates_used' section.
 
-    Returns None if the section is absent (no constraint), or a dict mapping each club
-    ID to its maximum number of home dates that may be used.  A club not mentioned in
-    the section inherits the section-level 'default' if one is given; clubs with no
-    entry and no default are left unconstrained.
+    Returns a dict mapping club IDs to their maximum number of home dates that may be
+    used.  Clubs not mentioned in the section are left unconstrained (absent from the
+    returned dict).  If the section is absent entirely, an empty dict is returned.
     """
     section_name = "max_home_dates_used"
     section_spec = data.get(section_name)
     if section_spec is None:
-        return None
+        return {}
 
     if not isinstance(section_spec, dict):
         raise SpecError(f"{path}: {section_name!r} must be a mapping")
 
-    unsupported = section_spec.keys() - {"default", "clubs"}
+    unsupported = section_spec.keys() - {"clubs"}
     if unsupported:
         raise SpecError(
             f"{path}: {section_name}.{sorted(unsupported)} not supported "
-            "(only 'default' and 'clubs' are)"
+            "(only 'clubs' is)"
         )
-
-    section_default_spec = section_spec.get("default")
-    section_default = (
-        None
-        if section_default_spec is None
-        else _require_int(section_default_spec, f"{path}: {section_name}.default")
-    )
 
     clubs_section = section_spec.get("clubs", {})
     if not isinstance(clubs_section, dict):
@@ -400,16 +392,10 @@ def _parse_max_home_dates_used(
             f"{path}: {section_name}.clubs references unknown club(s) {sorted(unknown_clubs)}"
         )
 
-    result: dict[str, int] = {}
-    for club_id in clubs:
-        if club_id in clubs_section:
-            result[club_id] = _require_int(
-                clubs_section[club_id], f"{path}: {section_name}.clubs[{club_id!r}]"
-            )
-        elif section_default is not None:
-            result[club_id] = section_default
-
-    return result if result else None
+    return {
+        club_id: _require_int(value, f"{path}: {section_name}.clubs[{club_id!r}]")
+        for club_id, value in clubs_section.items()
+    }
 
 
 def load_spec(spec_path: str | Path) -> Spec:
@@ -436,12 +422,12 @@ def load_spec(spec_path: str | Path) -> Spec:
     )
 
     max_concurrent_home_matches = _parse_max_concurrent_home_matches(data, clubs, path)
-    max_home_dates_used = _parse_max_home_dates_used(data, clubs, path)
 
     kwargs: dict[str, Any] = {}
     if "min_gap_days" in data:
         kwargs["min_gap_days"] = data["min_gap_days"]
-    if max_home_dates_used is not None:
+    max_home_dates_used = _parse_max_home_dates_used(data, clubs, path)
+    if max_home_dates_used:
         kwargs["max_home_dates_used"] = max_home_dates_used
 
     parameters = fmodel.Parameters(

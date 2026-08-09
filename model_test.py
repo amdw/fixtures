@@ -253,23 +253,26 @@ class TestMaxHomeDatesUsed(unittest.TestCase):
             "A": fmodel.MaxConcurrentHomeMatches(default=2),
             "B": fmodel.MaxConcurrentHomeMatches(default=2),
         }
+        kwargs = {}
+        if max_home_dates_used is not None:
+            kwargs["max_home_dates_used"] = max_home_dates_used
         return fmodel.Parameters(
             teams=teams,
             home_dates=home_dates,
             unavailable_away_dates={"A": [], "B": []},
             max_concurrent_home_matches=max_concurrent,
             min_gap_days=0,
-            max_home_dates_used=max_home_dates_used,
+            **kwargs,
         )
 
     def test_constraint_not_applied_when_absent(self):
-        """When max_home_dates_used is None, all home dates can be used."""
+        """When max_home_dates_used is empty, all home dates can be used."""
         # A has 3 home dates but only needs to schedule 1 home match.
         home_dates = {
             "A": [date(2025, 1, 1), date(2025, 2, 1), date(2025, 3, 1)],
             "B": [date(2025, 4, 1)],
         }
-        params = self._make_params(home_dates, max_home_dates_used=None)
+        params = self._make_params(home_dates)
         fixtures = list(fmodel.solve(params))
         # One home match for A, one for B
         self.assertEqual(len(fixtures), 2)

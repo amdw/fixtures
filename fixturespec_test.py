@@ -463,13 +463,6 @@ home_dates:
         with self.assertRaisesRegex(fixturespec.SpecError, "mapping"):
             fixturespec.load_spec(path)
 
-    def test_max_home_dates_used_default(self):
-        path = self._write(
-            _MINIMAL_SPEC + "max_home_dates_used:\n  default: 1\n"
-        )
-        spec = fixturespec.load_spec(path)
-        self.assertEqual(spec.parameters.max_home_dates_used, {"albany": 1, "hackney": 1})
-
     def test_max_home_dates_used_per_club(self):
         path = self._write(
             _MINIMAL_SPEC
@@ -478,18 +471,19 @@ home_dates:
         spec = fixturespec.load_spec(path)
         self.assertEqual(spec.parameters.max_home_dates_used, {"albany": 1, "hackney": 1})
 
-    def test_max_home_dates_used_default_and_club_override(self):
+    def test_max_home_dates_used_partial_clubs(self):
+        """Only the clubs listed in the section are constrained."""
         path = self._write(
             _MINIMAL_SPEC
-            + "max_home_dates_used:\n  default: 2\n  clubs:\n    albany: 1\n"
+            + "max_home_dates_used:\n  clubs:\n    albany: 1\n"
         )
         spec = fixturespec.load_spec(path)
-        self.assertEqual(spec.parameters.max_home_dates_used, {"albany": 1, "hackney": 2})
+        self.assertEqual(spec.parameters.max_home_dates_used, {"albany": 1})
 
     def test_max_home_dates_used_absent(self):
         path = self._write(_MINIMAL_SPEC)
         spec = fixturespec.load_spec(path)
-        self.assertIsNone(spec.parameters.max_home_dates_used)
+        self.assertEqual(spec.parameters.max_home_dates_used, {})
 
     def test_max_home_dates_used_unknown_club(self):
         path = self._write(
@@ -509,7 +503,7 @@ home_dates:
 
     def test_max_home_dates_used_unsupported_key(self):
         path = self._write(
-            _MINIMAL_SPEC + "max_home_dates_used:\n  default: 1\n  teams: {}\n"
+            _MINIMAL_SPEC + "max_home_dates_used:\n  clubs:\n    albany: 1\n  teams: {}\n"
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
             fixturespec.load_spec(path)
