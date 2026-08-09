@@ -17,7 +17,7 @@
 import collections
 import random
 import unittest
-from datetime import date
+from datetime import date, timedelta
 
 import fmodel
 import genfixtures
@@ -238,6 +238,86 @@ class TestSolve(unittest.TestCase):
             0,
             "Expected no fixtures to be scheduled due to impossible constraints",
         )
+
+
+class TestMaxHomeDatesUsed(unittest.TestCase):
+    """Test cases for the max_home_dates_used constraint."""
+
+    def test_constraint_limits_dates_used(self):
+        """Solver uses at most max_home_dates_used home dates for a club.
+
+        Club "A" has two teams in a division with six other teams (one each from
+        clubs B-G).  Each A team plays seven home matches (one vs each of the
+        other seven teams, including the intra-club match).  A has twelve weekly
+        home dates available but max_home_dates_used is set to 8.  With
+        max_concurrent_home_matches=2, the solver can pack two home matches per
+        date, so 14 total A home matches fit in 8 dates (capacity 16).  This
+        leaves at least four of A's twelve available home dates completely unused.
+        """
+        other_clubs = ["B", "C", "D", "E", "F", "G"]
+        teams = [
+            fmodel.Team(division=1, club="A", index=1),
+            fmodel.Team(division=1, club="A", index=2),
+        ] + [fmodel.Team(division=1, club=c, index=1) for c in other_clubs]
+
+        # 12 weekly home dates for A (starting 6 Jan 2025).
+        a_start = date(2025, 1, 6)
+        a_home_dates = [a_start + timedelta(weeks=i) for i in range(12)]
+        # 8 weekly home dates each for B-G, each club's dates shifted by one day
+        # relative to the previous club (B starts Sep 1, C starts Sep 2, etc.) so
+        # that no two clubs share the same date set.
+        other_home_dates = {
+            c: [date(2025, 9, 1) + timedelta(days=i, weeks=j) for j in range(8)]
+            for i, c in enumerate(other_clubs)
+        }
+        home_dates = {"A": a_home_dates} | other_home_dates
+
+        all_clubs = ["A"] + other_clubs
+        params = fmodel.Parameters(
+            teams=teams,
+            home_dates=home_dates,
+            unavailable_away_dates={c: [] for c in all_clubs},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=2),
+                **{c: fmodel.MaxConcurrentHomeMatches(default=1) for c in other_clubs},
+            },
+            min_gap_days=0,
+            max_home_dates_used={"A": 8},
+        )
+        fixtures = list(fmodel.solve(params))
+
+        a_dates_used = {sf.date for sf in fixtures if sf.fixture.home_team.club == "A"}
+        self.assertLessEqual(len(a_dates_used), 8)
+        unused_a_dates = set(a_home_dates) - a_dates_used
+        self.assertGreaterEqual(len(unused_a_dates), 4)
+
+    def test_constraint_enforced_strictly(self):
+        """A club with two teams needs two home dates; a limit of 1 makes it infeasible."""
+        # A has two teams in the same division, requiring 2 home matches on different dates
+        # (min_gap_days=7 forces different dates). But max_home_dates_used=1 for A means
+        # only 1 date can be used — impossible.
+        teams = [
+            fmodel.Team(division=1, club="A", index=1),
+            fmodel.Team(division=1, club="A", index=2),
+            fmodel.Team(division=1, club="B", index=1),
+        ]
+        home_dates = {
+            "A": [date(2025, 1, 1), date(2025, 2, 1), date(2025, 3, 1)],
+            "B": [date(2025, 4, 1), date(2025, 5, 1), date(2025, 6, 1)],
+        }
+        params = fmodel.Parameters(
+            teams=teams,
+            home_dates=home_dates,
+            unavailable_away_dates={"A": [], "B": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=1),
+                "B": fmodel.MaxConcurrentHomeMatches(default=2),
+            },
+            min_gap_days=7,
+            max_home_dates_used={"A": 1, "B": 3},
+        )
+        with self.assertRaises(ValueError):
+            fmodel.solve(params)
 
 
 if __name__ == "__main__":

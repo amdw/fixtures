@@ -358,6 +358,46 @@ def _parse_max_concurrent_home_matches(
     return result
 
 
+def _parse_max_home_dates_used(
+    data: Mapping[str, Any], clubs: Mapping[str, fmodel.Club], path: Path
+) -> dict[str, int]:
+    """Parse the optional 'max_home_dates_used' section.
+
+    Returns a dict mapping club IDs to their maximum number of home dates that may be
+    used.  Clubs not mentioned in the section are left unconstrained (absent from the
+    returned dict).  If the section is absent entirely, an empty dict is returned.
+    """
+    section_name = "max_home_dates_used"
+    section_spec = data.get(section_name)
+    if section_spec is None:
+        return {}
+
+    if not isinstance(section_spec, dict):
+        raise SpecError(f"{path}: {section_name!r} must be a mapping")
+
+    unsupported = section_spec.keys() - {"clubs"}
+    if unsupported:
+        raise SpecError(
+            f"{path}: {section_name}.{sorted(unsupported)} not supported "
+            "(only 'clubs' is)"
+        )
+
+    clubs_section = section_spec.get("clubs", {})
+    if not isinstance(clubs_section, dict):
+        raise SpecError(f"{path}: {section_name}.clubs must be a mapping")
+
+    unknown_clubs = clubs_section.keys() - clubs.keys()
+    if unknown_clubs:
+        raise SpecError(
+            f"{path}: {section_name}.clubs references unknown club(s) {sorted(unknown_clubs)}"
+        )
+
+    return {
+        club_id: _require_int(value, f"{path}: {section_name}.clubs[{club_id!r}]")
+        for club_id, value in clubs_section.items()
+    }
+
+
 def load_spec(spec_path: str | Path) -> Spec:
     """Load a fixture Spec (solver Parameters plus club reporting metadata) from a YAML file."""
     path = Path(spec_path)
@@ -386,6 +426,9 @@ def load_spec(spec_path: str | Path) -> Spec:
     kwargs: dict[str, Any] = {}
     if "min_gap_days" in data:
         kwargs["min_gap_days"] = data["min_gap_days"]
+    max_home_dates_used = _parse_max_home_dates_used(data, clubs, path)
+    if max_home_dates_used:
+        kwargs["max_home_dates_used"] = max_home_dates_used
 
     parameters = fmodel.Parameters(
         teams=list(teams.values()),

@@ -85,6 +85,7 @@ class Parameters:
     unavailable_away_dates: Mapping[ClubT, list[date]]
     max_concurrent_home_matches: Mapping[ClubT, MaxConcurrentHomeMatches]
     min_gap_days: int = 7
+    max_home_dates_used: Mapping[ClubT, int] = dataclasses.field(default_factory=dict)
 
     def max_concurrent_home_matches_for(self, club: ClubT, d: date) -> int:
         """The most home matches `club` may host on date `d`."""
@@ -111,6 +112,34 @@ def date_windows(dates: Collection[date], window_days: int) -> list[frozenset[da
             result.append(window)
 
     return result
+
+
+def _add_max_home_dates_used_constraints(
+    model: cp_model.CpModel,
+    max_home_dates_used: Mapping[ClubT, int],
+    vars_by_club_home_date: Mapping[tuple[str, date], list[cp_model.IntVar]],
+) -> None:
+    """For each club in max_home_dates_used, add constraints limiting the number of home dates used."""
+    # Collect the set of home dates per club that appear in the variable map
+    clubs_home_dates: MutableMapping[str, list[date]] = collections.defaultdict(list)
+    for club, d in vars_by_club_home_date:
+        if club in max_home_dates_used:
+            clubs_home_dates[club].append(d)
+
+    for club, limit in max_home_dates_used.items():
+        date_used_vars = []
+        for d in clubs_home_dates[club]:
+            date_vars = vars_by_club_home_date[(club, d)]
+            date_used = model.new_bool_var(f"{club}_date_used_{d.isoformat()}")
+            # date_used == 1 iff sum(date_vars) >= 1
+            model.add(cp_model.LinearExpr.Sum(date_vars) >= 1).only_enforce_if(
+                date_used
+            )
+            model.add(cp_model.LinearExpr.Sum(date_vars) == 0).only_enforce_if(
+                date_used.negated()
+            )
+            date_used_vars.append(date_used)
+        model.add(cp_model.LinearExpr.Sum(date_used_vars) <= limit)
 
 
 def solve(params: Parameters) -> Collection[ScheduledFixture]:
@@ -164,6 +193,10 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
         # Each club can host at most max_concurrent_home_matches matches per date
         max_matches = params.max_concurrent_home_matches_for(club, match_date)
         model.add(cp_model.LinearExpr.Sum(club_home_date_vars) <= max_matches)
+
+    _add_max_home_dates_used_constraints(
+        model, params.max_home_dates_used, vars_by_club_home_date
+    )
 
     solver = cp_model.CpSolver()
     status = solver.Solve(model)
