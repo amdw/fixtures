@@ -284,14 +284,14 @@ class TestMaxHomeDatesUsed(unittest.TestCase):
             "A": [date(2025, 1, 1), date(2025, 2, 1), date(2025, 3, 1)],
             "B": [date(2025, 4, 1)],
         }
-        params = self._make_params(
-            home_dates, max_home_dates_used={"A": 1, "B": 1}
-        )
+        params = self._make_params(home_dates, max_home_dates_used={"A": 1, "B": 1})
         fixtures = list(fmodel.solve(params))
         # Still one home match for A and one for B
         self.assertEqual(len(fixtures), 2)
         # A's fixture must be on exactly one of the three available dates
-        a_home_dates_used = {sf.date for sf in fixtures if sf.fixture.home_team.club == "A"}
+        a_home_dates_used = {
+            sf.date for sf in fixtures if sf.fixture.home_team.club == "A"
+        }
         self.assertEqual(len(a_home_dates_used), 1)
 
     def test_constraint_enforced_strictly(self):

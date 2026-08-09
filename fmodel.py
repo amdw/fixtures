@@ -132,8 +132,12 @@ def _add_max_home_dates_used_constraints(
             date_vars = vars_by_club_home_date[(club, d)]
             date_used = model.new_bool_var(f"{club}_date_used_{d.isoformat()}")
             # date_used == 1 iff sum(date_vars) >= 1
-            model.add(cp_model.LinearExpr.Sum(date_vars) >= 1).only_enforce_if(date_used)
-            model.add(cp_model.LinearExpr.Sum(date_vars) == 0).only_enforce_if(date_used.negated())
+            model.add(cp_model.LinearExpr.Sum(date_vars) >= 1).only_enforce_if(
+                date_used
+            )
+            model.add(cp_model.LinearExpr.Sum(date_vars) == 0).only_enforce_if(
+                date_used.negated()
+            )
             date_used_vars.append(date_used)
         model.add(cp_model.LinearExpr.Sum(date_used_vars) <= limit)
 
