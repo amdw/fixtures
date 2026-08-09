@@ -358,6 +358,60 @@ def _parse_max_concurrent_home_matches(
     return result
 
 
+def _parse_max_home_dates_used(
+    data: Mapping[str, Any], clubs: Mapping[str, fmodel.Club], path: Path
+) -> dict[str, int] | None:
+    """Parse the optional 'max_home_dates_used' section.
+
+    Returns None if the section is absent (no constraint), or a dict mapping each club
+    ID to its maximum number of home dates that may be used.  A club not mentioned in
+    the section inherits the section-level 'default' if one is given; clubs with no
+    entry and no default are left unconstrained.
+    """
+    section_name = "max_home_dates_used"
+    section_spec = data.get(section_name)
+    if section_spec is None:
+        return None
+
+    if not isinstance(section_spec, dict):
+        raise SpecError(f"{path}: {section_name!r} must be a mapping")
+
+    unsupported = section_spec.keys() - {"default", "clubs"}
+    if unsupported:
+        raise SpecError(
+            f"{path}: {section_name}.{sorted(unsupported)} not supported "
+            "(only 'default' and 'clubs' are)"
+        )
+
+    section_default_spec = section_spec.get("default")
+    section_default = (
+        None
+        if section_default_spec is None
+        else _require_int(section_default_spec, f"{path}: {section_name}.default")
+    )
+
+    clubs_section = section_spec.get("clubs", {})
+    if not isinstance(clubs_section, dict):
+        raise SpecError(f"{path}: {section_name}.clubs must be a mapping")
+
+    unknown_clubs = clubs_section.keys() - clubs.keys()
+    if unknown_clubs:
+        raise SpecError(
+            f"{path}: {section_name}.clubs references unknown club(s) {sorted(unknown_clubs)}"
+        )
+
+    result: dict[str, int] = {}
+    for club_id in clubs:
+        if club_id in clubs_section:
+            result[club_id] = _require_int(
+                clubs_section[club_id], f"{path}: {section_name}.clubs[{club_id!r}]"
+            )
+        elif section_default is not None:
+            result[club_id] = section_default
+
+    return result if result else None
+
+
 def load_spec(spec_path: str | Path) -> Spec:
     """Load a fixture Spec (solver Parameters plus club reporting metadata) from a YAML file."""
     path = Path(spec_path)
@@ -382,10 +436,13 @@ def load_spec(spec_path: str | Path) -> Spec:
     )
 
     max_concurrent_home_matches = _parse_max_concurrent_home_matches(data, clubs, path)
+    max_home_dates_used = _parse_max_home_dates_used(data, clubs, path)
 
     kwargs: dict[str, Any] = {}
     if "min_gap_days" in data:
         kwargs["min_gap_days"] = data["min_gap_days"]
+    if max_home_dates_used is not None:
+        kwargs["max_home_dates_used"] = max_home_dates_used
 
     parameters = fmodel.Parameters(
         teams=list(teams.values()),

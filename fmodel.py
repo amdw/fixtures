@@ -85,6 +85,7 @@ class Parameters:
     unavailable_away_dates: Mapping[ClubT, list[date]]
     max_concurrent_home_matches: Mapping[ClubT, MaxConcurrentHomeMatches]
     min_gap_days: int = 7
+    max_home_dates_used: Mapping[ClubT, int] | None = None
 
     def max_concurrent_home_matches_for(self, club: ClubT, d: date) -> int:
         """The most home matches `club` may host on date `d`."""
@@ -164,6 +165,26 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
         # Each club can host at most max_concurrent_home_matches matches per date
         max_matches = params.max_concurrent_home_matches_for(club, match_date)
         model.add(cp_model.LinearExpr.Sum(club_home_date_vars) <= max_matches)
+
+    if params.max_home_dates_used is not None:
+        # Group home dates by club
+        clubs_with_home_dates: MutableMapping[str, set[date]] = collections.defaultdict(set)
+        for club, match_date in vars_by_club_home_date:
+            clubs_with_home_dates[club].add(match_date)
+        for club, home_dates in clubs_with_home_dates.items():
+            if club not in params.max_home_dates_used:
+                continue
+            limit = params.max_home_dates_used[club]
+            # A date is "used" if at least one match is scheduled on it
+            date_used_vars = []
+            for d in home_dates:
+                date_vars = vars_by_club_home_date[(club, d)]
+                date_used = model.new_bool_var(f"{club}_date_used_{d.isoformat()}")
+                # date_used == 1 iff sum(date_vars) >= 1
+                model.add(cp_model.LinearExpr.Sum(date_vars) >= 1).only_enforce_if(date_used)
+                model.add(cp_model.LinearExpr.Sum(date_vars) == 0).only_enforce_if(date_used.negated())
+                date_used_vars.append(date_used)
+            model.add(cp_model.LinearExpr.Sum(date_used_vars) <= limit)
 
     solver = cp_model.CpSolver()
     status = solver.Solve(model)

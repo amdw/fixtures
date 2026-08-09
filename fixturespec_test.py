@@ -463,6 +463,57 @@ home_dates:
         with self.assertRaisesRegex(fixturespec.SpecError, "mapping"):
             fixturespec.load_spec(path)
 
+    def test_max_home_dates_used_default(self):
+        path = self._write(
+            _MINIMAL_SPEC + "max_home_dates_used:\n  default: 1\n"
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.parameters.max_home_dates_used, {"albany": 1, "hackney": 1})
+
+    def test_max_home_dates_used_per_club(self):
+        path = self._write(
+            _MINIMAL_SPEC
+            + "max_home_dates_used:\n  clubs:\n    albany: 1\n    hackney: 1\n"
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.parameters.max_home_dates_used, {"albany": 1, "hackney": 1})
+
+    def test_max_home_dates_used_default_and_club_override(self):
+        path = self._write(
+            _MINIMAL_SPEC
+            + "max_home_dates_used:\n  default: 2\n  clubs:\n    albany: 1\n"
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.parameters.max_home_dates_used, {"albany": 1, "hackney": 2})
+
+    def test_max_home_dates_used_absent(self):
+        path = self._write(_MINIMAL_SPEC)
+        spec = fixturespec.load_spec(path)
+        self.assertIsNone(spec.parameters.max_home_dates_used)
+
+    def test_max_home_dates_used_unknown_club(self):
+        path = self._write(
+            _MINIMAL_SPEC
+            + "max_home_dates_used:\n  clubs:\n    unknown-club: 1\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "unknown-club"):
+            fixturespec.load_spec(path)
+
+    def test_max_home_dates_used_not_int(self):
+        path = self._write(
+            _MINIMAL_SPEC
+            + "max_home_dates_used:\n  clubs:\n    albany: not-an-int\n    hackney: 1\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "integer"):
+            fixturespec.load_spec(path)
+
+    def test_max_home_dates_used_unsupported_key(self):
+        path = self._write(
+            _MINIMAL_SPEC + "max_home_dates_used:\n  default: 1\n  teams: {}\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
+            fixturespec.load_spec(path)
+
     def test_solves_end_to_end(self):
         """A loaded spec's Parameters should be usable directly with fmodel.solve()."""
         path = self._write(_MINIMAL_SPEC)
