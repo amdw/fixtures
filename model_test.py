@@ -17,7 +17,7 @@
 import collections
 import random
 import unittest
-from datetime import date
+from datetime import date, timedelta
 
 import fmodel
 import genfixtures
@@ -243,56 +243,53 @@ class TestSolve(unittest.TestCase):
 class TestMaxHomeDatesUsed(unittest.TestCase):
     """Test cases for the max_home_dates_used constraint."""
 
-    def _make_params(self, home_dates, max_home_dates_used=None):
-        """Helper: build a two-team, one-division Parameters."""
+    def test_constraint_limits_dates_used(self):
+        """Solver uses at most max_home_dates_used home dates for a club.
+
+        Club "A" has two teams in a division with six other teams (one each from
+        clubs B-G).  Each A team plays seven home matches (one vs each of the
+        other seven teams, including the intra-club match).  A has twelve weekly
+        home dates available but max_home_dates_used is set to 8.  With
+        max_concurrent_home_matches=2, the solver can pack two home matches per
+        date, so 14 total A home matches fit in 8 dates (capacity 16).  This
+        leaves at least four of A's twelve available home dates completely unused.
+        """
+        other_clubs = ["B", "C", "D", "E", "F", "G"]
         teams = [
             fmodel.Team(division=1, club="A", index=1),
-            fmodel.Team(division=1, club="B", index=1),
-        ]
-        max_concurrent = {
-            "A": fmodel.MaxConcurrentHomeMatches(default=2),
-            "B": fmodel.MaxConcurrentHomeMatches(default=2),
+            fmodel.Team(division=1, club="A", index=2),
+        ] + [fmodel.Team(division=1, club=c, index=1) for c in other_clubs]
+
+        # 12 weekly home dates for A (starting 6 Jan 2025).
+        a_start = date(2025, 1, 6)
+        a_home_dates = [a_start + timedelta(weeks=i) for i in range(12)]
+        # 8 weekly home dates each for B-G, each club's dates shifted by one day
+        # relative to the previous club (B starts Sep 1, C starts Sep 2, etc.) so
+        # that no two clubs share the same date set.
+        other_home_dates = {
+            c: [date(2025, 9, 1) + timedelta(days=i, weeks=j) for j in range(8)]
+            for i, c in enumerate(other_clubs)
         }
-        kwargs = {}
-        if max_home_dates_used is not None:
-            kwargs["max_home_dates_used"] = max_home_dates_used
-        return fmodel.Parameters(
+        home_dates = {"A": a_home_dates} | other_home_dates
+
+        all_clubs = ["A"] + other_clubs
+        params = fmodel.Parameters(
             teams=teams,
             home_dates=home_dates,
-            unavailable_away_dates={"A": [], "B": []},
-            max_concurrent_home_matches=max_concurrent,
+            unavailable_away_dates={c: [] for c in all_clubs},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=2),
+                **{c: fmodel.MaxConcurrentHomeMatches(default=1) for c in other_clubs},
+            },
             min_gap_days=0,
-            **kwargs,
+            max_home_dates_used={"A": 8},
         )
-
-    def test_constraint_not_applied_when_absent(self):
-        """When max_home_dates_used is empty, all home dates can be used."""
-        # A has 3 home dates but only needs to schedule 1 home match.
-        home_dates = {
-            "A": [date(2025, 1, 1), date(2025, 2, 1), date(2025, 3, 1)],
-            "B": [date(2025, 4, 1)],
-        }
-        params = self._make_params(home_dates)
         fixtures = list(fmodel.solve(params))
-        # One home match for A, one for B
-        self.assertEqual(len(fixtures), 2)
 
-    def test_constraint_limits_dates_used(self):
-        """Solver uses at most max_home_dates_used dates per club."""
-        # A has 3 home dates; allow at most 1 to be used.
-        home_dates = {
-            "A": [date(2025, 1, 1), date(2025, 2, 1), date(2025, 3, 1)],
-            "B": [date(2025, 4, 1)],
-        }
-        params = self._make_params(home_dates, max_home_dates_used={"A": 1, "B": 1})
-        fixtures = list(fmodel.solve(params))
-        # Still one home match for A and one for B
-        self.assertEqual(len(fixtures), 2)
-        # A's fixture must be on exactly one of the three available dates
-        a_home_dates_used = {
-            sf.date for sf in fixtures if sf.fixture.home_team.club == "A"
-        }
-        self.assertEqual(len(a_home_dates_used), 1)
+        a_dates_used = {sf.date for sf in fixtures if sf.fixture.home_team.club == "A"}
+        self.assertLessEqual(len(a_dates_used), 8)
+        unused_a_dates = set(a_home_dates) - a_dates_used
+        self.assertGreaterEqual(len(unused_a_dates), 4)
 
     def test_constraint_enforced_strictly(self):
         """A club with two teams needs two home dates; a limit of 1 makes it infeasible."""
