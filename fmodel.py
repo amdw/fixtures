@@ -115,6 +115,7 @@ class Parameters:
     max_home_dates_used: Mapping[ClubT, int] = dataclasses.field(default_factory=dict)
     fixed_fixtures: Collection[ScheduledFixture] = ()
     excluded_fixtures: Collection[Fixture] = ()
+    latest_internal_match_date: date | None = None
 
     def __post_init__(self) -> None:
         _check_no_duplicate_teams(self.teams)
@@ -192,8 +193,9 @@ def _add_fixed_fixtures_constraints(
                 f"{scheduled.date.isoformat()} is not schedulable on that date "
                 "(check that the two teams are in the same division, that the date "
                 "is a home date for the home team's club, that it isn't an "
-                "unavailable away date for the away team's club, and that the "
-                "fixture isn't also in excluded_fixtures)"
+                "unavailable away date for the away team's club, that the fixture "
+                "isn't also in excluded_fixtures, and -- if the two teams share a "
+                "club -- that the date isn't after latest_internal_match_date)"
             )
         model.add(var == 1)
 
@@ -222,8 +224,15 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
             fixture = Fixture(home_team=home_team, away_team=away_team)
             if fixture in excluded:
                 continue
+            is_internal = home_team.club == away_team.club
             for match_date in params.home_dates[home_team.club]:
                 if match_date in params.unavailable_away_dates.get(away_team.club, []):
+                    continue
+                if (
+                    is_internal
+                    and params.latest_internal_match_date is not None
+                    and match_date > params.latest_internal_match_date
+                ):
                     continue
                 var = model.new_bool_var(
                     f"{home_team.name}_vs_{away_team.name}_{match_date.isoformat()}"

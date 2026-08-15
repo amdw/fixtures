@@ -656,3 +656,4 @@ exclude_fixtures:
   fixtures:
     - home: albany-1
       away: hackney-1
+latest_internal_match_date: '2025-12-31'
