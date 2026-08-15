@@ -213,6 +213,21 @@ class TestLoadSpec(unittest.TestCase):
         spec = fixturespec.load_spec(path)
         self.assertEqual(spec.parameters.min_gap_days, 10)
 
+    def test_latest_internal_match_date_absent(self):
+        path = self._write(_MINIMAL_SPEC)
+        spec = fixturespec.load_spec(path)
+        self.assertIsNone(spec.parameters.latest_internal_match_date)
+
+    def test_latest_internal_match_date_parsed(self):
+        path = self._write(_MINIMAL_SPEC + "latest_internal_match_date: 2025-12-31\n")
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.parameters.latest_internal_match_date, date(2025, 12, 31))
+
+    def test_latest_internal_match_date_invalid(self):
+        path = self._write(_MINIMAL_SPEC + "latest_internal_match_date: not-a-date\n")
+        with self.assertRaisesRegex(fixturespec.SpecError, "not-a-date"):
+            fixturespec.load_spec(path)
+
     def test_duplicate_top_level_key_rejected(self):
         path = self._write(_MINIMAL_SPEC + "\nmin_gap_days: 7\nmin_gap_days: 10\n")
         with self.assertRaisesRegex(fixturespec.SpecError, "duplicate key"):
@@ -840,6 +855,52 @@ home_dates:
                 for sf in fixtures
             )
         )
+
+    def test_latest_internal_match_date_conflicts_with_fixed_fixtures(self):
+        path = self._write(
+            _THREE_TEAM_SPEC + "fixed_fixtures:\n"
+            "  - home: albany-1\n"
+            "    away: albany-2\n"
+            "    date: 2025-12-01\n"
+            "latest_internal_match_date: 2025-10-15\n"
+        )
+        with self.assertRaisesRegex(
+            fixturespec.SpecError, "after latest_internal_match_date"
+        ):
+            fixturespec.load_spec(path)
+
+    def test_latest_internal_match_date_ignores_cross_club_fixed_fixtures(self):
+        """The cutoff only applies to fixtures between two teams of the same club."""
+        path = self._write(
+            _THREE_TEAM_SPEC + "fixed_fixtures:\n"
+            "  - home: albany-1\n"
+            "    away: hackney-1\n"
+            "    date: 2025-12-01\n"
+            "latest_internal_match_date: 2025-10-15\n"
+        )
+        spec = fixturespec.load_spec(path)  # must not raise
+        self.assertEqual(spec.parameters.latest_internal_match_date, date(2025, 10, 15))
+
+    def test_latest_internal_match_date_solves_end_to_end(self):
+        path = self._write(
+            _THREE_TEAM_SPEC + "latest_internal_match_date: 2025-10-15\n"
+        )
+        spec = fixturespec.load_spec(path)
+        fixtures = list(fmodel.solve(spec.parameters))
+        albany1 = next(
+            t for t in spec.parameters.teams if t.club == "albany" and t.index == 1
+        )
+        albany2 = next(
+            t for t in spec.parameters.teams if t.club == "albany" and t.index == 2
+        )
+        internal = [
+            sf
+            for sf in fixtures
+            if {sf.fixture.home_team, sf.fixture.away_team} == {albany1, albany2}
+        ]
+        self.assertEqual(len(internal), 2)
+        for sf in internal:
+            self.assertLessEqual(sf.date, date(2025, 10, 15))
 
     def test_solves_end_to_end(self):
         """A loaded spec's Parameters should be usable directly with fmodel.solve()."""

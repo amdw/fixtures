@@ -624,6 +624,25 @@ def load_spec(spec_path: str | Path) -> Spec:
                 )
         kwargs["excluded_fixtures"] = excluded_fixtures
 
+    if "latest_internal_match_date" in data:
+        latest_internal_match_date = _parse_date(
+            data["latest_internal_match_date"],
+            f"{path}: 'latest_internal_match_date'",
+        )
+        for sf in fixed_fixtures:
+            home_team = sf.fixture.home_team
+            away_team = sf.fixture.away_team
+            if (
+                home_team.club == away_team.club
+                and sf.date > latest_internal_match_date
+            ):
+                raise SpecError(
+                    f"{path}: fixed_fixtures entry {home_team.name} vs "
+                    f"{away_team.name} on {sf.date.isoformat()} is after "
+                    "latest_internal_match_date"
+                )
+        kwargs["latest_internal_match_date"] = latest_internal_match_date
+
     parameters = fmodel.Parameters(
         teams=list(teams.values()),
         home_dates=home_dates,

@@ -394,6 +394,108 @@ class TestFixedFixtures(unittest.TestCase):
         self.assertNotEqual(reverse.date, date(2025, 1, 1))
 
 
+class TestLatestInternalMatchDate(unittest.TestCase):
+    """Test cases for the latest_internal_match_date constraint."""
+
+    def _params(self, **kwargs):
+        teams = [
+            fmodel.Team(division=1, club="A", index=1),
+            fmodel.Team(division=1, club="A", index=2),
+            fmodel.Team(division=1, club="B", index=1),
+        ]
+        home_dates = {
+            "A": [
+                date(2025, 1, 1),
+                date(2025, 2, 1),
+                date(2025, 3, 1),
+                date(2025, 4, 1),
+            ],
+            "B": [date(2025, 5, 1), date(2025, 6, 1)],
+        }
+        return fmodel.Parameters(
+            teams=teams,
+            home_dates=home_dates,
+            unavailable_away_dates={"A": [], "B": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=2),
+                "B": fmodel.MaxConcurrentHomeMatches(default=1),
+            },
+            min_gap_days=7,
+            **kwargs,
+        )
+
+    def test_internal_matches_respect_the_cutoff(self):
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=1, club="A", index=2)
+        params = self._params(latest_internal_match_date=date(2025, 2, 15))
+        fixtures = list(fmodel.solve(params))
+        internal = [
+            sf
+            for sf in fixtures
+            if {sf.fixture.home_team, sf.fixture.away_team} == {a1, a2}
+        ]
+        self.assertEqual(len(internal), 2)  # A1 v A2 and A2 v A1
+        for sf in internal:
+            self.assertLessEqual(sf.date, date(2025, 2, 15))
+
+    def test_non_internal_matches_unaffected(self):
+        """A cross-club fixture (different clubs) may still use a late home date."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        b1 = fmodel.Team(division=1, club="B", index=1)
+        params = self._params(latest_internal_match_date=date(2025, 2, 15))
+        fixtures = list(fmodel.solve(params))
+        cross_club = next(
+            sf
+            for sf in fixtures
+            if sf.fixture.home_team == a1 and sf.fixture.away_team == b1
+        )
+        self.assertGreater(cross_club.date, date(2025, 2, 15))
+
+    def test_cutoff_before_any_home_date_drops_the_internal_fixture(self):
+        """No A home date qualifies, so the internal fixture has zero candidate
+        variables: consistent with how a fixture that unavailable_away_dates makes
+        wholly unschedulable is silently omitted (see
+        TestSolve.test_simple_impossible_constraint) rather than erroring, it's simply
+        left out of the result -- other fixtures are unaffected.
+        """
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=1, club="A", index=2)
+        params = self._params(latest_internal_match_date=date(2024, 12, 1))
+        fixtures = list(fmodel.solve(params))
+        internal = [
+            sf
+            for sf in fixtures
+            if {sf.fixture.home_team, sf.fixture.away_team} == {a1, a2}
+        ]
+        self.assertEqual(internal, [])
+        self.assertTrue(fixtures)  # the other (non-internal) fixtures still solve
+
+    def test_fixed_internal_fixture_after_cutoff_rejected(self):
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=1, club="A", index=2)
+        fixed = fmodel.ScheduledFixture(
+            fixture=fmodel.Fixture(home_team=a1, away_team=a2), date=date(2025, 4, 1)
+        )
+        params = self._params(
+            fixed_fixtures=[fixed], latest_internal_match_date=date(2025, 2, 15)
+        )
+        with self.assertRaises(ValueError):
+            fmodel.solve(params)
+
+    def test_no_cutoff_by_default(self):
+        """Without latest_internal_match_date, internal matches can use any date."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=1, club="A", index=2)
+        params = self._params()
+        fixtures = list(fmodel.solve(params))
+        internal_dates = {
+            sf.date
+            for sf in fixtures
+            if {sf.fixture.home_team, sf.fixture.away_team} == {a1, a2}
+        }
+        self.assertTrue(internal_dates)
+
+
 class TestExcludedFixtures(unittest.TestCase):
     """Test cases for the excluded_fixtures parameter."""
 

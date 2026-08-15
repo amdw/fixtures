@@ -41,6 +41,7 @@ so it's safe to rerun after editing the spec.
 name: "2025-26 Season"           # optional, defaults to "" (no subtitle shown)
 draft: false                    # optional, defaults shown here
 min_gap_days: 7                 # optional, defaults shown here
+latest_internal_match_date: 2025-12-31  # optional, no default (no cutoff applied)
 
 clubs:
   albany:                       # club ID: stable, referenced from teams/home_dates/etc.
@@ -133,6 +134,14 @@ pairs under `fixtures`. All three are optional and can be combined. A
 fixture can't be both fixed and excluded; excluded fixtures still appear in
 the HTML report, at the bottom of every relevant table, with "TBC" in
 place of a date.
+
+`latest_internal_match_date`, if set, is the latest date allowed for a
+fixture between two teams of the same club (e.g. Hendon 1 v Hendon 2) —
+useful for requiring "derby" matches to be settled earlier in the season
+than the rest of the fixture list. It has no effect on fixtures between
+teams from different clubs. If omitted, no such cutoff is applied. A
+`fixed_fixtures` entry between two teams of the same club must not be
+dated after it.
 
 ### HTML report
 
