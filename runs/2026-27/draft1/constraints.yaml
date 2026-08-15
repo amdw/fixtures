@@ -152,9 +152,8 @@ club_constraints:
     - '2026-12-05'
     - '2026-12-06'
     - '2026-12-07'
-    # Christmas / New Year
-    - '2026-12-23'
-    - '2026-12-30'
+    # Christmas/New Year is handled by the top-level avoid_dates, so isn't
+    # repeated here.
     # Either side of the 2027-04-14 home date the club wants to avoid
     # (see home_dates above).
     - '2027-04-12'
@@ -179,7 +178,9 @@ club_constraints:
     - '2026-12-02'
     - '2026-12-09'
     - '2026-12-16'
-    # 2026-12-23 and 2026-12-30 skipped: Christmas/New Year.
+    # 2026-12-23 and 2026-12-30 skipped: Christmas/New Year (top-level
+    # avoid_dates covers this club too, so no unavailable_away_dates entry
+    # is needed below).
     - '2027-01-06'
     - '2027-01-13'
     - '2027-01-20'
@@ -199,9 +200,6 @@ club_constraints:
     - '2027-04-28'
     - '2027-05-05'
     - '2027-05-12'
-    unavailable_away_dates:
-    - '2026-12-23'
-    - '2026-12-30'
 
 fixed_fixtures:
   - home: hendon-1
@@ -216,3 +214,23 @@ fixed_fixtures:
   - home: hendon-5
     away: hendon-4
     date: '2026-09-17'
+
+# Christmas/New Year: the full weeks beginning 2026-12-21 and 2026-12-28,
+# on the assumption no club will want to schedule fixtures - home or away -
+# in that fortnight. Blocking it here means individual clubs don't need to
+# repeat it in their own unavailable_away_dates.
+avoid_dates:
+- '2026-12-21'
+- '2026-12-22'
+- '2026-12-23'
+- '2026-12-24'
+- '2026-12-25'
+- '2026-12-26'
+- '2026-12-27'
+- '2026-12-28'
+- '2026-12-29'
+- '2026-12-30'
+- '2026-12-31'
+- '2027-01-01'
+- '2027-01-02'
+- '2027-01-03'
