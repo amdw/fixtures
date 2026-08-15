@@ -320,5 +320,120 @@ class TestMaxHomeDatesUsed(unittest.TestCase):
             fmodel.solve(params)
 
 
+class TestFixedFixtures(unittest.TestCase):
+    """Test cases for the fixed_fixtures constraint."""
+
+    def _params(self, **kwargs):
+        teams = [
+            fmodel.Team(division=1, club="A", index=1),
+            fmodel.Team(division=1, club="A", index=2),
+            fmodel.Team(division=1, club="B", index=1),
+        ]
+        # A needs 4 home dates to fit A1 v A2, A2 v A1, A1 v B1 and A2 v B1 without
+        # double-booking B1 (B1 can't play two away matches on the same date); B just
+        # needs 2 for its two home matches (B1 v A1, B1 v A2), min_gap_days apart.
+        home_dates = {
+            "A": [
+                date(2025, 1, 1),
+                date(2025, 2, 1),
+                date(2025, 3, 1),
+                date(2025, 4, 1),
+            ],
+            "B": [date(2025, 5, 1), date(2025, 6, 1)],
+        }
+        return fmodel.Parameters(
+            teams=teams,
+            home_dates=home_dates,
+            unavailable_away_dates={"A": [], "B": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=2),
+                "B": fmodel.MaxConcurrentHomeMatches(default=1),
+            },
+            min_gap_days=7,
+            **kwargs,
+        )
+
+    def test_fixed_fixture_is_scheduled_on_given_date(self):
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=1, club="A", index=2)
+        fixed = fmodel.ScheduledFixture(
+            fixture=fmodel.Fixture(home_team=a1, away_team=a2), date=date(2025, 1, 1)
+        )
+        params = self._params(fixed_fixtures=[fixed])
+        fixtures = list(fmodel.solve(params))
+        self.assertIn(fixed, fixtures)
+
+    def test_fixed_fixture_on_non_home_date_rejected(self):
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=1, club="A", index=2)
+        fixed = fmodel.ScheduledFixture(
+            fixture=fmodel.Fixture(home_team=a1, away_team=a2),
+            date=date(2025, 7, 1),  # not one of A's home dates
+        )
+        params = self._params(fixed_fixtures=[fixed])
+        with self.assertRaises(ValueError):
+            fmodel.solve(params)
+
+    def test_fixed_fixture_forces_other_fixtures_off_that_date(self):
+        """Pinning A1 v A2 to a date means A1 and A2 are both unavailable that date,
+        so the reverse fixture (which involves both of the same teams) must land
+        elsewhere."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=1, club="A", index=2)
+        fixed = fmodel.ScheduledFixture(
+            fixture=fmodel.Fixture(home_team=a1, away_team=a2), date=date(2025, 1, 1)
+        )
+        params = self._params(fixed_fixtures=[fixed])
+        fixtures = list(fmodel.solve(params))
+        # a2 v a1 (the reverse fixture) must be on a different date
+        reverse = next(
+            sf
+            for sf in fixtures
+            if sf.fixture.home_team == a2 and sf.fixture.away_team == a1
+        )
+        self.assertNotEqual(reverse.date, date(2025, 1, 1))
+
+
+class TestDuplicateRejection(unittest.TestCase):
+    """Parameters construction relies on each (Fixture, date) pair mapping to at most
+    one solver variable; these are the two ways it could otherwise be violated."""
+
+    def test_duplicate_team_rejected(self):
+        teams = [
+            fmodel.Team(division=1, club="A", index=1),
+            fmodel.Team(division=1, club="A", index=1),  # duplicate
+            fmodel.Team(division=1, club="B", index=1),
+        ]
+        with self.assertRaisesRegex(ValueError, "Duplicate team"):
+            fmodel.Parameters(
+                teams=teams,
+                home_dates={"A": [date(2025, 1, 1)], "B": [date(2025, 2, 1)]},
+                unavailable_away_dates={"A": [], "B": []},
+                max_concurrent_home_matches={
+                    "A": fmodel.MaxConcurrentHomeMatches(default=1),
+                    "B": fmodel.MaxConcurrentHomeMatches(default=1),
+                },
+            )
+
+    def test_duplicate_home_date_rejected(self):
+        teams = [
+            fmodel.Team(division=1, club="A", index=1),
+            fmodel.Team(division=1, club="B", index=1),
+        ]
+        with self.assertRaisesRegex(ValueError, "Duplicate home date"):
+            fmodel.Parameters(
+                teams=teams,
+                home_dates={
+                    "A": [date(2025, 1, 1), date(2025, 1, 1)],  # duplicate
+                    "B": [date(2025, 2, 1)],
+                },
+                unavailable_away_dates={"A": [], "B": []},
+                max_concurrent_home_matches={
+                    "A": fmodel.MaxConcurrentHomeMatches(default=1),
+                    "B": fmodel.MaxConcurrentHomeMatches(default=1),
+                },
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
