@@ -228,51 +228,6 @@ def _parse_divisions(
         )
 
 
-_DATES_SECTION_KEYS = {"clubs"}
-
-
-def _parse_dates_section(
-    data: Mapping[str, Any],
-    clubs: Mapping[str, fmodel.Club],
-    path: Path,
-    section_name: str,
-) -> dict[str, list[date]]:
-    """Parse a home_dates/unavailable_away_dates section's 'clubs' sub-mapping.
-
-    A 'teams' sub-mapping (for per-team date overrides) is planned but not yet supported.
-    """
-    result: dict[str, list[date]] = {club_id: [] for club_id in clubs}
-
-    section_spec = data.get(section_name)
-    if section_spec is None:
-        return result
-    if not isinstance(section_spec, dict):
-        raise SpecError(f"{path}: {section_name!r} must be a mapping")
-
-    unsupported = section_spec.keys() - _DATES_SECTION_KEYS
-    if unsupported:
-        raise SpecError(
-            f"{path}: {section_name}.{sorted(unsupported)} not supported (only 'clubs' is, so far)"
-        )
-
-    clubs_section = section_spec.get("clubs")
-    if clubs_section is None:
-        return result
-    if not isinstance(clubs_section, dict):
-        raise SpecError(f"{path}: {section_name}.clubs must be a mapping")
-
-    for club_id, dates in clubs_section.items():
-        if club_id not in clubs:
-            raise SpecError(
-                f"{path}: {section_name}.clubs references unknown club {club_id!r}"
-            )
-        result[club_id] = _parse_date_list(
-            dates, f"{path}: {section_name}.clubs[{club_id!r}]"
-        )
-
-    return result
-
-
 def _parse_max_concurrent_home_matches_value(
     value: Any, context: str
 ) -> fmodel.MaxConcurrentHomeMatches:
@@ -303,107 +258,123 @@ def _parse_max_concurrent_home_matches_value(
     )
 
 
-_MAX_CONCURRENT_HOME_MATCHES_SECTION_KEYS = {"default", "clubs"}
+_CLUB_CONSTRAINT_FIELD_KEYS = {
+    "home_dates",
+    "unavailable_away_dates",
+    "max_concurrent_home_matches",
+    "max_home_dates_used",
+}
+
+# Constraint types with a notion of a default, overridable per club. Other constraint
+# types (home_dates, unavailable_away_dates, max_home_dates_used) have no meaningful
+# spec-wide default, so aren't accepted under 'defaults'.
+_CLUB_CONSTRAINT_DEFAULTS_KEYS = {"max_concurrent_home_matches"}
 
 
-def _parse_max_concurrent_home_matches(
+@dataclasses.dataclass(frozen=True)
+class _ClubConstraints:
+    home_dates: dict[str, list[date]]
+    unavailable_away_dates: dict[str, list[date]]
+    max_concurrent_home_matches: dict[str, fmodel.MaxConcurrentHomeMatches]
+    max_home_dates_used: dict[str, int]
+
+
+def _parse_club_constraints(
     data: Mapping[str, Any], clubs: Mapping[str, fmodel.Club], path: Path
-) -> dict[str, fmodel.MaxConcurrentHomeMatches]:
-    """Parse the 'max_concurrent_home_matches' section.
+) -> _ClubConstraints:
+    """Parse the 'club_constraints' section: per-club home_dates, unavailable_away_dates,
+    max_concurrent_home_matches and max_home_dates_used, keyed directly by club ID.
 
-    'default' (optional) applies to any club not given an explicit entry under
-    'clubs'. If 'default' is omitted, every club must have an explicit 'clubs' entry:
-    a plain integer (a default with no overrides) or a mapping of 'default' (required)
-    and 'overrides' (a date -> integer mapping, optional).
+    An optional 'defaults' entry (a sibling of the club entries) supplies a spec-wide
+    default for constraint types that support one (currently just
+    max_concurrent_home_matches); a club's own entry, if present, always takes
+    precedence over 'defaults'. If 'defaults.max_concurrent_home_matches' is omitted,
+    every club must have its own max_concurrent_home_matches entry.
     """
-    section_name = "max_concurrent_home_matches"
+    section_name = "club_constraints"
     section_spec = data.get(section_name, {})
     if not isinstance(section_spec, dict):
         raise SpecError(f"{path}: {section_name!r} must be a mapping")
 
-    unsupported = section_spec.keys() - _MAX_CONCURRENT_HOME_MATCHES_SECTION_KEYS
-    if unsupported:
+    defaults_spec = section_spec.get("defaults", {})
+    if not isinstance(defaults_spec, dict):
+        raise SpecError(f"{path}: {section_name}.defaults must be a mapping")
+    unsupported_defaults = defaults_spec.keys() - _CLUB_CONSTRAINT_DEFAULTS_KEYS
+    if unsupported_defaults:
         raise SpecError(
-            f"{path}: {section_name}.{sorted(unsupported)} not supported "
-            "(only 'default' and 'clubs' are)"
+            f"{path}: {section_name}.defaults.{sorted(unsupported_defaults)} not "
+            f"supported (only {sorted(_CLUB_CONSTRAINT_DEFAULTS_KEYS)} are)"
+        )
+    default_max_concurrent_home_matches = None
+    if "max_concurrent_home_matches" in defaults_spec:
+        default_max_concurrent_home_matches = _parse_max_concurrent_home_matches_value(
+            defaults_spec["max_concurrent_home_matches"],
+            f"{path}: {section_name}.defaults.max_concurrent_home_matches",
         )
 
-    section_default_spec = section_spec.get("default")
-    section_default = (
-        None
-        if section_default_spec is None
-        else _require_int(section_default_spec, f"{path}: {section_name}.default")
-    )
-
-    clubs_section = section_spec.get("clubs", {})
-    if not isinstance(clubs_section, dict):
-        raise SpecError(f"{path}: {section_name}.clubs must be a mapping")
-
-    unknown_clubs = clubs_section.keys() - clubs.keys()
+    unknown_clubs = section_spec.keys() - clubs.keys() - {"defaults"}
     if unknown_clubs:
         raise SpecError(
-            f"{path}: {section_name}.clubs references unknown club(s) {sorted(unknown_clubs)}"
+            f"{path}: {section_name} references unknown club(s) {sorted(unknown_clubs)}"
         )
 
-    result: dict[str, fmodel.MaxConcurrentHomeMatches] = {}
-    missing: list[str] = []
+    home_dates: dict[str, list[date]] = {}
+    unavailable_away_dates: dict[str, list[date]] = {}
+    max_concurrent_home_matches: dict[str, fmodel.MaxConcurrentHomeMatches] = {}
+    max_home_dates_used: dict[str, int] = {}
+    missing_max_concurrent: list[str] = []
+
     for club_id in clubs:
-        if club_id in clubs_section:
-            result[club_id] = _parse_max_concurrent_home_matches_value(
-                clubs_section[club_id], f"{path}: {section_name}.clubs[{club_id!r}]"
+        club_spec = section_spec.get(club_id, {})
+        if not isinstance(club_spec, dict):
+            raise SpecError(f"{path}: {section_name}[{club_id!r}] must be a mapping")
+        unsupported = club_spec.keys() - _CLUB_CONSTRAINT_FIELD_KEYS
+        if unsupported:
+            raise SpecError(
+                f"{path}: {section_name}[{club_id!r}].{sorted(unsupported)} not "
+                f"supported (only {sorted(_CLUB_CONSTRAINT_FIELD_KEYS)} are)"
             )
-        elif section_default is not None:
-            result[club_id] = fmodel.MaxConcurrentHomeMatches(default=section_default)
+
+        home_dates[club_id] = _parse_date_list(
+            club_spec.get("home_dates"),
+            f"{path}: {section_name}[{club_id!r}].home_dates",
+        )
+        unavailable_away_dates[club_id] = _parse_date_list(
+            club_spec.get("unavailable_away_dates"),
+            f"{path}: {section_name}[{club_id!r}].unavailable_away_dates",
+        )
+
+        if "max_concurrent_home_matches" in club_spec:
+            max_concurrent_home_matches[club_id] = (
+                _parse_max_concurrent_home_matches_value(
+                    club_spec["max_concurrent_home_matches"],
+                    f"{path}: {section_name}[{club_id!r}].max_concurrent_home_matches",
+                )
+            )
+        elif default_max_concurrent_home_matches is not None:
+            max_concurrent_home_matches[club_id] = default_max_concurrent_home_matches
         else:
-            missing.append(club_id)
+            missing_max_concurrent.append(club_id)
 
-    if missing:
+        if "max_home_dates_used" in club_spec:
+            max_home_dates_used[club_id] = _require_int(
+                club_spec["max_home_dates_used"],
+                f"{path}: {section_name}[{club_id!r}].max_home_dates_used",
+            )
+
+    if missing_max_concurrent:
         raise SpecError(
-            f"{path}: {section_name}.clubs missing entry for club(s) {sorted(missing)} "
-            f"(no top-level {section_name}.default set)"
+            f"{path}: {section_name} missing max_concurrent_home_matches for "
+            f"club(s) {sorted(missing_max_concurrent)} (no "
+            f"{section_name}.defaults.max_concurrent_home_matches set)"
         )
 
-    return result
-
-
-def _parse_max_home_dates_used(
-    data: Mapping[str, Any], clubs: Mapping[str, fmodel.Club], path: Path
-) -> dict[str, int]:
-    """Parse the optional 'max_home_dates_used' section.
-
-    Returns a dict mapping club IDs to their maximum number of home dates that may be
-    used.  Clubs not mentioned in the section are left unconstrained (absent from the
-    returned dict).  If the section is absent entirely, an empty dict is returned.
-    """
-    section_name = "max_home_dates_used"
-    section_spec = data.get(section_name)
-    if section_spec is None:
-        return {}
-
-    if not isinstance(section_spec, dict):
-        raise SpecError(f"{path}: {section_name!r} must be a mapping")
-
-    unsupported = section_spec.keys() - {"clubs"}
-    if unsupported:
-        raise SpecError(
-            f"{path}: {section_name}.{sorted(unsupported)} not supported "
-            "(only 'clubs' is)"
-        )
-
-    clubs_section = section_spec.get("clubs", {})
-    if not isinstance(clubs_section, dict):
-        raise SpecError(f"{path}: {section_name}.clubs must be a mapping")
-
-    unknown_clubs = clubs_section.keys() - clubs.keys()
-    if unknown_clubs:
-        raise SpecError(
-            f"{path}: {section_name}.clubs references unknown club(s) {sorted(unknown_clubs)}"
-        )
-
-    return {
-        club_id: _require_int(value, f"{path}: {section_name}.clubs[{club_id!r}]")
-        for club_id, value in clubs_section.items()
-    }
+    return _ClubConstraints(
+        home_dates=home_dates,
+        unavailable_away_dates=unavailable_away_dates,
+        max_concurrent_home_matches=max_concurrent_home_matches,
+        max_home_dates_used=max_home_dates_used,
+    )
 
 
 def _parse_fixed_fixtures(
@@ -595,19 +566,16 @@ def load_spec(spec_path: str | Path) -> Spec:
     teams = _parse_teams(data, clubs, path)
     _parse_divisions(data, teams, path)
 
-    home_dates = _parse_dates_section(data, clubs, path, "home_dates")
-    unavailable_away_dates = _parse_dates_section(
-        data, clubs, path, "unavailable_away_dates"
-    )
-
-    max_concurrent_home_matches = _parse_max_concurrent_home_matches(data, clubs, path)
+    club_constraints = _parse_club_constraints(data, clubs, path)
+    home_dates = club_constraints.home_dates
+    unavailable_away_dates = club_constraints.unavailable_away_dates
+    max_concurrent_home_matches = club_constraints.max_concurrent_home_matches
 
     kwargs: dict[str, Any] = {}
     if "min_gap_days" in data:
         kwargs["min_gap_days"] = data["min_gap_days"]
-    max_home_dates_used = _parse_max_home_dates_used(data, clubs, path)
-    if max_home_dates_used:
-        kwargs["max_home_dates_used"] = max_home_dates_used
+    if club_constraints.max_home_dates_used:
+        kwargs["max_home_dates_used"] = club_constraints.max_home_dates_used
 
     fixed_fixtures = _parse_fixed_fixtures(data, teams, home_dates, path)
     if fixed_fixtures:

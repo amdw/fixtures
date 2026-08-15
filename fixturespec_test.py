@@ -22,11 +22,11 @@ from pathlib import Path
 import fixturespec
 import fmodel
 
-# A valid spec minus 'max_concurrent_home_matches', for tests that need to append
-# their own version of that section (appending a second copy on top of _MINIMAL_SPEC's
-# own would create a duplicate top-level YAML key, which PyYAML resolves by silently
-# letting the later one clobber the earlier one).
-_MINIMAL_SPEC_NO_MCHM = """
+# Clubs/teams/divisions boilerplate, minus 'club_constraints', for tests that need to
+# supply their own version of that section (concatenating a second copy on top of an
+# existing one would create a duplicate top-level YAML key, which PyYAML resolves by
+# silently letting the later one clobber the earlier one).
+_BOILERPLATE = """
 clubs:
   albany:
     name: Albany
@@ -51,18 +51,26 @@ teams:
 
 divisions:
   1: [albany-1, hackney-1]
-
-home_dates:
-  clubs:
-    albany: [2025-09-01, 2025-09-29]
-    hackney: [2025-09-15]
-
-unavailable_away_dates:
-  clubs:
-    albany: [2025-12-25]
 """
 
-_MINIMAL_SPEC = _MINIMAL_SPEC_NO_MCHM + "max_concurrent_home_matches:\n  default: 1\n"
+# A valid spec minus 'club_constraints.defaults' (so every club still needs its own
+# max_concurrent_home_matches entry to be valid), for tests that need to append their
+# own version of that piece.
+_MINIMAL_SPEC_NO_MCHM = (
+    _BOILERPLATE
+    + """
+club_constraints:
+  albany:
+    home_dates: [2025-09-01, 2025-09-29]
+    unavailable_away_dates: [2025-12-25]
+  hackney:
+    home_dates: [2025-09-15]
+"""
+)
+
+_MINIMAL_SPEC = (
+    _MINIMAL_SPEC_NO_MCHM + "  defaults:\n    max_concurrent_home_matches: 1\n"
+)
 
 # A three-team spec (two Albany teams plus Hackney) for exclude_fixtures tests, which
 # need a division where excluding one team/club still leaves other fixtures behind.
@@ -96,13 +104,13 @@ teams:
 divisions:
   1: [albany-1, albany-2, hackney-1]
 
-home_dates:
-  clubs:
-    albany: [2025-09-01, 2025-10-01, 2025-11-01, 2025-12-01]
-    hackney: [2026-01-01, 2026-02-01]
-
-max_concurrent_home_matches:
-  default: 2
+club_constraints:
+  defaults:
+    max_concurrent_home_matches: 2
+  albany:
+    home_dates: [2025-09-01, 2025-10-01, 2025-11-01, 2025-12-01]
+  hackney:
+    home_dates: [2026-01-01, 2026-02-01]
 """
 
 
@@ -151,8 +159,8 @@ class TestLoadSpec(unittest.TestCase):
         # hackney has no unavailable_away_dates entry, should default to empty
         self.assertEqual(spec.parameters.unavailable_away_dates["hackney"], [])
         self.assertEqual(spec.parameters.min_gap_days, 7)
-        # Neither club has its own entry, so both inherit _MINIMAL_SPEC's top-level
-        # max_concurrent_home_matches.default (1).
+        # Neither club has its own entry, so both inherit _MINIMAL_SPEC's
+        # club_constraints.defaults.max_concurrent_home_matches (1).
         self.assertEqual(
             spec.parameters.max_concurrent_home_matches["albany"],
             fmodel.MaxConcurrentHomeMatches(default=1),
@@ -235,32 +243,36 @@ class TestLoadSpec(unittest.TestCase):
 
     def test_duplicate_nested_key_rejected(self):
         path = self._write(
-            _MINIMAL_SPEC_NO_MCHM + "max_concurrent_home_matches:\n"
-            "  clubs:\n"
-            "    albany: 1\n"
-            "    albany: 2\n"
-            "    hackney: 1\n"
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    max_concurrent_home_matches: 1\n"
+            "  albany:\n"
+            "    home_dates: [2025-09-01]\n"
+            "  albany:\n"
+            "    home_dates: [2025-09-08]\n"
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "duplicate key"):
             fixturespec.load_spec(path)
 
-    # These tests write standalone specs rather than extending _MINIMAL_SPEC, since
-    # _MINIMAL_SPEC already has a top-level max_concurrent_home_matches section and
-    # YAML silently lets a later duplicate top-level key clobber the earlier one.
+    # These tests write standalone specs rather than extending _MINIMAL_SPEC_NO_MCHM,
+    # since appending a second 'club_constraints' section (or a second entry for a
+    # club already present) would create a duplicate YAML key, which PyYAML resolves
+    # by silently letting the later one clobber the earlier one.
 
     def test_max_concurrent_home_matches_shorthand_int(self):
         path = self._write(
-            _MINIMAL_SPEC_NO_MCHM + "max_concurrent_home_matches:\n"
-            "  default: 1\n"
-            "  clubs:\n"
-            "    albany: 3\n"
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    max_concurrent_home_matches: 1\n"
+            "  albany:\n"
+            "    max_concurrent_home_matches: 3\n"
         )
         spec = fixturespec.load_spec(path)
         self.assertEqual(
             spec.parameters.max_concurrent_home_matches["albany"],
             fmodel.MaxConcurrentHomeMatches(default=3),
         )
-        # hackney wasn't given its own entry, so it inherits the section-level default
+        # hackney wasn't given its own entry, so it inherits club_constraints.defaults
         self.assertEqual(
             spec.parameters.max_concurrent_home_matches["hackney"],
             fmodel.MaxConcurrentHomeMatches(default=1),
@@ -268,13 +280,14 @@ class TestLoadSpec(unittest.TestCase):
 
     def test_max_concurrent_home_matches_default_and_overrides(self):
         path = self._write(
-            _MINIMAL_SPEC_NO_MCHM + "max_concurrent_home_matches:\n"
-            "  clubs:\n"
-            "    albany:\n"
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    max_concurrent_home_matches:\n"
             "      default: 2\n"
             "      overrides:\n"
             "        2025-09-01: 3\n"
-            "    hackney: 1\n"
+            "  hackney:\n"
+            "    max_concurrent_home_matches: 1\n"
         )
         spec = fixturespec.load_spec(path)
         self.assertEqual(
@@ -284,39 +297,51 @@ class TestLoadSpec(unittest.TestCase):
 
     def test_max_concurrent_home_matches_missing_default(self):
         path = self._write(
-            _MINIMAL_SPEC_NO_MCHM + "max_concurrent_home_matches:\n"
-            "  clubs:\n"
-            "    albany:\n"
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    max_concurrent_home_matches:\n"
             "      overrides:\n"
             "        2025-09-01: 3\n"
-            "    hackney: 1\n"
+            "  hackney:\n"
+            "    max_concurrent_home_matches: 1\n"
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "default"):
             fixturespec.load_spec(path)
 
-    def test_max_concurrent_home_matches_unknown_club(self):
+    def test_club_constraints_unknown_club(self):
         path = self._write(
-            _MINIMAL_SPEC_NO_MCHM + "max_concurrent_home_matches:\n"
-            "  clubs:\n"
-            "    albany: 1\n"
-            "    hackney: 1\n"
-            "    nonexistent: 3\n"
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    max_concurrent_home_matches: 1\n"
+            "  hackney:\n"
+            "    max_concurrent_home_matches: 1\n"
+            "  nonexistent:\n"
+            "    max_concurrent_home_matches: 3\n"
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
             fixturespec.load_spec(path)
 
     def test_max_concurrent_home_matches_missing_club_without_section_default(self):
         path = self._write(
-            _MINIMAL_SPEC_NO_MCHM + "max_concurrent_home_matches:\n"
-            "  clubs:\n"
-            "    albany: 1\n"
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    max_concurrent_home_matches: 1\n"
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "hackney"):
             fixturespec.load_spec(path)
 
     def test_max_concurrent_home_matches_section_omitted_entirely(self):
-        path = self._write(_MINIMAL_SPEC_NO_MCHM)
+        path = self._write(_BOILERPLATE)
         with self.assertRaisesRegex(fixturespec.SpecError, "albany.*hackney"):
+            fixturespec.load_spec(path)
+
+    def test_club_constraints_defaults_unsupported_field(self):
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    home_dates: [2025-09-01]\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
             fixturespec.load_spec(path)
 
     def test_missing_clubs(self):
@@ -485,9 +510,9 @@ teams:
     division: 1
 divisions:
   1: [albany-1]
-home_dates:
-  clubs:
-    albany: ["not-a-date"]
+club_constraints:
+  albany:
+    home_dates: ["not-a-date"]
 """)
         with self.assertRaisesRegex(fixturespec.SpecError, "not-a-date"):
             fixturespec.load_spec(path)
@@ -507,9 +532,9 @@ teams:
     division: 1
 divisions:
   1: [albany-1]
-home_dates:
-  clubs:
-    albany: [2025-09-01, 2025-09-01]
+club_constraints:
+  albany:
+    home_dates: [2025-09-01, 2025-09-01]
 """)
         with self.assertRaisesRegex(fixturespec.SpecError, "duplicate date"):
             fixturespec.load_spec(path)
@@ -529,14 +554,14 @@ teams:
     division: 1
 divisions:
   1: [albany-1]
-unavailable_away_dates:
-  clubs:
-    albany: [2025-09-01, 2025-09-01]
+club_constraints:
+  albany:
+    unavailable_away_dates: [2025-09-01, 2025-09-01]
 """)
         with self.assertRaisesRegex(fixturespec.SpecError, "duplicate date"):
             fixturespec.load_spec(path)
 
-    def test_unsupported_dates_subsection(self):
+    def test_unsupported_club_constraint_field(self):
         path = self._write("""
 clubs:
   albany:
@@ -551,9 +576,10 @@ teams:
     division: 1
 divisions:
   1: [albany-1]
-home_dates:
-  teams:
-    albany-1: [2025-09-01]
+club_constraints:
+  albany:
+    home_dates: [2025-09-01]
+    teams: {}
 """)
         with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
             fixturespec.load_spec(path)
@@ -565,8 +591,13 @@ home_dates:
 
     def test_max_home_dates_used_per_club(self):
         path = self._write(
-            _MINIMAL_SPEC
-            + "max_home_dates_used:\n  clubs:\n    albany: 1\n    hackney: 1\n"
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    max_concurrent_home_matches: 1\n"
+            "  albany:\n"
+            "    max_home_dates_used: 1\n"
+            "  hackney:\n"
+            "    max_home_dates_used: 1\n"
         )
         spec = fixturespec.load_spec(path)
         self.assertEqual(
@@ -574,9 +605,13 @@ home_dates:
         )
 
     def test_max_home_dates_used_partial_clubs(self):
-        """Only the clubs listed in the section are constrained."""
+        """Only the clubs given their own entry are constrained."""
         path = self._write(
-            _MINIMAL_SPEC + "max_home_dates_used:\n  clubs:\n    albany: 1\n"
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    max_concurrent_home_matches: 1\n"
+            "  albany:\n"
+            "    max_home_dates_used: 1\n"
         )
         spec = fixturespec.load_spec(path)
         self.assertEqual(spec.parameters.max_home_dates_used, {"albany": 1})
@@ -588,25 +623,26 @@ home_dates:
 
     def test_max_home_dates_used_unknown_club(self):
         path = self._write(
-            _MINIMAL_SPEC + "max_home_dates_used:\n  clubs:\n    unknown-club: 1\n"
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    max_concurrent_home_matches: 1\n"
+            "  unknown-club:\n"
+            "    max_home_dates_used: 1\n"
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "unknown-club"):
             fixturespec.load_spec(path)
 
     def test_max_home_dates_used_not_int(self):
         path = self._write(
-            _MINIMAL_SPEC
-            + "max_home_dates_used:\n  clubs:\n    albany: not-an-int\n    hackney: 1\n"
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    max_concurrent_home_matches: 1\n"
+            "  albany:\n"
+            "    max_home_dates_used: not-an-int\n"
+            "  hackney:\n"
+            "    max_home_dates_used: 1\n"
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "integer"):
-            fixturespec.load_spec(path)
-
-    def test_max_home_dates_used_unsupported_key(self):
-        path = self._write(
-            _MINIMAL_SPEC
-            + "max_home_dates_used:\n  clubs:\n    albany: 1\n  teams: {}\n"
-        )
-        with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
             fixturespec.load_spec(path)
 
     def test_fixed_fixture(self):
