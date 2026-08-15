@@ -566,9 +566,14 @@ def load_spec(spec_path: str | Path) -> Spec:
     teams = _parse_teams(data, clubs, path)
     _parse_divisions(data, teams, path)
 
+    avoid_dates = _parse_date_list(data.get("avoid_dates"), f"{path}: 'avoid_dates'")
+
     club_constraints = _parse_club_constraints(data, clubs, path)
     home_dates = club_constraints.home_dates
-    unavailable_away_dates = club_constraints.unavailable_away_dates
+    unavailable_away_dates = {
+        club_id: sorted(set(dates) | set(avoid_dates))
+        for club_id, dates in club_constraints.unavailable_away_dates.items()
+    }
     max_concurrent_home_matches = club_constraints.max_concurrent_home_matches
 
     kwargs: dict[str, Any] = {}
