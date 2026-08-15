@@ -118,7 +118,13 @@ def _parse_date_list(value: Any, context: str) -> list[date]:
         return []
     if not isinstance(value, list):
         raise SpecError(f"{context}: expected a list of dates, got {value!r}")
-    return [_parse_date(v, context) for v in value]
+    dates = [_parse_date(v, context) for v in value]
+    seen: set[date] = set()
+    for d in dates:
+        if d in seen:
+            raise SpecError(f"{context}: duplicate date {d.isoformat()}")
+        seen.add(d)
+    return dates
 
 
 def _parse_clubs(data: Mapping[str, Any], path: Path) -> dict[str, fmodel.Club]:
@@ -398,6 +404,72 @@ def _parse_max_home_dates_used(
     }
 
 
+def _parse_fixed_fixtures(
+    data: Mapping[str, Any],
+    teams: Mapping[str, fmodel.Team],
+    home_dates: Mapping[str, list[date]],
+    path: Path,
+) -> list[fmodel.ScheduledFixture]:
+    """Parse the optional 'fixed_fixtures' section: fixtures pinned to a specific date.
+
+    Each entry references a home and away team (by team ID) and a date. The two
+    teams must be in the same division, and the date must be one of the home
+    team's club's allowed home dates.
+    """
+    section_name = "fixed_fixtures"
+    section_spec = data.get(section_name)
+    if section_spec is None:
+        return []
+    if not isinstance(section_spec, list):
+        raise SpecError(f"{path}: {section_name!r} must be a list")
+
+    required = {"home", "away", "date"}
+    fixed_fixtures = []
+    for i, entry in enumerate(section_spec):
+        context = f"{path}: {section_name}[{i}]"
+        if not isinstance(entry, dict):
+            raise SpecError(f"{context} must be a mapping")
+        missing = required - entry.keys()
+        if missing:
+            raise SpecError(f"{context} missing required field(s) {sorted(missing)}")
+        unsupported = entry.keys() - required
+        if unsupported:
+            raise SpecError(f"{context}: unsupported field(s) {sorted(unsupported)}")
+
+        home_id = entry["home"]
+        away_id = entry["away"]
+        if home_id not in teams:
+            raise SpecError(f"{context}: references unknown team {home_id!r}")
+        if away_id not in teams:
+            raise SpecError(f"{context}: references unknown team {away_id!r}")
+        if home_id == away_id:
+            raise SpecError(f"{context}: home and away team are both {home_id!r}")
+
+        home_team = teams[home_id]
+        away_team = teams[away_id]
+        if home_team.division != away_team.division:
+            raise SpecError(
+                f"{context}: {home_id!r} (division {home_team.division}) and "
+                f"{away_id!r} (division {away_team.division}) are not in the same "
+                "division"
+            )
+
+        fixture_date = _parse_date(entry["date"], f"{context}.date")
+        if fixture_date not in home_dates.get(home_team.club, []):
+            raise SpecError(
+                f"{context}: {fixture_date.isoformat()} is not one of {home_id!r}'s "
+                "club's home dates"
+            )
+
+        fixed_fixtures.append(
+            fmodel.ScheduledFixture(
+                fixture=fmodel.Fixture(home_team=home_team, away_team=away_team),
+                date=fixture_date,
+            )
+        )
+    return fixed_fixtures
+
+
 def load_spec(spec_path: str | Path) -> Spec:
     """Load a fixture Spec (solver Parameters plus club reporting metadata) from a YAML file."""
     path = Path(spec_path)
@@ -429,6 +501,10 @@ def load_spec(spec_path: str | Path) -> Spec:
     max_home_dates_used = _parse_max_home_dates_used(data, clubs, path)
     if max_home_dates_used:
         kwargs["max_home_dates_used"] = max_home_dates_used
+
+    fixed_fixtures = _parse_fixed_fixtures(data, teams, home_dates, path)
+    if fixed_fixtures:
+        kwargs["fixed_fixtures"] = fixed_fixtures
 
     parameters = fmodel.Parameters(
         teams=list(teams.values()),

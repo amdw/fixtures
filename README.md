@@ -90,6 +90,11 @@ max_concurrent_home_matches:
       default: 2
       overrides:                  # per-date overrides of that club's default
         2025-09-08: 3
+
+fixed_fixtures:                   # optional; pin specific fixtures to a specific date
+  - home: albany-1
+    away: hackney-1
+    date: 2025-09-01
 ```
 
 If `max_concurrent_home_matches.default` is omitted, every club must have an
@@ -107,6 +112,12 @@ ISO8601 (`yyyy-mm-dd`), quoted or unquoted. `home_dates`/
 `teams` child section for per-team overrides
 is planned). New constraint types can be added to `fixturespec.py` and
 `fmodel.Parameters` as they're needed.
+
+`fixed_fixtures` pins specific fixtures (by home/away team ID) to a
+specific date, forcing them into the solved schedule as given rather than
+letting the solver choose. For each entry, `home` and `away` must be teams
+in the same division, and `date` must be one of the home team's club's
+`home_dates`.
 
 ### HTML report
 

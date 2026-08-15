@@ -436,6 +436,50 @@ home_dates:
         with self.assertRaisesRegex(fixturespec.SpecError, "not-a-date"):
             fixturespec.load_spec(path)
 
+    def test_duplicate_date_in_home_dates_rejected(self):
+        path = self._write("""
+clubs:
+  albany:
+    name: Albany
+    home_venue: x
+    home_start_time: "19:30"
+    home_time_limit: "75+15"
+teams:
+  albany-1:
+    club: albany
+    index: 1
+    division: 1
+divisions:
+  1: [albany-1]
+home_dates:
+  clubs:
+    albany: [2025-09-01, 2025-09-01]
+""")
+        with self.assertRaisesRegex(fixturespec.SpecError, "duplicate date"):
+            fixturespec.load_spec(path)
+
+    def test_duplicate_date_in_unavailable_away_dates_rejected(self):
+        path = self._write("""
+clubs:
+  albany:
+    name: Albany
+    home_venue: x
+    home_start_time: "19:30"
+    home_time_limit: "75+15"
+teams:
+  albany-1:
+    club: albany
+    index: 1
+    division: 1
+divisions:
+  1: [albany-1]
+unavailable_away_dates:
+  clubs:
+    albany: [2025-09-01, 2025-09-01]
+""")
+        with self.assertRaisesRegex(fixturespec.SpecError, "duplicate date"):
+            fixturespec.load_spec(path)
+
     def test_unsupported_dates_subsection(self):
         path = self._write("""
 clubs:
@@ -507,6 +551,101 @@ home_dates:
             + "max_home_dates_used:\n  clubs:\n    albany: 1\n  teams: {}\n"
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
+            fixturespec.load_spec(path)
+
+    def test_fixed_fixture(self):
+        path = self._write(
+            _MINIMAL_SPEC + "fixed_fixtures:\n"
+            "  - home: hackney-1\n"
+            "    away: albany-1\n"
+            "    date: 2025-09-15\n"
+        )
+        spec = fixturespec.load_spec(path)
+        hackney_1 = next(t for t in spec.parameters.teams if t.club == "hackney")
+        albany_1 = next(t for t in spec.parameters.teams if t.club == "albany")
+        self.assertEqual(
+            spec.parameters.fixed_fixtures,
+            [
+                fmodel.ScheduledFixture(
+                    fixture=fmodel.Fixture(home_team=hackney_1, away_team=albany_1),
+                    date=date(2025, 9, 15),
+                )
+            ],
+        )
+
+    def test_fixed_fixtures_absent(self):
+        path = self._write(_MINIMAL_SPEC)
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.parameters.fixed_fixtures, ())
+
+    def test_fixed_fixtures_not_a_list(self):
+        path = self._write(_MINIMAL_SPEC + "fixed_fixtures:\n  home: hackney-1\n")
+        with self.assertRaisesRegex(fixturespec.SpecError, "list"):
+            fixturespec.load_spec(path)
+
+    def test_fixed_fixtures_missing_field(self):
+        path = self._write(
+            _MINIMAL_SPEC + "fixed_fixtures:\n  - home: hackney-1\n    away: albany-1\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "date"):
+            fixturespec.load_spec(path)
+
+    def test_fixed_fixtures_unsupported_field(self):
+        path = self._write(
+            _MINIMAL_SPEC + "fixed_fixtures:\n"
+            "  - home: hackney-1\n"
+            "    away: albany-1\n"
+            "    date: 2025-09-15\n"
+            "    venue: elsewhere\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "venue"):
+            fixturespec.load_spec(path)
+
+    def test_fixed_fixtures_unknown_team(self):
+        path = self._write(
+            _MINIMAL_SPEC + "fixed_fixtures:\n"
+            "  - home: nonexistent\n"
+            "    away: albany-1\n"
+            "    date: 2025-09-15\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
+            fixturespec.load_spec(path)
+
+    def test_fixed_fixtures_home_equals_away(self):
+        path = self._write(
+            _MINIMAL_SPEC + "fixed_fixtures:\n"
+            "  - home: hackney-1\n"
+            "    away: hackney-1\n"
+            "    date: 2025-09-15\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "hackney-1"):
+            fixturespec.load_spec(path)
+
+    def test_fixed_fixtures_different_divisions_rejected(self):
+        path = self._write(
+            _MINIMAL_SPEC.replace(
+                "  hackney-1:\n    club: hackney\n    index: 1\n    division: 1",
+                "  hackney-1:\n    club: hackney\n    index: 1\n    division: 2",
+            ).replace(
+                "divisions:\n  1: [albany-1, hackney-1]",
+                "divisions:\n  1: [albany-1]\n  2: [hackney-1]",
+            )
+            + "fixed_fixtures:\n"
+            "  - home: hackney-1\n"
+            "    away: albany-1\n"
+            "    date: 2025-09-15\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "not in the same division"):
+            fixturespec.load_spec(path)
+
+    def test_fixed_fixtures_date_not_a_home_date_rejected(self):
+        path = self._write(
+            _MINIMAL_SPEC + "fixed_fixtures:\n"
+            "  - home: hackney-1\n"
+            "    away: albany-1\n"
+            "    date: 2025-09-16\n"  # not one of hackney's home dates
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "home dates"):
             fixturespec.load_spec(path)
 
     def test_solves_end_to_end(self):
