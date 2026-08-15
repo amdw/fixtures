@@ -19,7 +19,9 @@ See README.md for a description of the expected YAML structure.
 
 from __future__ import annotations
 
+import collections
 import dataclasses
+import itertools
 from collections.abc import Mapping
 from datetime import date, datetime
 from pathlib import Path
@@ -470,6 +472,111 @@ def _parse_fixed_fixtures(
     return fixed_fixtures
 
 
+_EXCLUDE_FIXTURES_SECTION_KEYS = {"clubs", "teams", "fixtures"}
+
+
+def _parse_exclude_fixtures(
+    data: Mapping[str, Any], teams: Mapping[str, fmodel.Team], path: Path
+) -> list[fmodel.Fixture]:
+    """Parse the optional 'exclude_fixtures' section: fixtures withheld from
+    scheduling entirely, to be arranged in a later run.
+
+    'clubs' and 'teams' exclude every fixture (in both directions) that any of the
+    given clubs' or teams' teams would otherwise play within their division;
+    'fixtures' excludes individual home/away pairs. Returns the fully expanded set
+    of excluded (home, away) Fixture pairs.
+    """
+    section_name = "exclude_fixtures"
+    section_spec = data.get(section_name)
+    if section_spec is None:
+        return []
+    if not isinstance(section_spec, dict):
+        raise SpecError(f"{path}: {section_name!r} must be a mapping")
+
+    unsupported = section_spec.keys() - _EXCLUDE_FIXTURES_SECTION_KEYS
+    if unsupported:
+        raise SpecError(
+            f"{path}: {section_name}.{sorted(unsupported)} not supported "
+            "(only 'clubs', 'teams' and 'fixtures' are)"
+        )
+
+    teams_by_division: dict[int, list[fmodel.Team]] = collections.defaultdict(list)
+    for team in teams.values():
+        teams_by_division[team.division].append(team)
+
+    excluded: set[fmodel.Fixture] = set()
+
+    clubs_spec = section_spec.get("clubs", [])
+    if not isinstance(clubs_spec, list):
+        raise SpecError(f"{path}: {section_name}.clubs must be a list")
+    known_club_ids = {t.club for t in teams.values()}
+    for club_id in clubs_spec:
+        if club_id not in known_club_ids:
+            raise SpecError(
+                f"{path}: {section_name}.clubs references unknown club {club_id!r}"
+            )
+        for division_teams in teams_by_division.values():
+            for home_team, away_team in itertools.permutations(division_teams, 2):
+                if home_team.club == club_id or away_team.club == club_id:
+                    excluded.add(
+                        fmodel.Fixture(home_team=home_team, away_team=away_team)
+                    )
+
+    teams_spec = section_spec.get("teams", [])
+    if not isinstance(teams_spec, list):
+        raise SpecError(f"{path}: {section_name}.teams must be a list")
+    for team_id in teams_spec:
+        if team_id not in teams:
+            raise SpecError(
+                f"{path}: {section_name}.teams references unknown team {team_id!r}"
+            )
+        team = teams[team_id]
+        for other in teams_by_division[team.division]:
+            if other == team:
+                continue
+            excluded.add(fmodel.Fixture(home_team=team, away_team=other))
+            excluded.add(fmodel.Fixture(home_team=other, away_team=team))
+
+    fixtures_spec = section_spec.get("fixtures", [])
+    if not isinstance(fixtures_spec, list):
+        raise SpecError(f"{path}: {section_name}.fixtures must be a list")
+    required = {"home", "away"}
+    for i, entry in enumerate(fixtures_spec):
+        context = f"{path}: {section_name}.fixtures[{i}]"
+        if not isinstance(entry, dict):
+            raise SpecError(f"{context} must be a mapping")
+        missing = required - entry.keys()
+        if missing:
+            raise SpecError(f"{context} missing required field(s) {sorted(missing)}")
+        unsupported_fields = entry.keys() - required
+        if unsupported_fields:
+            raise SpecError(
+                f"{context}: unsupported field(s) {sorted(unsupported_fields)}"
+            )
+
+        home_id = entry["home"]
+        away_id = entry["away"]
+        if home_id not in teams:
+            raise SpecError(f"{context}: references unknown team {home_id!r}")
+        if away_id not in teams:
+            raise SpecError(f"{context}: references unknown team {away_id!r}")
+        if home_id == away_id:
+            raise SpecError(f"{context}: home and away team are both {home_id!r}")
+
+        home_team = teams[home_id]
+        away_team = teams[away_id]
+        if home_team.division != away_team.division:
+            raise SpecError(
+                f"{context}: {home_id!r} (division {home_team.division}) and "
+                f"{away_id!r} (division {away_team.division}) are not in the same "
+                "division"
+            )
+
+        excluded.add(fmodel.Fixture(home_team=home_team, away_team=away_team))
+
+    return list(excluded)
+
+
 def load_spec(spec_path: str | Path) -> Spec:
     """Load a fixture Spec (solver Parameters plus club reporting metadata) from a YAML file."""
     path = Path(spec_path)
@@ -505,6 +612,17 @@ def load_spec(spec_path: str | Path) -> Spec:
     fixed_fixtures = _parse_fixed_fixtures(data, teams, home_dates, path)
     if fixed_fixtures:
         kwargs["fixed_fixtures"] = fixed_fixtures
+
+    excluded_fixtures = _parse_exclude_fixtures(data, teams, path)
+    if excluded_fixtures:
+        excluded_fixture_set = set(excluded_fixtures)
+        for sf in fixed_fixtures:
+            if sf.fixture in excluded_fixture_set:
+                raise SpecError(
+                    f"{path}: fixed_fixtures entry {sf.fixture.home_team.name} vs "
+                    f"{sf.fixture.away_team.name} is also excluded by exclude_fixtures"
+                )
+        kwargs["excluded_fixtures"] = excluded_fixtures
 
     parameters = fmodel.Parameters(
         teams=list(teams.values()),

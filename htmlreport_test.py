@@ -282,6 +282,98 @@ class TestGenerateReport(unittest.TestCase):
         self.assertIn('<p class="description">Test description.</p>', content)
 
 
+class TestExcludedFixturesInReport(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.output_dir = Path(self._tmpdir.name) / "out"
+
+        self.clubs = {
+            "harrow": _club(
+                "Harrow", venue="Harrow Leisure Centre", start="19:30", limit="75+15"
+            ),
+            "ealing": _club(
+                "Ealing", venue="Ealing Sports Hall", start="19:00", limit="60+15"
+            ),
+        }
+        self.harrow1 = fmodel.Team(division=1, club="harrow", index=1)
+        self.harrow2 = fmodel.Team(division=1, club="harrow", index=2)
+        self.ealing1 = fmodel.Team(division=1, club="ealing", index=1)
+        self.teams = [self.harrow1, self.harrow2, self.ealing1]
+
+        self.fixtures = [_sf(self.harrow1, self.ealing1, date(2025, 9, 1))]
+        self.excluded = [fmodel.Fixture(home_team=self.harrow2, away_team=self.ealing1)]
+
+        self.index_path = htmlreport.generate_report(
+            self.fixtures,
+            self.teams,
+            self.clubs,
+            self.output_dir,
+            excluded_fixtures=self.excluded,
+        )
+
+    def test_all_matches_page_shows_tbc_row_after_dated_rows(self):
+        content = (self.output_dir / "all-matches.html").read_text()
+        self.assertIn("<td><strong>TBC</strong></td>", content)
+        self.assertIn("Harrow 2", content)
+        self.assertLess(content.index("2025"), content.index("TBC"))
+
+    def test_division_page_shows_excluded_fixture(self):
+        div1 = (self.output_dir / "division-1.html").read_text()
+        self.assertIn("<td><strong>TBC</strong></td>", div1)
+        self.assertIn("Harrow 2", div1)
+
+    def test_club_page_consolidated_shows_excluded_fixture(self):
+        harrow_page = (self.output_dir / "club-harrow.html").read_text()
+        consolidated_table = harrow_page.split("<h2>")[0]
+        self.assertIn("TBC", consolidated_table)
+        ealing_page = (self.output_dir / "club-ealing.html").read_text()
+        consolidated_table = ealing_page.split("<h2>")[0]
+        self.assertIn("TBC", consolidated_table)
+
+    def test_team_page_shows_excluded_fixture_with_blank_days_since(self):
+        harrow_page = (self.output_dir / "club-harrow.html").read_text()
+        harrow2_section = harrow_page.split("<h2>Harrow 2</h2>")[1].split("<h2>")[0]
+        expected_row = (
+            "<tr><td><strong>TBC</strong></td><td>Ealing 1</td><td>Home</td>"
+            "<td>Harrow Leisure Centre</td><td>19:30</td><td>75+15</td><td></td></tr>"
+        )
+        self.assertIn(expected_row, harrow2_section)
+
+    def test_team_not_involved_in_excluded_fixture_unaffected(self):
+        harrow_page = (self.output_dir / "club-harrow.html").read_text()
+        harrow1_section = harrow_page.split("<h2>Harrow 1</h2>")[1].split("<h2>")[0]
+        self.assertNotIn("TBC", harrow1_section)
+
+    def test_no_excluded_fixtures_by_default(self):
+        out2 = Path(self._tmpdir.name) / "out-no-excluded"
+        htmlreport.generate_report(self.fixtures, self.teams, self.clubs, out2)
+        content = (out2 / "all-matches.html").read_text()
+        self.assertNotIn("TBC", content)
+
+    def test_division_with_only_excluded_fixtures_still_gets_a_page(self):
+        clubs = dict(self.clubs)
+        clubs["hendon"] = _club("Hendon")
+        clubs["wembley"] = _club("Wembley")
+        hendon1 = fmodel.Team(division=2, club="hendon", index=1)
+        wembley1 = fmodel.Team(division=2, club="wembley", index=1)
+        teams = [*self.teams, hendon1, wembley1]
+        excluded = [
+            *self.excluded,
+            fmodel.Fixture(home_team=hendon1, away_team=wembley1),
+        ]
+
+        out2 = Path(self._tmpdir.name) / "out-div2"
+        htmlreport.generate_report(
+            self.fixtures, teams, clubs, out2, excluded_fixtures=excluded
+        )
+        div2 = (out2 / "division-2.html").read_text()
+        self.assertIn("TBC", div2)
+        self.assertIn("Hendon 1", div2)
+        self.assertIn("Wembley 1", div2)
+
+
 class TestWriteRunsIndex(unittest.TestCase):
     def setUp(self):
         super().setUp()

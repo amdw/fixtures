@@ -42,6 +42,7 @@ def run(spec_path: Path, output_dir: Path) -> Path:
         spec.parameters.teams,
         spec.clubs,
         output_dir,
+        excluded_fixtures=spec.parameters.excluded_fixtures,
         name=spec.name,
         draft=spec.draft,
         description=spec.description,

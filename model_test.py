@@ -394,6 +394,70 @@ class TestFixedFixtures(unittest.TestCase):
         self.assertNotEqual(reverse.date, date(2025, 1, 1))
 
 
+class TestExcludedFixtures(unittest.TestCase):
+    """Test cases for the excluded_fixtures parameter."""
+
+    def _params(self, **kwargs):
+        teams = [
+            fmodel.Team(division=1, club="A", index=1),
+            fmodel.Team(division=1, club="A", index=2),
+            fmodel.Team(division=1, club="B", index=1),
+        ]
+        home_dates = {
+            "A": [
+                date(2025, 1, 1),
+                date(2025, 2, 1),
+                date(2025, 3, 1),
+                date(2025, 4, 1),
+            ],
+            "B": [date(2025, 5, 1), date(2025, 6, 1)],
+        }
+        return fmodel.Parameters(
+            teams=teams,
+            home_dates=home_dates,
+            unavailable_away_dates={"A": [], "B": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=2),
+                "B": fmodel.MaxConcurrentHomeMatches(default=1),
+            },
+            min_gap_days=7,
+            **kwargs,
+        )
+
+    def test_excluded_fixture_is_not_scheduled(self):
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=1, club="A", index=2)
+        excluded_fixture = fmodel.Fixture(home_team=a1, away_team=a2)
+        params = self._params(excluded_fixtures=[excluded_fixture])
+        fixtures = list(fmodel.solve(params))
+        self.assertNotIn(excluded_fixture, [sf.fixture for sf in fixtures])
+        # The other 5 fixtures in this 3-team division must still be scheduled
+        self.assertEqual(len(fixtures), 5)
+
+    def test_exclusion_is_directional(self):
+        """Excluding A1 v A2 must not also exclude the reverse fixture A2 v A1."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=1, club="A", index=2)
+        excluded_fixture = fmodel.Fixture(home_team=a1, away_team=a2)
+        params = self._params(excluded_fixtures=[excluded_fixture])
+        fixtures = list(fmodel.solve(params))
+        self.assertTrue(
+            any(
+                sf.fixture.home_team == a2 and sf.fixture.away_team == a1
+                for sf in fixtures
+            )
+        )
+
+    def test_fixed_and_excluded_conflict_rejected(self):
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=1, club="A", index=2)
+        fixture = fmodel.Fixture(home_team=a1, away_team=a2)
+        fixed = fmodel.ScheduledFixture(fixture=fixture, date=date(2025, 1, 1))
+        params = self._params(fixed_fixtures=[fixed], excluded_fixtures=[fixture])
+        with self.assertRaises(ValueError):
+            fmodel.solve(params)
+
+
 class TestDuplicateRejection(unittest.TestCase):
     """Parameters construction relies on each (Fixture, date) pair mapping to at most
     one solver variable; these are the two ways it could otherwise be violated."""

@@ -136,13 +136,21 @@ def _page_description(path: Path) -> str:
     return html.unescape(match.group(1)) if match else ""
 
 
+def _table_cell(cell: str) -> str:
+    # "TBC" marks an excluded fixture's not-yet-scheduled date; call it out in bold.
+    escaped = html.escape(cell)
+    return (
+        f"<td><strong>{escaped}</strong></td>"
+        if cell == "TBC"
+        else f"<td>{escaped}</td>"
+    )
+
+
 def _table(headers: list[str], rows: list[list[str]]) -> str:
     head_html = "".join(f"<th>{html.escape(h)}</th>" for h in headers)
     if rows:
         body_html = "".join(
-            "<tr>"
-            + "".join(f"<td>{html.escape(cell)}</td>" for cell in row)
-            + "</tr>\n"
+            "<tr>" + "".join(_table_cell(cell) for cell in row) + "</tr>\n"
             for row in rows
         )
     else:
@@ -240,6 +248,80 @@ def _team_rows(
     return rows
 
 
+def _by_home_team_name(
+    fixtures: Collection[fmodel.Fixture], clubs: Mapping[str, fmodel.Club]
+) -> list[fmodel.Fixture]:
+    return sorted(fixtures, key=lambda f: _team_name(f.home_team, clubs))
+
+
+def _excluded_rows_with_division(
+    fixtures: Collection[fmodel.Fixture], clubs: Mapping[str, fmodel.Club]
+) -> list[list[str]]:
+    rows = []
+    for f in _by_home_team_name(fixtures, clubs):
+        home_club = clubs[f.home_team.club]
+        rows.append(
+            [
+                "TBC",
+                str(f.home_team.division),
+                _team_name(f.home_team, clubs),
+                _team_name(f.away_team, clubs),
+                home_club.home_venue,
+                home_club.home_start_time,
+                home_club.home_time_limit,
+            ]
+        )
+    return rows
+
+
+def _excluded_rows(
+    fixtures: Collection[fmodel.Fixture], clubs: Mapping[str, fmodel.Club]
+) -> list[list[str]]:
+    rows = []
+    for f in _by_home_team_name(fixtures, clubs):
+        home_club = clubs[f.home_team.club]
+        rows.append(
+            [
+                "TBC",
+                _team_name(f.home_team, clubs),
+                _team_name(f.away_team, clubs),
+                home_club.home_venue,
+                home_club.home_start_time,
+                home_club.home_time_limit,
+            ]
+        )
+    return rows
+
+
+def _excluded_team_rows(
+    team: fmodel.Team,
+    fixtures: Collection[fmodel.Fixture],
+    clubs: Mapping[str, fmodel.Club],
+) -> list[list[str]]:
+    rows = []
+    for f in sorted(
+        fixtures,
+        key=lambda f: _team_name(
+            f.away_team if f.home_team == team else f.home_team, clubs
+        ),
+    ):
+        is_home = f.home_team == team
+        opponent = f.away_team if is_home else f.home_team
+        home_club = clubs[f.home_team.club]
+        rows.append(
+            [
+                "TBC",
+                _team_name(opponent, clubs),
+                "Home" if is_home else "Away",
+                home_club.home_venue,
+                home_club.home_start_time,
+                home_club.home_time_limit,
+                "",
+            ]
+        )
+    return rows
+
+
 def _nav(links: list[tuple[str, str]]) -> str:
     items = "".join(
         f'<li><a href="{href}">{html.escape(text)}</a></li>\n' for href, text in links
@@ -277,11 +359,16 @@ def generate_report(
     teams: Collection[fmodel.Team],
     clubs: Mapping[str, fmodel.Club],
     output_dir: Path,
+    excluded_fixtures: Collection[fmodel.Fixture] = (),
     name: str = "",
     draft: bool = False,
     description: str = "",
 ) -> Path:
     """Write all HTML report pages for a solved fixture list into output_dir.
+
+    excluded_fixtures (fixtures withheld from scheduling entirely, to be arranged
+    in a later run) are appended to the bottom of every relevant table with "TBC"
+    in place of a date.
 
     Returns the path to the run's index.html.
     """
@@ -290,6 +377,10 @@ def generate_report(
     fixtures_by_division: dict[int, list[fmodel.ScheduledFixture]] = defaultdict(list)
     for sf in fixtures:
         fixtures_by_division[sf.fixture.home_team.division].append(sf)
+
+    excluded_by_division: dict[int, list[fmodel.Fixture]] = defaultdict(list)
+    for f in excluded_fixtures:
+        excluded_by_division[f.home_team.division].append(f)
 
     teams_by_club: dict[str, list[fmodel.Team]] = defaultdict(list)
     for team in teams:
@@ -301,11 +392,21 @@ def generate_report(
         if sf.fixture.away_team.club != sf.fixture.home_team.club:
             fixtures_by_club[sf.fixture.away_team.club].append(sf)
 
+    excluded_by_club: dict[str, list[fmodel.Fixture]] = defaultdict(list)
+    for f in excluded_fixtures:
+        excluded_by_club[f.home_team.club].append(f)
+        if f.away_team.club != f.home_team.club:
+            excluded_by_club[f.away_team.club].append(f)
+
     # All matches
     (output_dir / "all-matches.html").write_text(
         _page(
             "All matches",
-            _table(_MATCH_HEADERS_WITH_DIVISION, _rows_with_division(fixtures, clubs)),
+            _table(
+                _MATCH_HEADERS_WITH_DIVISION,
+                _rows_with_division(fixtures, clubs)
+                + _excluded_rows_with_division(excluded_fixtures, clubs),
+            ),
             name,
             draft,
             description,
@@ -313,11 +414,15 @@ def generate_report(
     )
 
     # One page per division
-    for division in sorted(fixtures_by_division):
+    for division in sorted(set(fixtures_by_division) | set(excluded_by_division)):
         (output_dir / f"division-{division}.html").write_text(
             _page(
                 f"Division {division}",
-                _table(_MATCH_HEADERS, _rows(fixtures_by_division[division], clubs)),
+                _table(
+                    _MATCH_HEADERS,
+                    _rows(fixtures_by_division[division], clubs)
+                    + _excluded_rows(excluded_by_division[division], clubs),
+                ),
                 name,
                 draft,
                 description,
@@ -329,7 +434,8 @@ def generate_report(
         club_name = clubs[club_id].name
         body = _table(
             _MATCH_HEADERS_WITH_DIVISION,
-            _rows_with_division(fixtures_by_club.get(club_id, []), clubs),
+            _rows_with_division(fixtures_by_club.get(club_id, []), clubs)
+            + _excluded_rows_with_division(excluded_by_club.get(club_id, []), clubs),
         )
         for team in sorted(teams_by_club[club_id], key=lambda t: t.index):
             team_fixtures = [
@@ -337,9 +443,18 @@ def generate_report(
                 for sf in fixtures
                 if sf.fixture.home_team == team or sf.fixture.away_team == team
             ]
+            team_excluded = [
+                f
+                for f in excluded_fixtures
+                if f.home_team == team or f.away_team == team
+            ]
             body += f"<h2>{html.escape(_team_name(team, clubs))}</h2>\n"
             body += f"<h3>Division {team.division}</h3>\n"
-            body += _table(_TEAM_MATCH_HEADERS, _team_rows(team, team_fixtures, clubs))
+            body += _table(
+                _TEAM_MATCH_HEADERS,
+                _team_rows(team, team_fixtures, clubs)
+                + _excluded_team_rows(team, team_excluded, clubs),
+            )
         (output_dir / f"club-{slugify(club_id)}.html").write_text(
             _page(club_name, body, name, draft, description)
         )
