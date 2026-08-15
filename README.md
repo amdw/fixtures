@@ -44,7 +44,7 @@ min_gap_days: 7                 # optional, defaults shown here
 latest_internal_match_date: 2025-12-31  # optional, no default (no cutoff applied)
 
 clubs:
-  albany:                       # club ID: stable, referenced from teams/home_dates/etc.
+  albany:                       # club ID: stable, referenced from teams/club_constraints/etc.
     name: Albany
     home_venue: Albany Sports Hall
     home_start_time: "19:30"
@@ -74,23 +74,22 @@ divisions:
   1: [albany-1, hackney-1]
   3: [hackney-5]
 
-home_dates:
-  clubs:
-    albany: [2025-09-01, 2025-09-15, 2025-09-29]
-    hackney: [2025-09-08, 2025-09-22]
+club_constraints:
+  defaults:                       # optional; spec-wide defaults, overridable per club
+    max_concurrent_home_matches: 2  # applies to any club not given its own entry below
 
-unavailable_away_dates:
-  clubs:
-    albany: [2025-12-25]
+  albany:
+    home_dates: [2025-09-01, 2025-09-15, 2025-09-29]
+    unavailable_away_dates: [2025-12-25]
+    max_concurrent_home_matches: 3  # shorthand for {default: 3}
 
-max_concurrent_home_matches:
-  default: 2                      # optional; applies to any club not listed below
-  clubs:
-    albany: 3                     # shorthand for {default: 3}
-    hackney:
+  hackney:
+    home_dates: [2025-09-08, 2025-09-22]
+    max_concurrent_home_matches:
       default: 2
       overrides:                  # per-date overrides of that club's default
         2025-09-08: 3
+    max_home_dates_used: 1        # optional; caps how many of these home dates get used
 
 fixed_fixtures:                   # optional; pin specific fixtures to a specific date
   - home: albany-1
@@ -103,21 +102,26 @@ exclude_fixtures:                 # optional; withhold fixtures from scheduling 
       away: albany-1
 ```
 
-If `max_concurrent_home_matches.default` is omitted, every club must have an
-explicit entry under `max_concurrent_home_matches.clubs` — there's no
-built-in fallback value.
+`club_constraints` groups every constraint that can vary by club — currently
+`home_dates`, `unavailable_away_dates`, `max_concurrent_home_matches` and
+`max_home_dates_used` — under that club's own ID, alongside an optional
+`defaults` entry (a sibling of the club entries, not itself a club) for
+constraint types that support a spec-wide default overridable per club.
+Today that's just `max_concurrent_home_matches`; if
+`club_constraints.defaults.max_concurrent_home_matches` is omitted, every
+club must have its own `max_concurrent_home_matches` entry — there's no
+built-in fallback value. `home_dates` and `unavailable_away_dates` default to
+empty if a club's entry omits them (or the club has no entry at all).
 
 Club and team IDs are your own stable keys (letters/digits/hyphens are safest,
 since they're also used to build report filenames) — used to cross-reference
-clubs from teams, teams from `divisions`, and clubs from `home_dates`/
-`unavailable_away_dates`/`max_concurrent_home_matches`. Every team's
-`division` must match the division list it's listed under in `divisions`,
-and every team must appear in exactly one division list. Dates are plain
-ISO8601 (`yyyy-mm-dd`), quoted or unquoted. `home_dates`/
-`unavailable_away_dates` only support a `clubs` child section today (a
-`teams` child section for per-team overrides
-is planned). New constraint types can be added to `fixturespec.py` and
-`fmodel.Parameters` as they're needed.
+clubs from teams, teams from `divisions`, and clubs from `club_constraints`.
+Every team's `division` must match the division list it's listed under in
+`divisions`, and every team must appear in exactly one division list. Dates
+are plain ISO8601 (`yyyy-mm-dd`), quoted or unquoted. Per-team constraint
+overrides (as opposed to per-club) are planned but not yet supported. New
+constraint types can be added to `fixturespec.py` and `fmodel.Parameters` as
+they're needed.
 
 `fixed_fixtures` pins specific fixtures (by home/away team ID) to a
 specific date, forcing them into the solved schedule as given rather than
