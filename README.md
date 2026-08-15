@@ -95,6 +95,11 @@ fixed_fixtures:                   # optional; pin specific fixtures to a specifi
   - home: albany-1
     away: hackney-1
     date: 2025-09-01
+
+exclude_fixtures:                 # optional; withhold fixtures from scheduling entirely
+  fixtures:                       # individual home/away pairs, to arrange later
+    - home: hackney-1
+      away: albany-1
 ```
 
 If `max_concurrent_home_matches.default` is omitted, every club must have an
@@ -118,6 +123,16 @@ specific date, forcing them into the solved schedule as given rather than
 letting the solver choose. For each entry, `home` and `away` must be teams
 in the same division, and `date` must be one of the home team's club's
 `home_dates`.
+
+`exclude_fixtures` withholds fixtures from scheduling entirely — e.g. to
+arrange in a later run, once dates are confirmed — rather than pinning
+them. Give whole club IDs under `clubs` or whole team IDs under `teams`
+(each excludes every fixture that club's/team's teams would otherwise play
+within their division, in both directions), and/or individual home/away
+pairs under `fixtures`. All three are optional and can be combined. A
+fixture can't be both fixed and excluded; excluded fixtures still appear in
+the HTML report, at the bottom of every relevant table, with "TBC" in
+place of a date.
 
 ### HTML report
 

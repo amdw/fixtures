@@ -114,6 +114,7 @@ class Parameters:
     min_gap_days: int = 7
     max_home_dates_used: Mapping[ClubT, int] = dataclasses.field(default_factory=dict)
     fixed_fixtures: Collection[ScheduledFixture] = ()
+    excluded_fixtures: Collection[Fixture] = ()
 
     def __post_init__(self) -> None:
         _check_no_duplicate_teams(self.teams)
@@ -190,8 +191,9 @@ def _add_fixed_fixtures_constraints(
                 f"Fixed fixture {home_team.name} vs {away_team.name} on "
                 f"{scheduled.date.isoformat()} is not schedulable on that date "
                 "(check that the two teams are in the same division, that the date "
-                "is a home date for the home team's club, and that it isn't an "
-                "unavailable away date for the away team's club)"
+                "is a home date for the home team's club, that it isn't an "
+                "unavailable away date for the away team's club, and that the "
+                "fixture isn't also in excluded_fixtures)"
             )
         model.add(var == 1)
 
@@ -213,15 +215,19 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
         collections.defaultdict(list)
     )
 
+    excluded = set(params.excluded_fixtures)
+
     for division_teams in teams_by_division.values():
         for home_team, away_team in itertools.permutations(division_teams, 2):
+            fixture = Fixture(home_team=home_team, away_team=away_team)
+            if fixture in excluded:
+                continue
             for match_date in params.home_dates[home_team.club]:
                 if match_date in params.unavailable_away_dates.get(away_team.club, []):
                     continue
                 var = model.new_bool_var(
                     f"{home_team.name}_vs_{away_team.name}_{match_date.isoformat()}"
                 )
-                fixture = Fixture(home_team=home_team, away_team=away_team)
                 key = (fixture, match_date)
                 if key in vars_by_fixture_date:
                     raise ValueError(

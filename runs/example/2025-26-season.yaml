@@ -652,3 +652,7 @@ max_concurrent_home_matches:
       default: 2
       overrides:
         '2025-11-13': 3
+exclude_fixtures:
+  fixtures:
+    - home: albany-1
+      away: hackney-1

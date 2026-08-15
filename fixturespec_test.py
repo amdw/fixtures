@@ -64,6 +64,47 @@ unavailable_away_dates:
 
 _MINIMAL_SPEC = _MINIMAL_SPEC_NO_MCHM + "max_concurrent_home_matches:\n  default: 1\n"
 
+# A three-team spec (two Albany teams plus Hackney) for exclude_fixtures tests, which
+# need a division where excluding one team/club still leaves other fixtures behind.
+_THREE_TEAM_SPEC = """
+clubs:
+  albany:
+    name: Albany
+    home_venue: Albany Sports Hall
+    home_start_time: "19:30"
+    home_time_limit: "75+15"
+  hackney:
+    name: Hackney
+    home_venue: Hackney Community Centre
+    home_start_time: "19:00"
+    home_time_limit: "60+15"
+
+teams:
+  albany-1:
+    club: albany
+    index: 1
+    division: 1
+  albany-2:
+    club: albany
+    index: 2
+    division: 1
+  hackney-1:
+    club: hackney
+    index: 1
+    division: 1
+
+divisions:
+  1: [albany-1, albany-2, hackney-1]
+
+home_dates:
+  clubs:
+    albany: [2025-09-01, 2025-10-01, 2025-11-01, 2025-12-01]
+    hackney: [2026-01-01, 2026-02-01]
+
+max_concurrent_home_matches:
+  default: 2
+"""
+
 
 class TestLoadSpec(unittest.TestCase):
     """Test cases for load_spec()."""
@@ -647,6 +688,158 @@ home_dates:
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "home dates"):
             fixturespec.load_spec(path)
+
+    def test_exclude_fixtures_absent(self):
+        path = self._write(_MINIMAL_SPEC)
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.parameters.excluded_fixtures, ())
+
+    def test_exclude_specific_fixture(self):
+        path = self._write(
+            _THREE_TEAM_SPEC + "exclude_fixtures:\n"
+            "  fixtures:\n"
+            "    - home: albany-1\n"
+            "      away: albany-2\n"
+        )
+        spec = fixturespec.load_spec(path)
+        albany1 = next(
+            t for t in spec.parameters.teams if t.club == "albany" and t.index == 1
+        )
+        albany2 = next(
+            t for t in spec.parameters.teams if t.club == "albany" and t.index == 2
+        )
+        self.assertEqual(
+            list(spec.parameters.excluded_fixtures),
+            [fmodel.Fixture(home_team=albany1, away_team=albany2)],
+        )
+
+    def test_exclude_team(self):
+        """Excluding a team excludes all its fixtures, in both directions."""
+        path = self._write(
+            _THREE_TEAM_SPEC + "exclude_fixtures:\n  teams: [hackney-1]\n"
+        )
+        spec = fixturespec.load_spec(path)
+        hackney1 = next(t for t in spec.parameters.teams if t.club == "hackney")
+        others = [t for t in spec.parameters.teams if t.club != "hackney"]
+        expected = set()
+        for other in others:
+            expected.add(fmodel.Fixture(home_team=hackney1, away_team=other))
+            expected.add(fmodel.Fixture(home_team=other, away_team=hackney1))
+        self.assertEqual(set(spec.parameters.excluded_fixtures), expected)
+
+    def test_exclude_club(self):
+        """Excluding a club excludes all of that club's teams' fixtures."""
+        path = self._write(_THREE_TEAM_SPEC + "exclude_fixtures:\n  clubs: [hackney]\n")
+        spec = fixturespec.load_spec(path)
+        hackney1 = next(t for t in spec.parameters.teams if t.club == "hackney")
+        others = [t for t in spec.parameters.teams if t.club != "hackney"]
+        expected = set()
+        for other in others:
+            expected.add(fmodel.Fixture(home_team=hackney1, away_team=other))
+            expected.add(fmodel.Fixture(home_team=other, away_team=hackney1))
+        self.assertEqual(set(spec.parameters.excluded_fixtures), expected)
+
+    def test_exclude_fixtures_unknown_club(self):
+        path = self._write(
+            _THREE_TEAM_SPEC + "exclude_fixtures:\n  clubs: [nonexistent]\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
+            fixturespec.load_spec(path)
+
+    def test_exclude_fixtures_unknown_team(self):
+        path = self._write(
+            _THREE_TEAM_SPEC + "exclude_fixtures:\n  teams: [nonexistent]\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
+            fixturespec.load_spec(path)
+
+    def test_exclude_fixtures_unsupported_key(self):
+        path = self._write(
+            _THREE_TEAM_SPEC + "exclude_fixtures:\n  players: [nonexistent]\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
+            fixturespec.load_spec(path)
+
+    def test_exclude_fixtures_unknown_team_in_fixtures_list(self):
+        path = self._write(
+            _THREE_TEAM_SPEC + "exclude_fixtures:\n"
+            "  fixtures:\n"
+            "    - home: nonexistent\n"
+            "      away: albany-2\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
+            fixturespec.load_spec(path)
+
+    def test_exclude_fixtures_home_equals_away(self):
+        path = self._write(
+            _THREE_TEAM_SPEC + "exclude_fixtures:\n"
+            "  fixtures:\n"
+            "    - home: albany-1\n"
+            "      away: albany-1\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "albany-1"):
+            fixturespec.load_spec(path)
+
+    def test_exclude_fixtures_different_divisions_rejected(self):
+        path = self._write(
+            _THREE_TEAM_SPEC.replace(
+                "  hackney-1:\n    club: hackney\n    index: 1\n    division: 1",
+                "  hackney-1:\n    club: hackney\n    index: 1\n    division: 2",
+            ).replace(
+                "divisions:\n  1: [albany-1, albany-2, hackney-1]",
+                "divisions:\n  1: [albany-1, albany-2]\n  2: [hackney-1]",
+            )
+            + "exclude_fixtures:\n"
+            "  fixtures:\n"
+            "    - home: albany-1\n"
+            "      away: hackney-1\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "not in the same division"):
+            fixturespec.load_spec(path)
+
+    def test_exclude_fixtures_missing_field(self):
+        path = self._write(
+            _THREE_TEAM_SPEC + "exclude_fixtures:\n  fixtures:\n    - home: albany-1\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "away"):
+            fixturespec.load_spec(path)
+
+    def test_exclude_fixtures_conflicts_with_fixed_fixtures(self):
+        path = self._write(
+            _THREE_TEAM_SPEC + "fixed_fixtures:\n"
+            "  - home: albany-1\n"
+            "    away: albany-2\n"
+            "    date: 2025-09-01\n"
+            "exclude_fixtures:\n"
+            "  fixtures:\n"
+            "    - home: albany-1\n"
+            "      away: albany-2\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "also excluded"):
+            fixturespec.load_spec(path)
+
+    def test_exclude_fixtures_solves_end_to_end(self):
+        path = self._write(
+            _THREE_TEAM_SPEC + "exclude_fixtures:\n"
+            "  fixtures:\n"
+            "    - home: albany-1\n"
+            "      away: albany-2\n"
+        )
+        spec = fixturespec.load_spec(path)
+        fixtures = list(fmodel.solve(spec.parameters))
+        albany1 = next(
+            t for t in spec.parameters.teams if t.club == "albany" and t.index == 1
+        )
+        albany2 = next(
+            t for t in spec.parameters.teams if t.club == "albany" and t.index == 2
+        )
+        self.assertEqual(len(fixtures), 5)  # 6 fixtures minus the excluded one
+        self.assertFalse(
+            any(
+                sf.fixture.home_team == albany1 and sf.fixture.away_team == albany2
+                for sf in fixtures
+            )
+        )
 
     def test_solves_end_to_end(self):
         """A loaded spec's Parameters should be usable directly with fmodel.solve()."""
