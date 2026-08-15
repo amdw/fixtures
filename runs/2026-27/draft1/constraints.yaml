@@ -8,16 +8,6 @@ draft: true
 #     teams, divisions, club_constraints)
 #   - Hendon's unavailable_away_dates (none supplied yet)
 #   - club_constraints.defaults / max_concurrent_home_matches, etc.
-#
-# West London's home_dates/unavailable_away_dates below assume a season
-# running 2026-10-01 to 2027-05-14 (not yet confirmed for the league as a
-# whole). unavailable_away_dates covers 2026-12-23 and 2026-12-30
-# (Christmas/New Year), 2026-09-30 and 2027-04-15 (the latter corrected
-# from West London's originally-stated 2026-04-15, which fell outside the
-# season - to be reconfirmed with the club). None of these fall on a
-# Wednesday within the season, so home_dates is unaffected by them; it
-# only excludes 2026-12-23 and 2026-12-30. Still doesn't exclude the
-# London Chess Classic (2026 dates unannounced).
 
 clubs:
   hendon:
@@ -109,8 +99,9 @@ club_constraints:
     - '2026-11-04'
     - '2026-11-11'
     - '2026-11-18'
-    - '2026-11-25'
-    - '2026-12-02'
+    # 2026-11-25 and 2026-12-02 skipped: precaution around the
+    # not-yet-announced London Chess Classic (see unavailable_away_dates
+    # below for rationale).
     - '2026-12-09'
     - '2026-12-16'
     - '2027-01-06'
@@ -127,15 +118,36 @@ club_constraints:
     - '2027-03-24'
     - '2027-03-31'
     - '2027-04-07'
-    - '2027-04-14'
+    # 2027-04-14 skipped: home date the club explicitly asked to avoid.
     - '2027-04-21'
     - '2027-04-28'
     - '2027-05-05'
     - '2027-05-12'
     unavailable_away_dates:
     - '2026-09-30'
+    # 2026-11-23 to 2026-12-07: precaution around the not-yet-announced
+    # London Chess Classic, which ran Wed 26 Nov - Sun 7 Dec in 2025.
+    - '2026-11-23'
+    - '2026-11-24'
+    - '2026-11-25'
+    - '2026-11-26'
+    - '2026-11-27'
+    - '2026-11-28'
+    - '2026-11-29'
+    - '2026-12-01'
+    - '2026-12-02'
+    - '2026-12-03'
+    - '2026-12-04'
+    - '2026-12-05'
+    - '2026-12-06'
+    - '2026-12-07'
+    # Christmas / New Year
     - '2026-12-23'
     - '2026-12-30'
+    # Either side of the 2027-04-14 home date the club wants to avoid
+    # (see home_dates above).
+    - '2027-04-12'
+    - '2027-04-13'
     - '2027-04-15'
 
 fixed_fixtures:
