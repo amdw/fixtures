@@ -1,0 +1,153 @@
+name: "2026-27 Season"
+draft: true
+
+# DRAFT spec, being built up club by club as information comes in.
+#
+# Still outstanding before this can be run through run.py:
+#   - All other clubs (venues, home night/start time/time limit, home dates,
+#     teams, divisions, club_constraints)
+#   - Hendon's unavailable_away_dates (none supplied yet)
+#   - club_constraints.defaults / max_concurrent_home_matches, etc.
+#
+# West London's home_dates/unavailable_away_dates below assume a season
+# running 2026-10-01 to 2027-05-14 (not yet confirmed for the league as a
+# whole). unavailable_away_dates covers 2026-12-23 and 2026-12-30
+# (Christmas/New Year), 2026-09-30 and 2027-04-15 (the latter corrected
+# from West London's originally-stated 2026-04-15, which fell outside the
+# season - to be reconfirmed with the club). None of these fall on a
+# Wednesday within the season, so home_dates is unaffected by them; it
+# only excludes 2026-12-23 and 2026-12-30. Still doesn't exclude the
+# London Chess Classic (2026 dates unannounced).
+
+clubs:
+  hendon:
+    name: Hendon
+    home_venue: "Cumberland Lawn Tennis Club, 25 Alvanley Gardens, London NW6 1JD"
+    home_start_time: '19:30'
+    home_time_limit: 60+30
+  west-london:
+    name: West London
+    home_venue: "Chiswick Town Hall, Heathfield Terrace, Turnham Green, Chiswick, London W4 4JN"
+    home_start_time: '19:15'
+    home_time_limit: 75+15
+
+teams:
+  west-london-1:
+    club: west-london
+    index: 1
+    division: 1
+  hendon-1:
+    club: hendon
+    index: 1
+    division: 1
+  hendon-2:
+    club: hendon
+    index: 2
+    division: 1
+  hendon-3:
+    club: hendon
+    index: 3
+    division: 2
+  hendon-4:
+    club: hendon
+    index: 4
+    division: 3
+  hendon-5:
+    club: hendon
+    index: 5
+    division: 3
+    name_override: "Hendon Barnet Knights Juniors"
+
+divisions:
+  1:
+  - west-london-1
+  - hendon-1
+  - hendon-2
+  2:
+  - hendon-3
+  3:
+  - hendon-4
+  - hendon-5
+
+club_constraints:
+  hendon:
+    home_dates:
+    - '2026-09-10'
+    - '2026-09-17'
+    - '2026-09-24'
+    - '2026-10-08'
+    - '2026-10-15'
+    - '2026-10-22'
+    - '2026-10-29'
+    - '2026-11-12'
+    - '2026-11-19'
+    - '2026-11-26'
+    - '2026-12-10'
+    - '2027-01-14'
+    - '2027-01-21'
+    - '2027-01-28'
+    - '2027-02-11'
+    - '2027-02-18'
+    - '2027-02-25'
+    - '2027-03-11'
+    - '2027-03-18'
+    - '2027-03-25'
+    - '2027-04-08'
+    - '2027-04-15'
+    - '2027-04-22'
+    - '2027-04-29'
+    - '2027-05-13'
+    # Held in reserve in case of fixture congestion
+    # - '2027-05-20'
+    # - '2027-05-27'
+  west-london:
+    home_dates:
+    - '2026-10-07'
+    - '2026-10-14'
+    - '2026-10-21'
+    - '2026-10-28'
+    - '2026-11-04'
+    - '2026-11-11'
+    - '2026-11-18'
+    - '2026-11-25'
+    - '2026-12-02'
+    - '2026-12-09'
+    - '2026-12-16'
+    - '2027-01-06'
+    - '2027-01-13'
+    - '2027-01-20'
+    - '2027-01-27'
+    - '2027-02-03'
+    - '2027-02-10'
+    - '2027-02-17'
+    - '2027-02-24'
+    - '2027-03-03'
+    - '2027-03-10'
+    - '2027-03-17'
+    - '2027-03-24'
+    - '2027-03-31'
+    - '2027-04-07'
+    - '2027-04-14'
+    - '2027-04-21'
+    - '2027-04-28'
+    - '2027-05-05'
+    - '2027-05-12'
+    unavailable_away_dates:
+    - '2026-09-30'
+    - '2026-12-23'
+    - '2026-12-30'
+    - '2027-04-15'
+
+fixed_fixtures:
+  - home: hendon-1
+    away: hendon-2
+    date: '2026-09-10'
+  - home: hendon-2
+    away: hendon-1
+    date: '2026-09-17'
+  - home: hendon-4
+    away: hendon-5
+    date: '2026-09-10'
+  - home: hendon-5
+    away: hendon-4
+    date: '2026-09-17'
