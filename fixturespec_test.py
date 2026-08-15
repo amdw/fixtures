@@ -236,6 +236,39 @@ class TestLoadSpec(unittest.TestCase):
         with self.assertRaisesRegex(fixturespec.SpecError, "not-a-date"):
             fixturespec.load_spec(path)
 
+    def test_avoid_dates_absent(self):
+        path = self._write(_MINIMAL_SPEC)
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(
+            spec.parameters.unavailable_away_dates["albany"], [date(2025, 12, 25)]
+        )
+        self.assertEqual(spec.parameters.unavailable_away_dates["hackney"], [])
+
+    def test_avoid_dates_merged_into_every_clubs_unavailable_away_dates(self):
+        path = self._write(_MINIMAL_SPEC + "avoid_dates: [2025-12-25, 2026-01-01]\n")
+        spec = fixturespec.load_spec(path)
+        # albany already had 2025-12-25 of its own; avoid_dates adds 2026-01-01
+        # without duplicating the date it already had.
+        self.assertEqual(
+            spec.parameters.unavailable_away_dates["albany"],
+            [date(2025, 12, 25), date(2026, 1, 1)],
+        )
+        # hackney had no unavailable_away_dates of its own; picks up both avoid_dates.
+        self.assertEqual(
+            spec.parameters.unavailable_away_dates["hackney"],
+            [date(2025, 12, 25), date(2026, 1, 1)],
+        )
+
+    def test_avoid_dates_invalid_date(self):
+        path = self._write(_MINIMAL_SPEC + "avoid_dates: [not-a-date]\n")
+        with self.assertRaisesRegex(fixturespec.SpecError, "not-a-date"):
+            fixturespec.load_spec(path)
+
+    def test_avoid_dates_duplicate_rejected(self):
+        path = self._write(_MINIMAL_SPEC + "avoid_dates: [2025-12-25, 2025-12-25]\n")
+        with self.assertRaisesRegex(fixturespec.SpecError, "duplicate date"):
+            fixturespec.load_spec(path)
+
     def test_duplicate_top_level_key_rejected(self):
         path = self._write(_MINIMAL_SPEC + "\nmin_gap_days: 7\nmin_gap_days: 10\n")
         with self.assertRaisesRegex(fixturespec.SpecError, "duplicate key"):

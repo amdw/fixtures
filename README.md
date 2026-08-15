@@ -42,6 +42,7 @@ name: "2025-26 Season"           # optional, defaults to "" (no subtitle shown)
 draft: false                    # optional, defaults shown here
 min_gap_days: 7                 # optional, defaults shown here
 latest_internal_match_date: 2025-12-31  # optional, no default (no cutoff applied)
+avoid_dates: [2025-12-25, 2026-01-01]   # optional; no fixtures for any club on these dates
 
 clubs:
   albany:                       # club ID: stable, referenced from teams/club_constraints/etc.
@@ -138,6 +139,14 @@ pairs under `fixtures`. All three are optional and can be combined. A
 fixture can't be both fixed and excluded; excluded fixtures still appear in
 the HTML report, at the bottom of every relevant table, with "TBC" in
 place of a date.
+
+`avoid_dates`, if set, is a list of dates blocked for every club (added to
+every club's `unavailable_away_dates`, so no fixture — home or away, for any
+club — can be scheduled on any of them) — useful for Christmas/New Year or
+other dates that would otherwise need repeating in every affected club's
+`unavailable_away_dates`. A club can still list one of these dates in its own
+`home_dates` (e.g. by oversight); it just won't ever be used, since every
+possible away team is unavailable that day.
 
 `latest_internal_match_date`, if set, is the latest date allowed for a
 fixture between two teams of the same club (e.g. Hendon 1 v Hendon 2) —
