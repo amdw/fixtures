@@ -20,6 +20,12 @@ clubs:
     home_venue: "Chiswick Town Hall, Heathfield Terrace, Turnham Green, Chiswick, London W4 4JN"
     home_start_time: '19:15'
     home_time_limit: 75+15
+  willesden-brent:
+    name: Willesden & Brent
+    home_venue: "Welford Health Centre, 113 Chalkhill Rd, Wembley Park, Wembley HA9 9FX"
+    home_start_time: '19:15'
+    # 75 minutes, no increment - club must be out of the venue before 10pm.
+    home_time_limit: 75+0
 
 teams:
   west-london-1:
@@ -38,6 +44,10 @@ teams:
     club: hendon
     index: 3
     division: 2
+  willesden-brent-1:
+    club: willesden-brent
+    index: 1
+    division: 2
   hendon-4:
     club: hendon
     index: 4
@@ -55,6 +65,7 @@ divisions:
   - hendon-2
   2:
   - hendon-3
+  - willesden-brent-1
   3:
   - hendon-4
   - hendon-5
@@ -149,6 +160,48 @@ club_constraints:
     - '2027-04-12'
     - '2027-04-13'
     - '2027-04-15'
+  willesden-brent:
+    # Every Wednesday from 2026-10-01 to 2027-05-14 with exceptions removed.
+    #
+    # Simon Liebesny also mentioned a personal (not team) preference to avoid the
+    # weeks of 2026-10-05 and 2027-03-15 (i.e. Wednesdays 2026-10-07 and
+    # 2027-03-17) - not excluded below since it's explicitly not a team
+    # requirement. Anthony Fulton will confirm sometime after 17th August.
+    home_dates:
+    - '2026-10-07'
+    - '2026-10-14'
+    - '2026-10-21'
+    - '2026-10-28'
+    - '2026-11-04'
+    - '2026-11-11'
+    - '2026-11-18'
+    - '2026-11-25'
+    - '2026-12-02'
+    - '2026-12-09'
+    - '2026-12-16'
+    # 2026-12-23 and 2026-12-30 skipped: Christmas/New Year.
+    - '2027-01-06'
+    - '2027-01-13'
+    - '2027-01-20'
+    - '2027-01-27'
+    - '2027-02-03'
+    - '2027-02-10'
+    - '2027-02-17'
+    - '2027-02-24'
+    - '2027-03-03'
+    - '2027-03-10'
+    - '2027-03-17'
+    - '2027-03-24'
+    - '2027-03-31'
+    - '2027-04-07'
+    - '2027-04-14'
+    - '2027-04-21'
+    - '2027-04-28'
+    - '2027-05-05'
+    - '2027-05-12'
+    unavailable_away_dates:
+    - '2026-12-23'
+    - '2026-12-30'
 
 fixed_fixtures:
   - home: hendon-1
