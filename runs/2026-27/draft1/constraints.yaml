@@ -7,7 +7,6 @@ min_gap_days: 7
 # Still outstanding before this can be run through run.py:
 #   - All other clubs (venues, home night/start time/time limit, home dates,
 #     teams, divisions, club_constraints)
-#   - club_constraints.defaults / max_concurrent_home_matches, etc.
 
 clubs:
   hendon:
@@ -78,7 +77,10 @@ divisions:
   - hendon-5
 
 club_constraints:
+  defaults:
+    max_concurrent_home_matches: 1
   hendon:
+    max_concurrent_home_matches: 3
     home_dates:
     - '2026-09-10'
     - '2026-09-17'
