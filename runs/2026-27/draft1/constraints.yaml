@@ -12,23 +12,27 @@ min_gap_days: 7
 clubs:
   hendon:
     name: Hendon
-    home_venue: "Cumberland Lawn Tennis Club, 25 Alvanley Gardens, London NW6 1JD"
+    home_venue_name: "Cumberland Lawn Tennis Club"
+    home_venue_address: "25 Alvanley Gardens, London NW6 1JD"
     home_start_time: '19:30'
     home_time_limit: 60+30
   west-london:
     name: West London
-    home_venue: "Chiswick Town Hall, Heathfield Terrace, Turnham Green, Chiswick, London W4 4JN"
+    home_venue_name: "Chiswick Town Hall"
+    home_venue_address: "Heathfield Terrace, Turnham Green, Chiswick, London W4 4JN"
     home_start_time: '19:15'
     home_time_limit: 75+15
   willesden-brent:
     name: Willesden & Brent
-    home_venue: "Welford Health Centre, 113 Chalkhill Rd, Wembley Park, Wembley HA9 9FX"
+    home_venue_name: "Welford Health Centre"
+    home_venue_address: "113 Chalkhill Rd, Wembley Park, Wembley HA9 9FX"
     home_start_time: '19:15'
     # 75 minutes, no increment - club must be out of the venue before 10pm.
     home_time_limit: 75+0
   metropolitan:
     name: Metropolitan
-    home_venue: "Artizan Street Library & Community Centre, 1 Artizan St, London E1 7AF"
+    home_venue_name: "Artizan Street Library & Community Centre"
+    home_venue_address: "1 Artizan St, London E1 7AF"
     home_start_time: '18:45'
     # Believed to be 60+15 - Andrew to confirm with the club.
     home_time_limit: 60+15
@@ -37,35 +41,27 @@ teams:
   west-london-1:
     club: west-london
     index: 1
-    division: 1
   hendon-1:
     club: hendon
     index: 1
-    division: 1
   hendon-2:
     club: hendon
     index: 2
-    division: 1
   hendon-3:
     club: hendon
     index: 3
-    division: 2
   willesden-brent-1:
     club: willesden-brent
     index: 1
-    division: 2
   metropolitan-1:
     club: metropolitan
     index: 1
-    division: 2
   hendon-4:
     club: hendon
     index: 4
-    division: 3
   hendon-5:
     club: hendon
     index: 5
-    division: 3
     name_override: "Hendon Barnet Knights Juniors"
 
 divisions:

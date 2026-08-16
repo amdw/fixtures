@@ -47,12 +47,14 @@ avoid_dates: [2025-12-25, 2026-01-01]   # optional; no fixtures for any club on 
 clubs:
   albany:                       # club ID: stable, referenced from teams/club_constraints/etc.
     name: Albany
-    home_venue: Albany Sports Hall
+    home_venue_name: Albany Sports Hall     # shown in every match table
+    home_venue_address: 1 Sports Hall Road, London N1 1AA  # shown on club/venues pages only
     home_start_time: "19:30"
     home_time_limit: "75+15"      # chess time control: 75 min + 15 sec/move
   hackney:
     name: Hackney
-    home_venue: Hackney Community Centre
+    home_venue_name: Hackney Community Centre
+    home_venue_address: 2 Community Lane, London E8 2BB
     home_start_time: "19:00"
     home_time_limit: "60+15"
 
@@ -60,18 +62,15 @@ teams:
   albany-1:                     # team ID: stable, referenced from divisions
     club: albany
     index: 1
-    division: 1
   hackney-1:
     club: hackney
     index: 1
-    division: 1
   hackney-5:
     club: hackney
     index: 5
-    division: 3
     name_override: "Hackney Herons"  # optional; used everywhere instead of "Hackney 5"
 
-divisions:
+divisions:                      # each team's division: the only place it's given
   1: [albany-1, hackney-1]
   3: [hackney-5]
 
@@ -117,8 +116,9 @@ empty if a club's entry omits them (or the club has no entry at all).
 Club and team IDs are your own stable keys (letters/digits/hyphens are safest,
 since they're also used to build report filenames) — used to cross-reference
 clubs from teams, teams from `divisions`, and clubs from `club_constraints`.
-Every team's `division` must match the division list it's listed under in
-`divisions`, and every team must appear in exactly one division list. Dates
+A team's division comes solely from the `divisions` list it's listed under -
+`teams` entries don't repeat it - and every team must appear in exactly one
+division list. Dates
 are plain ISO8601 (`yyyy-mm-dd`), quoted or unquoted. Per-team constraint
 overrides (as opposed to per-club) are planned but not yet supported. New
 constraint types can be added to `fixturespec.py` and `fmodel.Parameters` as
@@ -160,16 +160,19 @@ dated after it.
 
 Each run's folder contains:
 
-- `all-matches.html` — every fixture (date, division, home, away, venue,
-  start time, time limit)
-- `division-<n>.html` — one page per division (as above, minus division)
-- `club-<id>.html` — one page per club, with a consolidated table of all
-  the club's matches followed by one table per team
+- `all-matches.html` — every fixture (date, division, home, away, venue
+  name, start time, time limit), followed by a list of the full venue
+  name and address of every home club appearing in the table
+- `division-<n>.html` — one page per division (as above, minus division),
+  with its own venues list covering just that division's home clubs
+- `club-<id>.html` — one page per club, headed by that club's full venue
+  name and address, with a consolidated table of all the club's matches
+  followed by one table per team
 - `index.html` — links to all of the above (fully derived from the files
   above; see below, it doesn't need to be committed or hand-maintained)
 
-Venue, start time and time limit on each match are always the *home* team's
-club's values.
+Venue name (not the address - see above), start time and time limit on each
+match are always the *home* team's club's values.
 
 If the spec sets `name`, every page shows it in a banner above the page
 title (including `index.html`, which recovers it from one of the other

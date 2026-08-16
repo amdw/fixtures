@@ -52,6 +52,9 @@ _STYLE = """
     a { color: #0645ad; }
     nav ul { list-style: none; padding: 0; }
     nav li { margin-bottom: 0.3rem; }
+    .venue { margin-top: -0.5rem; margin-bottom: 1.5rem; color: #333; }
+    ul.venues { padding-left: 1.2rem; }
+    ul.venues li { margin-bottom: 0.3rem; }
 
     @media (max-width: 40rem) {
         body { margin: 1rem; }
@@ -191,7 +194,7 @@ def _rows_with_division(
                 str(sf.fixture.home_team.division),
                 _team_name(sf.fixture.home_team, clubs),
                 _team_name(sf.fixture.away_team, clubs),
-                home_club.home_venue,
+                home_club.home_venue_name,
                 home_club.home_start_time,
                 home_club.home_time_limit,
             ]
@@ -210,7 +213,7 @@ def _rows(
                 _fmt_date(sf.date),
                 _team_name(sf.fixture.home_team, clubs),
                 _team_name(sf.fixture.away_team, clubs),
-                home_club.home_venue,
+                home_club.home_venue_name,
                 home_club.home_start_time,
                 home_club.home_time_limit,
             ]
@@ -238,7 +241,7 @@ def _team_rows(
                 _fmt_date(sf.date),
                 _team_name(opponent, clubs),
                 "Home" if is_home else "Away",
-                home_club.home_venue,
+                home_club.home_venue_name,
                 home_club.home_start_time,
                 home_club.home_time_limit,
                 _days_since_previous(prev_date, sf.date),
@@ -266,7 +269,7 @@ def _excluded_rows_with_division(
                 str(f.home_team.division),
                 _team_name(f.home_team, clubs),
                 _team_name(f.away_team, clubs),
-                home_club.home_venue,
+                home_club.home_venue_name,
                 home_club.home_start_time,
                 home_club.home_time_limit,
             ]
@@ -285,7 +288,7 @@ def _excluded_rows(
                 "TBC",
                 _team_name(f.home_team, clubs),
                 _team_name(f.away_team, clubs),
-                home_club.home_venue,
+                home_club.home_venue_name,
                 home_club.home_start_time,
                 home_club.home_time_limit,
             ]
@@ -313,13 +316,42 @@ def _excluded_team_rows(
                 "TBC",
                 _team_name(opponent, clubs),
                 "Home" if is_home else "Away",
-                home_club.home_venue,
+                home_club.home_venue_name,
                 home_club.home_start_time,
                 home_club.home_time_limit,
                 "",
             ]
         )
     return rows
+
+
+def _venue_header(club: fmodel.Club) -> str:
+    return (
+        f'<p class="venue"><strong>{html.escape(club.home_venue_name)}</strong><br>\n'
+        f"{html.escape(club.home_venue_address)}</p>\n"
+    )
+
+
+def _venues_section(club_ids: Collection[str], clubs: Mapping[str, fmodel.Club]) -> str:
+    if not club_ids:
+        return ""
+    items = "".join(
+        f"<li><strong>{html.escape(clubs[cid].name)}</strong>: "
+        f"{html.escape(clubs[cid].home_venue_name)}, "
+        f"{html.escape(clubs[cid].home_venue_address)}</li>\n"
+        for cid in sorted(club_ids, key=lambda cid: clubs[cid].name)
+    )
+    return f'<h2>Venues</h2>\n<ul class="venues">\n{items}</ul>\n'
+
+
+def _home_club_ids_scheduled(
+    fixtures: Collection[fmodel.ScheduledFixture],
+) -> set[str]:
+    return {sf.fixture.home_team.club for sf in fixtures}
+
+
+def _home_club_ids_excluded(fixtures: Collection[fmodel.Fixture]) -> set[str]:
+    return {f.home_team.club for f in fixtures}
 
 
 def _nav(links: list[tuple[str, str]]) -> str:
@@ -399,6 +431,9 @@ def generate_report(
             excluded_by_club[f.away_team.club].append(f)
 
     # All matches
+    all_match_club_ids = _home_club_ids_scheduled(fixtures) | _home_club_ids_excluded(
+        excluded_fixtures
+    )
     (output_dir / "all-matches.html").write_text(
         _page(
             "All matches",
@@ -406,7 +441,8 @@ def generate_report(
                 _MATCH_HEADERS_WITH_DIVISION,
                 _rows_with_division(fixtures, clubs)
                 + _excluded_rows_with_division(excluded_fixtures, clubs),
-            ),
+            )
+            + _venues_section(all_match_club_ids, clubs),
             name,
             draft,
             description,
@@ -415,6 +451,9 @@ def generate_report(
 
     # One page per division
     for division in sorted(set(fixtures_by_division) | set(excluded_by_division)):
+        division_club_ids = _home_club_ids_scheduled(
+            fixtures_by_division[division]
+        ) | _home_club_ids_excluded(excluded_by_division[division])
         (output_dir / f"division-{division}.html").write_text(
             _page(
                 f"Division {division}",
@@ -422,17 +461,18 @@ def generate_report(
                     _MATCH_HEADERS,
                     _rows(fixtures_by_division[division], clubs)
                     + _excluded_rows(excluded_by_division[division], clubs),
-                ),
+                )
+                + _venues_section(division_club_ids, clubs),
                 name,
                 draft,
                 description,
             )
         )
 
-    # One page per club: consolidated table, then one table per team
+    # One page per club: venue header, consolidated table, then one table per team
     for club_id in sorted(teams_by_club):
         club_name = clubs[club_id].name
-        body = _table(
+        body = _venue_header(clubs[club_id]) + _table(
             _MATCH_HEADERS_WITH_DIVISION,
             _rows_with_division(fixtures_by_club.get(club_id, []), clubs)
             + _excluded_rows_with_division(excluded_by_club.get(club_id, []), clubs),

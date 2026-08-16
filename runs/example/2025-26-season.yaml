@@ -4,165 +4,152 @@ min_gap_days: 7
 clubs:
   albany:
     name: Albany
-    home_venue: Albany Sports Hall
+    home_venue_name: Albany Sports Hall
+    home_venue_address: 1 Albany Sports Hall Road, London
     home_start_time: '19:30'
     home_time_limit: 75+15
   ealing:
     name: Ealing
-    home_venue: Ealing Sports Hall
+    home_venue_name: Ealing Sports Hall
+    home_venue_address: 1 Ealing Sports Hall Road, London
     home_start_time: '19:30'
     home_time_limit: 75+15
   hackney:
     name: Hackney
-    home_venue: Hackney Sports Hall
+    home_venue_name: Hackney Sports Hall
+    home_venue_address: 1 Hackney Sports Hall Road, London
     home_start_time: '19:30'
     home_time_limit: 75+15
   hammersmith:
     name: Hammersmith
-    home_venue: Hammersmith Sports Hall
+    home_venue_name: Hammersmith Sports Hall
+    home_venue_address: 1 Hammersmith Sports Hall Road, London
     home_start_time: '19:30'
     home_time_limit: 75+15
   harrow:
     name: Harrow
-    home_venue: Harrow Sports Hall
+    home_venue_name: Harrow Sports Hall
+    home_venue_address: 1 Harrow Sports Hall Road, London
     home_start_time: '19:30'
     home_time_limit: 75+15
   hendon:
     name: Hendon
-    home_venue: Hendon Sports Hall
+    home_venue_name: Hendon Sports Hall
+    home_venue_address: 1 Hendon Sports Hall Road, London
     home_start_time: '19:30'
     home_time_limit: 75+15
   kings-head:
     name: Kings Head
-    home_venue: Kings Head Sports Hall
+    home_venue_name: Kings Head Sports Hall
+    home_venue_address: 1 Kings Head Sports Hall Road, London
     home_start_time: '19:30'
     home_time_limit: 75+15
   metropolitan:
     name: Metropolitan
-    home_venue: Metropolitan Sports Hall
+    home_venue_name: Metropolitan Sports Hall
+    home_venue_address: 1 Metropolitan Sports Hall Road, London
     home_start_time: '19:30'
     home_time_limit: 75+15
   muswell-hill:
     name: Muswell Hill
-    home_venue: Muswell Hill Sports Hall
+    home_venue_name: Muswell Hill Sports Hall
+    home_venue_address: 1 Muswell Hill Sports Hall Road, London
     home_start_time: '19:30'
     home_time_limit: 75+15
   potters-bar:
     name: Potters Bar
-    home_venue: Potters Bar Sports Hall
+    home_venue_name: Potters Bar Sports Hall
+    home_venue_address: 1 Potters Bar Sports Hall Road, London
     home_start_time: '19:30'
     home_time_limit: 75+15
   west-london:
     name: West London
-    home_venue: West London Sports Hall
+    home_venue_name: West London Sports Hall
+    home_venue_address: 1 West London Sports Hall Road, London
     home_start_time: '19:30'
     home_time_limit: 75+15
   willesden-brent:
     name: Willesden & Brent
-    home_venue: Willesden & Brent Sports Hall
+    home_venue_name: Willesden & Brent Sports Hall
+    home_venue_address: 1 Willesden & Brent Sports Hall Road, London
     home_start_time: '19:30'
     home_time_limit: 75+15
 teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
   hackney-1:
     club: hackney
     index: 1
-    division: 1
   hammersmith-1:
     club: hammersmith
     index: 1
-    division: 1
   hendon-1:
     club: hendon
     index: 1
-    division: 1
   kings-head-1:
     club: kings-head
     index: 1
-    division: 1
   metropolitan-1:
     club: metropolitan
     index: 1
-    division: 1
   muswell-hill-1:
     club: muswell-hill
     index: 1
-    division: 1
   west-london-1:
     club: west-london
     index: 1
-    division: 1
   ealing-1:
     club: ealing
     index: 1
-    division: 2
   hammersmith-2:
     club: hammersmith
     index: 2
-    division: 2
   harrow-1:
     club: harrow
     index: 1
-    division: 2
   harrow-2:
     club: harrow
     index: 2
-    division: 2
   hendon-2:
     club: hendon
     index: 2
-    division: 2
   hendon-3:
     club: hendon
     index: 3
-    division: 2
   kings-head-2:
     club: kings-head
     index: 2
-    division: 2
   muswell-hill-2:
     club: muswell-hill
     index: 2
-    division: 2
   willesden-brent-1:
     club: willesden-brent
     index: 1
-    division: 2
   ealing-2:
     club: ealing
     index: 2
-    division: 3
   hackney-2:
     club: hackney
     index: 2
-    division: 3
   hammersmith-3:
     club: hammersmith
     index: 3
-    division: 3
   hammersmith-4:
     club: hammersmith
     index: 4
-    division: 3
   hendon-4:
     club: hendon
     index: 4
-    division: 3
   hendon-5:
     club: hendon
     index: 5
-    division: 3
   kings-head-3:
     club: kings-head
     index: 3
-    division: 3
   potters-bar-1:
     club: potters-bar
     index: 1
-    division: 3
 divisions:
   1:
   - albany-1

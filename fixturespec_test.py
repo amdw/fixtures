@@ -30,12 +30,14 @@ _BOILERPLATE = """
 clubs:
   albany:
     name: Albany
-    home_venue: Albany Sports Hall
+    home_venue_name: Albany Sports Hall
+    home_venue_address: 1 Albany Road, London
     home_start_time: "19:30"
     home_time_limit: "75+15"
   hackney:
     name: Hackney
-    home_venue: Hackney Community Centre
+    home_venue_name: Hackney Community Centre
+    home_venue_address: 2 Hackney Road, London
     home_start_time: "19:00"
     home_time_limit: "60+15"
 
@@ -43,11 +45,9 @@ teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
   hackney-1:
     club: hackney
     index: 1
-    division: 1
 
 divisions:
   1: [albany-1, hackney-1]
@@ -78,12 +78,14 @@ _THREE_TEAM_SPEC = """
 clubs:
   albany:
     name: Albany
-    home_venue: Albany Sports Hall
+    home_venue_name: Albany Sports Hall
+    home_venue_address: 1 Albany Road, London
     home_start_time: "19:30"
     home_time_limit: "75+15"
   hackney:
     name: Hackney
-    home_venue: Hackney Community Centre
+    home_venue_name: Hackney Community Centre
+    home_venue_address: 2 Hackney Road, London
     home_start_time: "19:00"
     home_time_limit: "60+15"
 
@@ -91,15 +93,12 @@ teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
   albany-2:
     club: albany
     index: 2
-    division: 1
   hackney-1:
     club: hackney
     index: 1
-    division: 1
 
 divisions:
   1: [albany-1, albany-2, hackney-1]
@@ -136,7 +135,8 @@ class TestLoadSpec(unittest.TestCase):
             spec.clubs["albany"],
             fmodel.Club(
                 name="Albany",
-                home_venue="Albany Sports Hall",
+                home_venue_name="Albany Sports Hall",
+                home_venue_address="1 Albany Road, London",
                 home_start_time="19:30",
                 home_time_limit="75+15",
             ),
@@ -207,8 +207,8 @@ class TestLoadSpec(unittest.TestCase):
     def test_name_override(self):
         path = self._write(
             _MINIMAL_SPEC.replace(
-                "  hackney-1:\n    club: hackney\n    index: 1\n    division: 1",
-                "  hackney-1:\n    club: hackney\n    index: 1\n    division: 1\n"
+                "  hackney-1:\n    club: hackney\n    index: 1",
+                "  hackney-1:\n    club: hackney\n    index: 1\n"
                 '    name_override: "Hackney Herons"',
             )
         )
@@ -387,7 +387,8 @@ class TestLoadSpec(unittest.TestCase):
 clubs:
   albany:
     name: Albany
-    home_venue: Albany Sports Hall
+    home_venue_name: Albany Sports Hall
+    home_venue_address: 1 Albany Road, London
     home_start_time: "19:30"
 teams: {}
 divisions: {}
@@ -400,7 +401,8 @@ divisions: {}
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 """)
@@ -412,14 +414,14 @@ clubs:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
   hackney-1:
     club: hackney
     index: 1
-    division: 1
 divisions:
   1: [hackney-1]
 """)
@@ -431,18 +433,17 @@ divisions:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
   albany-1-again:
     club: albany
     index: 1
-    division: 1
 divisions:
   1: [albany-1, albany-1-again]
 """)
@@ -454,14 +455,14 @@ divisions:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
 """)
         with self.assertRaisesRegex(fixturespec.SpecError, "divisions"):
             fixturespec.load_spec(path)
@@ -471,41 +472,40 @@ teams:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
   albany-2:
     club: albany
     index: 2
-    division: 1
 divisions:
   1: [albany-1]
 """)
         with self.assertRaisesRegex(fixturespec.SpecError, "albany-2"):
             fixturespec.load_spec(path)
 
-    def test_division_mismatch_between_team_and_divisions_section(self):
+    def test_division_key_not_an_integer(self):
         path = self._write("""
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
 divisions:
-  2: [albany-1]
+  "one": [albany-1]
 """)
-        with self.assertRaisesRegex(fixturespec.SpecError, "albany-1"):
+        with self.assertRaisesRegex(fixturespec.SpecError, "integer"):
             fixturespec.load_spec(path)
 
     def test_team_listed_in_two_divisions(self):
@@ -513,14 +513,14 @@ divisions:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
 divisions:
   1: [albany-1]
   2: [albany-1]
@@ -533,14 +533,14 @@ divisions:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
 divisions:
   1: [albany-1]
 club_constraints:
@@ -555,14 +555,14 @@ club_constraints:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
 divisions:
   1: [albany-1]
 club_constraints:
@@ -577,14 +577,14 @@ club_constraints:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
 divisions:
   1: [albany-1]
 club_constraints:
@@ -599,14 +599,14 @@ club_constraints:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
 divisions:
   1: [albany-1]
 club_constraints:
@@ -749,9 +749,6 @@ club_constraints:
     def test_fixed_fixtures_different_divisions_rejected(self):
         path = self._write(
             _MINIMAL_SPEC.replace(
-                "  hackney-1:\n    club: hackney\n    index: 1\n    division: 1",
-                "  hackney-1:\n    club: hackney\n    index: 1\n    division: 2",
-            ).replace(
                 "divisions:\n  1: [albany-1, hackney-1]",
                 "divisions:\n  1: [albany-1]\n  2: [hackney-1]",
             )
@@ -867,9 +864,6 @@ club_constraints:
     def test_exclude_fixtures_different_divisions_rejected(self):
         path = self._write(
             _THREE_TEAM_SPEC.replace(
-                "  hackney-1:\n    club: hackney\n    index: 1\n    division: 1",
-                "  hackney-1:\n    club: hackney\n    index: 1\n    division: 2",
-            ).replace(
                 "divisions:\n  1: [albany-1, albany-2, hackney-1]",
                 "divisions:\n  1: [albany-1, albany-2]\n  2: [hackney-1]",
             )
