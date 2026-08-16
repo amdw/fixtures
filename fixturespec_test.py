@@ -45,11 +45,9 @@ teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
   hackney-1:
     club: hackney
     index: 1
-    division: 1
 
 divisions:
   1: [albany-1, hackney-1]
@@ -95,15 +93,12 @@ teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
   albany-2:
     club: albany
     index: 2
-    division: 1
   hackney-1:
     club: hackney
     index: 1
-    division: 1
 
 divisions:
   1: [albany-1, albany-2, hackney-1]
@@ -212,8 +207,8 @@ class TestLoadSpec(unittest.TestCase):
     def test_name_override(self):
         path = self._write(
             _MINIMAL_SPEC.replace(
-                "  hackney-1:\n    club: hackney\n    index: 1\n    division: 1",
-                "  hackney-1:\n    club: hackney\n    index: 1\n    division: 1\n"
+                "  hackney-1:\n    club: hackney\n    index: 1",
+                "  hackney-1:\n    club: hackney\n    index: 1\n"
                 '    name_override: "Hackney Herons"',
             )
         )
@@ -427,7 +422,6 @@ teams:
   hackney-1:
     club: hackney
     index: 1
-    division: 1
 divisions:
   1: [hackney-1]
 """)
@@ -447,11 +441,9 @@ teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
   albany-1-again:
     club: albany
     index: 1
-    division: 1
 divisions:
   1: [albany-1, albany-1-again]
 """)
@@ -471,7 +463,6 @@ teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
 """)
         with self.assertRaisesRegex(fixturespec.SpecError, "divisions"):
             fixturespec.load_spec(path)
@@ -489,18 +480,16 @@ teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
   albany-2:
     club: albany
     index: 2
-    division: 1
 divisions:
   1: [albany-1]
 """)
         with self.assertRaisesRegex(fixturespec.SpecError, "albany-2"):
             fixturespec.load_spec(path)
 
-    def test_division_mismatch_between_team_and_divisions_section(self):
+    def test_division_key_not_an_integer(self):
         path = self._write("""
 clubs:
   albany:
@@ -513,11 +502,10 @@ teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
 divisions:
-  2: [albany-1]
+  "one": [albany-1]
 """)
-        with self.assertRaisesRegex(fixturespec.SpecError, "albany-1"):
+        with self.assertRaisesRegex(fixturespec.SpecError, "integer"):
             fixturespec.load_spec(path)
 
     def test_team_listed_in_two_divisions(self):
@@ -533,7 +521,6 @@ teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
 divisions:
   1: [albany-1]
   2: [albany-1]
@@ -554,7 +541,6 @@ teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
 divisions:
   1: [albany-1]
 club_constraints:
@@ -577,7 +563,6 @@ teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
 divisions:
   1: [albany-1]
 club_constraints:
@@ -600,7 +585,6 @@ teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
 divisions:
   1: [albany-1]
 club_constraints:
@@ -623,7 +607,6 @@ teams:
   albany-1:
     club: albany
     index: 1
-    division: 1
 divisions:
   1: [albany-1]
 club_constraints:
@@ -766,9 +749,6 @@ club_constraints:
     def test_fixed_fixtures_different_divisions_rejected(self):
         path = self._write(
             _MINIMAL_SPEC.replace(
-                "  hackney-1:\n    club: hackney\n    index: 1\n    division: 1",
-                "  hackney-1:\n    club: hackney\n    index: 1\n    division: 2",
-            ).replace(
                 "divisions:\n  1: [albany-1, hackney-1]",
                 "divisions:\n  1: [albany-1]\n  2: [hackney-1]",
             )
@@ -884,9 +864,6 @@ club_constraints:
     def test_exclude_fixtures_different_divisions_rejected(self):
         path = self._write(
             _THREE_TEAM_SPEC.replace(
-                "  hackney-1:\n    club: hackney\n    index: 1\n    division: 1",
-                "  hackney-1:\n    club: hackney\n    index: 1\n    division: 2",
-            ).replace(
                 "divisions:\n  1: [albany-1, albany-2, hackney-1]",
                 "divisions:\n  1: [albany-1, albany-2]\n  2: [hackney-1]",
             )

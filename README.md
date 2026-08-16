@@ -62,18 +62,15 @@ teams:
   albany-1:                     # team ID: stable, referenced from divisions
     club: albany
     index: 1
-    division: 1
   hackney-1:
     club: hackney
     index: 1
-    division: 1
   hackney-5:
     club: hackney
     index: 5
-    division: 3
     name_override: "Hackney Herons"  # optional; used everywhere instead of "Hackney 5"
 
-divisions:
+divisions:                      # each team's division: the only place it's given
   1: [albany-1, hackney-1]
   3: [hackney-5]
 
@@ -119,8 +116,9 @@ empty if a club's entry omits them (or the club has no entry at all).
 Club and team IDs are your own stable keys (letters/digits/hyphens are safest,
 since they're also used to build report filenames) — used to cross-reference
 clubs from teams, teams from `divisions`, and clubs from `club_constraints`.
-Every team's `division` must match the division list it's listed under in
-`divisions`, and every team must appear in exactly one division list. Dates
+A team's division comes solely from the `divisions` list it's listed under -
+`teams` entries don't repeat it - and every team must appear in exactly one
+division list. Dates
 are plain ISO8601 (`yyyy-mm-dd`), quoted or unquoted. Per-team constraint
 overrides (as opposed to per-club) are planned but not yet supported. New
 constraint types can be added to `fixturespec.py` and `fmodel.Parameters` as
