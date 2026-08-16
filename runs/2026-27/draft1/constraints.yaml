@@ -1,12 +1,12 @@
 name: "2026-27 Season"
 draft: true
+min_gap_days: 7
 
 # DRAFT spec, being built up club by club as information comes in.
 #
 # Still outstanding before this can be run through run.py:
 #   - All other clubs (venues, home night/start time/time limit, home dates,
 #     teams, divisions, club_constraints)
-#   - Hendon's unavailable_away_dates (none supplied yet)
 #   - club_constraints.defaults / max_concurrent_home_matches, etc.
 
 clubs:
@@ -26,6 +26,12 @@ clubs:
     home_start_time: '19:15'
     # 75 minutes, no increment - club must be out of the venue before 10pm.
     home_time_limit: 75+0
+  metropolitan:
+    name: Metropolitan
+    home_venue: "Artizan Street Library & Community Centre, 1 Artizan St, London E1 7AF"
+    home_start_time: '18:45'
+    # Believed to be 60+15 - Andrew to confirm with the club.
+    home_time_limit: 60+15
 
 teams:
   west-london-1:
@@ -48,6 +54,10 @@ teams:
     club: willesden-brent
     index: 1
     division: 2
+  metropolitan-1:
+    club: metropolitan
+    index: 1
+    division: 2
   hendon-4:
     club: hendon
     index: 4
@@ -66,6 +76,7 @@ divisions:
   2:
   - hendon-3
   - willesden-brent-1
+  - metropolitan-1
   3:
   - hendon-4
   - hendon-5
@@ -200,6 +211,46 @@ club_constraints:
     - '2027-04-28'
     - '2027-05-05'
     - '2027-05-12'
+  metropolitan:
+    # All Thursdays from Oct 2026 to end of May 2027, minus the
+    # Christmas/New Year period (already covered by the top-level
+    # avoid_dates below, so not repeated here) - per their stated
+    # availability ("all dates between October and end of May are ok
+    # apart from the period around Christmas").
+    # TODO: Remove London League clashes when possible.
+    home_dates:
+    - '2026-10-01'
+    - '2026-10-08'
+    - '2026-10-15'
+    - '2026-10-22'
+    - '2026-10-29'
+    - '2026-11-05'
+    - '2026-11-12'
+    - '2026-11-19'
+    - '2026-11-26'
+    - '2026-12-03'
+    - '2026-12-10'
+    - '2026-12-17'
+    - '2027-01-07'
+    - '2027-01-14'
+    - '2027-01-21'
+    - '2027-01-28'
+    - '2027-02-04'
+    - '2027-02-11'
+    - '2027-02-18'
+    - '2027-02-25'
+    - '2027-03-04'
+    - '2027-03-11'
+    - '2027-03-18'
+    - '2027-03-25'
+    - '2027-04-01'
+    - '2027-04-08'
+    - '2027-04-15'
+    - '2027-04-22'
+    - '2027-04-29'
+    - '2027-05-06'
+    - '2027-05-13'
+    unavailable_away_dates: []
 
 fixed_fixtures:
   - home: hendon-1
