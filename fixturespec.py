@@ -165,18 +165,27 @@ def _parse_clubs(data: Mapping[str, Any], path: Path) -> dict[str, fmodel.Club]:
     return clubs
 
 
+@dataclasses.dataclass(frozen=True)
+class _TeamShell:
+    """A team's fields other than its division, which comes solely from 'divisions'."""
+
+    club: str
+    index: int
+    name_override: str | None
+
+
 def _parse_teams(
     data: Mapping[str, Any], clubs: Mapping[str, fmodel.Club], path: Path
-) -> dict[str, fmodel.Team]:
+) -> dict[str, _TeamShell]:
     teams_spec = _require_mapping(data.get("teams"), f"{path}: 'teams'")
 
-    teams: dict[str, fmodel.Team] = {}
+    teams: dict[str, _TeamShell] = {}
     seen_club_index: dict[tuple[str, int], str] = {}
     for team_id, team_spec in teams_spec.items():
         context = f"{path}: teams[{team_id!r}]"
         if not isinstance(team_spec, dict):
             raise SpecError(f"{context} must be a mapping")
-        required = {"club", "index", "division"}
+        required = {"club", "index"}
         missing = required - team_spec.keys()
         if missing:
             raise SpecError(f"{context} missing required field(s) {sorted(missing)}")
@@ -186,7 +195,6 @@ def _parse_teams(
             raise SpecError(f"{context} references unknown club {club_id!r}")
 
         index = _require_int(team_spec["index"], f"{context}.index")
-        division = _require_int(team_spec["division"], f"{context}.division")
 
         name_override = team_spec.get("name_override")
         if name_override is not None:
@@ -200,43 +208,41 @@ def _parse_teams(
             )
         seen_club_index[key] = team_id
 
-        teams[team_id] = fmodel.Team(
-            division=division, club=club_id, index=index, name_override=name_override
+        teams[team_id] = _TeamShell(
+            club=club_id, index=index, name_override=name_override
         )
     return teams
 
 
 def _parse_divisions(
-    data: Mapping[str, Any], teams: Mapping[str, fmodel.Team], path: Path
-) -> None:
-    """Validate the 'divisions' section (team IDs per division) against each team's own division."""
+    data: Mapping[str, Any], teams: Mapping[str, _TeamShell], path: Path
+) -> dict[str, int]:
+    """Parse the 'divisions' section (team IDs per division), returning each team's
+    division. This is the only place a team's division is given - 'teams' entries
+    don't repeat it."""
     divisions_spec = _require_mapping(data.get("divisions"), f"{path}: 'divisions'")
 
-    seen_team_ids: set[str] = set()
-    for division, team_ids in divisions_spec.items():
-        context = f"{path}: divisions[{division!r}]"
+    team_divisions: dict[str, int] = {}
+    for division_key, team_ids in divisions_spec.items():
+        context = f"{path}: divisions[{division_key!r}]"
+        division = _require_int(division_key, f"{context} key")
         if not isinstance(team_ids, list) or not team_ids:
             raise SpecError(f"{context} must be a non-empty list of team IDs")
         for team_id in team_ids:
             if team_id not in teams:
                 raise SpecError(f"{context} references unknown team {team_id!r}")
-            if team_id in seen_team_ids:
+            if team_id in team_divisions:
                 raise SpecError(
                     f"{path}: team {team_id!r} listed in more than one division"
                 )
-            seen_team_ids.add(team_id)
-            actual_division = teams[team_id].division
-            if actual_division != division:
-                raise SpecError(
-                    f"{context}: team {team_id!r} has division={actual_division!r} on its "
-                    f"own entry, which doesn't match"
-                )
+            team_divisions[team_id] = division
 
-    missing = teams.keys() - seen_team_ids
+    missing = teams.keys() - team_divisions.keys()
     if missing:
         raise SpecError(
             f"{path}: team(s) {sorted(missing)} not listed under 'divisions'"
         )
+    return team_divisions
 
 
 def _parse_max_concurrent_home_matches_value(
@@ -574,8 +580,17 @@ def load_spec(spec_path: str | Path) -> Spec:
         raise SpecError(f"{path}: top-level YAML content must be a mapping")
 
     clubs = _parse_clubs(data, path)
-    teams = _parse_teams(data, clubs, path)
-    _parse_divisions(data, teams, path)
+    team_shells = _parse_teams(data, clubs, path)
+    team_divisions = _parse_divisions(data, team_shells, path)
+    teams = {
+        team_id: fmodel.Team(
+            division=team_divisions[team_id],
+            club=shell.club,
+            index=shell.index,
+            name_override=shell.name_override,
+        )
+        for team_id, shell in team_shells.items()
+    }
 
     avoid_dates = _parse_date_list(data.get("avoid_dates"), f"{path}: 'avoid_dates'")
 
