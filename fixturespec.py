@@ -137,13 +137,24 @@ def _parse_clubs(data: Mapping[str, Any], path: Path) -> dict[str, fmodel.Club]:
         context = f"{path}: clubs[{club_id!r}]"
         if not isinstance(club_spec, dict):
             raise SpecError(f"{context} must be a mapping")
-        required = {"name", "home_venue", "home_start_time", "home_time_limit"}
+        required = {
+            "name",
+            "home_venue_name",
+            "home_venue_address",
+            "home_start_time",
+            "home_time_limit",
+        }
         missing = required - club_spec.keys()
         if missing:
             raise SpecError(f"{context} missing required field(s) {sorted(missing)}")
         clubs[club_id] = fmodel.Club(
             name=_require_str(club_spec["name"], f"{context}.name"),
-            home_venue=_require_str(club_spec["home_venue"], f"{context}.home_venue"),
+            home_venue_name=_require_str(
+                club_spec["home_venue_name"], f"{context}.home_venue_name"
+            ),
+            home_venue_address=_require_str(
+                club_spec["home_venue_address"], f"{context}.home_venue_address"
+            ),
             home_start_time=_require_str(
                 club_spec["home_start_time"], f"{context}.home_start_time"
             ),

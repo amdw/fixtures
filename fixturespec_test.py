@@ -30,12 +30,14 @@ _BOILERPLATE = """
 clubs:
   albany:
     name: Albany
-    home_venue: Albany Sports Hall
+    home_venue_name: Albany Sports Hall
+    home_venue_address: 1 Albany Road, London
     home_start_time: "19:30"
     home_time_limit: "75+15"
   hackney:
     name: Hackney
-    home_venue: Hackney Community Centre
+    home_venue_name: Hackney Community Centre
+    home_venue_address: 2 Hackney Road, London
     home_start_time: "19:00"
     home_time_limit: "60+15"
 
@@ -78,12 +80,14 @@ _THREE_TEAM_SPEC = """
 clubs:
   albany:
     name: Albany
-    home_venue: Albany Sports Hall
+    home_venue_name: Albany Sports Hall
+    home_venue_address: 1 Albany Road, London
     home_start_time: "19:30"
     home_time_limit: "75+15"
   hackney:
     name: Hackney
-    home_venue: Hackney Community Centre
+    home_venue_name: Hackney Community Centre
+    home_venue_address: 2 Hackney Road, London
     home_start_time: "19:00"
     home_time_limit: "60+15"
 
@@ -136,7 +140,8 @@ class TestLoadSpec(unittest.TestCase):
             spec.clubs["albany"],
             fmodel.Club(
                 name="Albany",
-                home_venue="Albany Sports Hall",
+                home_venue_name="Albany Sports Hall",
+                home_venue_address="1 Albany Road, London",
                 home_start_time="19:30",
                 home_time_limit="75+15",
             ),
@@ -387,7 +392,8 @@ class TestLoadSpec(unittest.TestCase):
 clubs:
   albany:
     name: Albany
-    home_venue: Albany Sports Hall
+    home_venue_name: Albany Sports Hall
+    home_venue_address: 1 Albany Road, London
     home_start_time: "19:30"
 teams: {}
 divisions: {}
@@ -400,7 +406,8 @@ divisions: {}
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 """)
@@ -412,7 +419,8 @@ clubs:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
@@ -431,7 +439,8 @@ divisions:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
@@ -454,7 +463,8 @@ divisions:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
@@ -471,7 +481,8 @@ teams:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
@@ -494,7 +505,8 @@ divisions:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
@@ -513,7 +525,8 @@ divisions:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
@@ -533,7 +546,8 @@ divisions:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
@@ -555,7 +569,8 @@ club_constraints:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
@@ -577,7 +592,8 @@ club_constraints:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:
@@ -599,7 +615,8 @@ club_constraints:
 clubs:
   albany:
     name: Albany
-    home_venue: x
+    home_venue_name: x
+    home_venue_address: x
     home_start_time: "19:30"
     home_time_limit: "75+15"
 teams:

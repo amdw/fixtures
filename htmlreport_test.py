@@ -30,10 +30,18 @@ def _sf(home: fmodel.Team, away: fmodel.Team, d: date) -> fmodel.ScheduledFixtur
 
 
 def _club(
-    name: str, venue: str = "Venue", start: str = "19:30", limit: str = "75+15"
+    name: str,
+    venue: str = "Venue",
+    address: str = "1 Venue Street, London",
+    start: str = "19:30",
+    limit: str = "75+15",
 ) -> fmodel.Club:
     return fmodel.Club(
-        name=name, home_venue=venue, home_start_time=start, home_time_limit=limit
+        name=name,
+        home_venue_name=venue,
+        home_venue_address=address,
+        home_start_time=start,
+        home_time_limit=limit,
     )
 
 
@@ -60,13 +68,25 @@ class TestGenerateReport(unittest.TestCase):
 
         self.clubs = {
             "harrow": _club(
-                "Harrow", venue="Harrow Leisure Centre", start="19:30", limit="75+15"
+                "Harrow",
+                venue="Harrow Leisure Centre",
+                address="1 Harrow Road, London",
+                start="19:30",
+                limit="75+15",
             ),
             "ealing": _club(
-                "Ealing", venue="Ealing Sports Hall", start="19:00", limit="60+15"
+                "Ealing",
+                venue="Ealing Sports Hall",
+                address="2 Ealing Road, London",
+                start="19:00",
+                limit="60+15",
             ),
             "hendon": _club(
-                "Hendon", venue="Hendon Club", start="20:00", limit="90+30"
+                "Hendon",
+                venue="Hendon Club",
+                address="3 Hendon Road, London",
+                start="20:00",
+                limit="90+30",
             ),
             "willesden-brent": _club("Willesden & Brent"),
         }
@@ -121,6 +141,29 @@ class TestGenerateReport(unittest.TestCase):
         self.assertIn("19:30", content)
         self.assertIn("75+15", content)
 
+    def test_match_table_shows_venue_name_but_not_address(self):
+        content = (self.output_dir / "all-matches.html").read_text()
+        table_part = content.split("<h2>Venues</h2>")[0]
+        self.assertIn("Harrow Leisure Centre", table_part)
+        self.assertNotIn("1 Harrow Road, London", table_part)
+
+    def test_all_matches_venues_section_lists_name_and_address(self):
+        content = (self.output_dir / "all-matches.html").read_text()
+        self.assertIn("<h2>Venues</h2>", content)
+        venues_part = content.split("<h2>Venues</h2>")[1]
+        self.assertIn("Harrow Leisure Centre", venues_part)
+        self.assertIn("1 Harrow Road, London", venues_part)
+        self.assertIn("Ealing Sports Hall", venues_part)
+        self.assertIn("2 Ealing Road, London", venues_part)
+        self.assertIn("Hendon Club", venues_part)
+
+    def test_division_venues_section_only_lists_that_divisions_clubs(self):
+        div1 = (self.output_dir / "division-1.html").read_text()
+        venues_part = div1.split("<h2>Venues</h2>")[1]
+        self.assertIn("Harrow Leisure Centre", venues_part)
+        self.assertIn("Ealing Sports Hall", venues_part)
+        self.assertNotIn("Hendon Club", venues_part)
+
     def test_name_override_used_throughout(self):
         content = (self.output_dir / "all-matches.html").read_text()
         self.assertIn("Willesden Warriors", content)
@@ -149,6 +192,12 @@ class TestGenerateReport(unittest.TestCase):
         # Harrow 1's own table should list all 3 of its fixtures (2 external + the derby)
         harrow1_section = harrow_page.split("<h2>Harrow 1</h2>")[1].split("<h2>")[0]
         self.assertEqual(harrow1_section.count("<tr>"), 4)  # header + 3 fixtures
+
+    def test_club_page_header_shows_venue_name_and_address(self):
+        harrow_page = (self.output_dir / "club-harrow.html").read_text()
+        header_part = harrow_page.split("<table>")[0]
+        self.assertIn("Harrow Leisure Centre", header_part)
+        self.assertIn("1 Harrow Road, London", header_part)
 
     def test_ampersand_club_name_slugified_and_escaped(self):
         path = self.output_dir / "club-willesden-brent.html"
