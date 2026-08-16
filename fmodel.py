@@ -62,7 +62,8 @@ class Club:
     """Reporting metadata for a club. Not used by the solver itself."""
 
     name: str
-    home_venue: str
+    home_venue_name: str
+    home_venue_address: str
     home_start_time: str
     home_time_limit: str  # chess time control, e.g. "75+15" for 75 min + 15 sec/move
 
