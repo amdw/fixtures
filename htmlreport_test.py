@@ -457,6 +457,61 @@ class TestWriteRunsIndex(unittest.TestCase):
             content.index("2025-26-season"), content.index("2024-25-season")
         )
 
+    def test_nested_run(self):
+        """A run need not sit directly under runs_dir -- e.g. several drafts of the
+        same season grouped under a season folder -- and should still be found and
+        linked correctly, nested under a heading for the grouping folder(s)."""
+        run_dir = self.runs_dir / "2026-27" / "draft1"
+        run_dir.mkdir(parents=True)
+        (run_dir / "all-matches.html").write_text("<html></html>")
+
+        htmlreport.write_runs_index(self.runs_dir, self.index_path)
+        content = self.index_path.read_text()
+
+        self.assertIn("runs/2026-27/draft1/index.html", content)
+        # The grouping folder itself has no report, so isn't a link.
+        self.assertNotIn('<a href="runs/2026-27/index.html"', content)
+        self.assertIn("2026-27", content)
+
+    def test_nested_and_flat_runs_combined(self):
+        (self.runs_dir / "example").mkdir(parents=True)
+        (self.runs_dir / "example" / "all-matches.html").write_text("<html></html>")
+        nested_run_dir = self.runs_dir / "2026-27" / "draft1"
+        nested_run_dir.mkdir(parents=True)
+        (nested_run_dir / "all-matches.html").write_text("<html></html>")
+
+        htmlreport.write_runs_index(self.runs_dir, self.index_path)
+        content = self.index_path.read_text()
+
+        self.assertIn("runs/example/index.html", content)
+        self.assertIn("runs/2026-27/draft1/index.html", content)
+
+
+class TestFindRunDirs(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.runs_dir = Path(self._tmpdir.name) / "runs"
+
+    def test_missing_runs_dir(self):
+        self.assertEqual(htmlreport.find_run_dirs(self.runs_dir), [])
+
+    def test_finds_runs_at_any_depth(self):
+        flat_run = self.runs_dir / "example"
+        flat_run.mkdir(parents=True)
+        (flat_run / "all-matches.html").write_text("<html></html>")
+
+        nested_run = self.runs_dir / "2026-27" / "draft1"
+        nested_run.mkdir(parents=True)
+        (nested_run / "all-matches.html").write_text("<html></html>")
+
+        (self.runs_dir / "incomplete-run").mkdir()
+
+        self.assertCountEqual(
+            htmlreport.find_run_dirs(self.runs_dir), [flat_run, nested_run]
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

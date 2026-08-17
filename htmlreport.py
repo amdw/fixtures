@@ -23,6 +23,7 @@ third-party dependency.
 
 from __future__ import annotations
 
+import dataclasses
 import html
 import re
 from collections import defaultdict
@@ -52,6 +53,7 @@ _STYLE = """
     a { color: #0645ad; }
     nav ul { list-style: none; padding: 0; }
     nav li { margin-bottom: 0.3rem; }
+    nav ul ul { padding-left: 1.2rem; margin-top: 0.3rem; }
     .venue { margin-top: -0.5rem; margin-bottom: 1.5rem; color: #333; }
     ul.venues { padding-left: 1.2rem; }
     ul.venues li { margin-bottom: 0.3rem; }
@@ -531,25 +533,70 @@ def build_run_index(run_dir: Path) -> Path:
     return index_path
 
 
-def write_runs_index(runs_dir: Path, index_path: Path) -> Path:
-    """(Re)write the top-level index page listing every run under runs_dir that has a report."""
-    run_names = []
-    if runs_dir.is_dir():
-        run_names = sorted(
-            (
-                p.name
-                for p in runs_dir.iterdir()
-                if p.is_dir() and (p / "all-matches.html").exists()
-            ),
-            reverse=True,
-        )
+def find_run_dirs(runs_dir: Path) -> list[Path]:
+    """Every directory anywhere under runs_dir that has its own report (i.e. has an
+    all-matches.html), at any depth -- a run need not sit directly under runs_dir.
+    """
+    if not runs_dir.is_dir():
+        return []
+    return sorted(p.parent for p in runs_dir.rglob("all-matches.html"))
 
-    if run_names:
+
+@dataclasses.dataclass
+class _RunTreeNode:
+    """One level of the folder hierarchy under runs_dir: is_run if this exact path
+    is itself a run (has its own report), plus any child folders (further runs
+    and/or grouping folders) keyed by name."""
+
+    is_run: bool = False
+    children: dict[str, _RunTreeNode] = dataclasses.field(default_factory=dict)
+
+
+def _build_run_tree(run_paths: Collection[Path]) -> _RunTreeNode:
+    root = _RunTreeNode()
+    for run_path in run_paths:
+        node = root
+        for part in run_path.parts:
+            node = node.children.setdefault(part, _RunTreeNode())
+        node.is_run = True
+    return root
+
+
+def _render_run_tree(
+    node: _RunTreeNode, path_parts: tuple[str, ...], rel_runs_dir: Path
+) -> str:
+    """Render node's children as a nested <ul>, most recent (reverse alphabetical)
+    first at each level; a name with no report of its own (just a grouping folder
+    for further runs, e.g. a season with several draft sub-folders) is rendered as
+    a plain label rather than a link."""
+    items = []
+    for name in sorted(node.children, reverse=True):
+        child = node.children[name]
+        child_parts = (*path_parts, name)
+        label = html.escape(name)
+        if child.is_run:
+            href = f"{rel_runs_dir}/{'/'.join(child_parts)}/index.html"
+            label = f'<a href="{href}">{label}</a>'
+        if child.children:
+            label += _render_run_tree(child, child_parts, rel_runs_dir)
+        items.append(f"<li>{label}</li>\n")
+    return f"<ul>\n{''.join(items)}</ul>\n"
+
+
+def write_runs_index(runs_dir: Path, index_path: Path) -> Path:
+    """(Re)write the top-level index page listing every run under runs_dir that has
+    a report, at any depth -- nested to reflect runs_dir's own folder structure
+    (e.g. runs/2026-27/draft1 is listed under a "2026-27" heading)."""
+    run_dirs = find_run_dirs(runs_dir)
+
+    if run_dirs:
         try:
             rel_runs_dir = runs_dir.relative_to(index_path.parent)
         except ValueError:
             rel_runs_dir = runs_dir
-        body = _nav([(f"{rel_runs_dir}/{name}/index.html", name) for name in run_names])
+        run_paths = [d.relative_to(runs_dir) for d in run_dirs]
+        tree = _build_run_tree(run_paths)
+        body = f"<nav>{_render_run_tree(tree, (), rel_runs_dir)}</nav>\n"
     else:
         body = "<p>No runs yet.</p>\n"
 
