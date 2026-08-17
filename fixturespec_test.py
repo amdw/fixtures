@@ -973,5 +973,49 @@ club_constraints:
         self.assertEqual(len(fixtures), 2)  # Albany v Hackney and Hackney v Albany
 
 
+class TestLoadTeamIds(unittest.TestCase):
+    """Test cases for load_team_ids()."""
+
+    def setUp(self):
+        super().setUp()
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.dir = Path(self._tmpdir.name)
+
+    def _write(self, contents: str, name: str = "spec.yaml") -> Path:
+        path = self.dir / name
+        path.write_text(contents)
+        return path
+
+    def test_maps_team_ids_to_club_and_index(self):
+        path = self._write(_MINIMAL_SPEC)
+        self.assertEqual(
+            fixturespec.load_team_ids(path),
+            {"albany-1": ("albany", 1), "hackney-1": ("hackney", 1)},
+        )
+
+    def test_does_not_require_divisions_or_club_constraints(self):
+        """Unlike load_spec(), only 'clubs' and 'teams' need to be valid."""
+        path = self._write(_BOILERPLATE)  # no club_constraints, no divisions issues
+        self.assertEqual(
+            fixturespec.load_team_ids(path),
+            {"albany-1": ("albany", 1), "hackney-1": ("hackney", 1)},
+        )
+
+    def test_unknown_club_still_rejected(self):
+        path = self._write(
+            "clubs:\n"
+            "  hackney:\n"
+            "    name: Hackney\n"
+            "    home_venue_name: x\n"
+            "    home_venue_address: x\n"
+            "    home_start_time: '19:00'\n"
+            "    home_time_limit: '60+15'\n"
+            "teams:\n  albany-1:\n    club: albany\n    index: 1\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "albany"):
+            fixturespec.load_team_ids(path)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -565,9 +565,9 @@ def _parse_exclude_fixtures(
     return list(excluded)
 
 
-def load_spec(spec_path: str | Path) -> Spec:
-    """Load a fixture Spec (solver Parameters plus club reporting metadata) from a YAML file."""
-    path = Path(spec_path)
+def _load_yaml_data(path: Path) -> dict[str, Any]:
+    """Read and parse a spec file's raw YAML content (shared by load_spec() and the
+    lighter-weight load_team_ids())."""
     with path.open() as f:
         try:
             # _NoDuplicateKeysSafeLoader subclasses SafeLoader, so this is as safe as
@@ -578,6 +578,31 @@ def load_spec(spec_path: str | Path) -> Spec:
 
     if not isinstance(data, dict):
         raise SpecError(f"{path}: top-level YAML content must be a mapping")
+    return data
+
+
+def load_team_ids(spec_path: str | Path) -> dict[str, tuple[str, int]]:
+    """Map each team ID in a spec to its (club, index) pair.
+
+    Only needs 'clubs' and 'teams' to be valid -- unlike load_spec(), it doesn't
+    require 'divisions', 'club_constraints', etc. fmodel.Team carries a (club,
+    index) pair but not the spec's own team ID, so this is for code (namely
+    fixturesolution.py) that needs to translate between the two -- e.g. to store
+    a solved fixture list by team ID rather than by (club, index).
+    """
+    path = Path(spec_path)
+    data = _load_yaml_data(path)
+    clubs = _parse_clubs(data, path)
+    team_shells = _parse_teams(data, clubs, path)
+    return {
+        team_id: (shell.club, shell.index) for team_id, shell in team_shells.items()
+    }
+
+
+def load_spec(spec_path: str | Path) -> Spec:
+    """Load a fixture Spec (solver Parameters plus club reporting metadata) from a YAML file."""
+    path = Path(spec_path)
+    data = _load_yaml_data(path)
 
     clubs = _parse_clubs(data, path)
     team_shells = _parse_teams(data, clubs, path)
