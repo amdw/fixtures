@@ -45,12 +45,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    rebuilt = []
-    if args.runs_dir.is_dir():
-        for run_dir in sorted(p for p in args.runs_dir.iterdir() if p.is_dir()):
-            if (run_dir / "all-matches.html").exists():
-                htmlreport.build_run_index(run_dir)
-                rebuilt.append(run_dir)
+    rebuilt = htmlreport.find_run_dirs(args.runs_dir)
+    for run_dir in rebuilt:
+        htmlreport.build_run_index(run_dir)
 
     htmlreport.write_runs_index(args.runs_dir, args.root_index)
 
