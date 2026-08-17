@@ -17,7 +17,7 @@ pipenv shell
 ```
 
 Alternatively, prefix individual commands with `pipenv run` (e.g. `pipenv run
-python run_tests.py`) instead of entering a `pipenv shell` session — useful
+python all_tests.py`) instead of entering a `pipenv shell` session — useful
 in non-interactive contexts, since the venv already exists once
 `pipenv install --dev` has been run.
 
@@ -31,9 +31,43 @@ file, placed inside the run folder you want its output written to (e.g.
 python run.py runs/2025-26-season/spec.yaml runs/2025-26-season
 ```
 
-This solves the fixtures, and writes the HTML report alongside the spec in
-`runs/2025-26-season/`. Re-running it overwrites the previous report in place,
-so it's safe to rerun after editing the spec.
+This solves the fixtures and writes the HTML report alongside the spec in
+`runs/2025-26-season/`. Re-running it overwrites the previous solution and
+report in place, so it's safe to rerun after editing the spec.
+
+`run.py` is just two separate steps run back to back, each usable on its own:
+
+```bash
+python solve.py runs/2025-26-season/spec.yaml
+python report.py runs/2025-26-season/spec.yaml runs/2025-26-season/solution.yaml runs/2025-26-season
+```
+
+`solve.py` runs the constraint solver and writes its result to a
+`solution.yaml` file (canonical, solver-independent -- see below) next to the
+spec, defaulting the output directory to the spec file's own directory.
+`report.py` turns a `solution.yaml` back into the HTML report, reading the
+original spec alongside it for club/venue/name and excluded-fixture details
+that aren't part of the solution itself. This split means the HTML report can
+be regenerated -- e.g. after a report formatting change -- without
+re-running the (comparatively slow) solver: just rerun `report.py` against
+the existing `solution.yaml`.
+
+### Solution file format
+
+`solution.yaml` lists every scheduled fixture as a home/away team ID pair
+(the same IDs used under `teams` and by `fixed_fixtures`/`exclude_fixtures`
+in the spec) plus its date:
+
+```yaml
+fixtures:
+  - home: albany-1
+    away: hackney-1
+    date: 2025-09-01
+```
+
+It only makes sense alongside the spec it was solved from -- `report.py`
+resolves each entry's team IDs against that spec's `teams` to recover each
+team's division and display name.
 
 ### Spec file format
 
@@ -160,6 +194,9 @@ dated after it.
 
 Each run's folder contains:
 
+- `solution.yaml` — the raw solved fixture list (see "Solution file format"
+  above); committed alongside the spec so the report can be regenerated
+  without re-solving
 - `all-matches.html` — every fixture (date, division, home, away, venue
   name, start time, time limit), followed by a list of the full venue
   name and address of every home club appearing in the table
@@ -229,7 +266,7 @@ python -m http.server --directory _site
 ## Testing
 
 ```bash
-python run_tests.py
+python all_tests.py
 ```
 
 ## Code Quality
