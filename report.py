@@ -12,20 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Solve a YAML fixture specification and write its HTML report into a run folder.
+"""Render a solution.yaml (as written by solve.py), plus its original spec (for
+team/club/exclusion metadata), as a set of HTML report pages.
 
 Usage:
-    python run.py <spec.yaml> <output_dir>
+    python report.py <spec.yaml> <solution.yaml> <output_dir>
 
-<output_dir> should normally live under runs/ (e.g. runs/2025-26-season) so
-that it is picked up by the top-level runs index used for GitHub Pages. The
-usual layout is to keep the spec file inside that same folder (e.g.
-runs/2025-26-season/spec.yaml) and pass it as both input and output location.
-
-This is just solve.py (spec.yaml -> solution.yaml) followed by report.py
-(solution.yaml -> HTML report) run back to back. If you only want to
-regenerate the HTML report -- e.g. after changing report formatting, without
-re-solving -- run report.py directly against the existing solution.yaml.
+This can be re-run at any time to regenerate the HTML report -- e.g. after
+changing report formatting -- without re-solving, as long as solution.yaml
+still matches the teams described in spec.yaml. run.py runs solve.py and
+report.py together in one step.
 """
 
 from __future__ import annotations
@@ -33,15 +29,29 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import fixturesolution
+import fixturespec
 import htmlreport
-import report as report_step
-import solve as solve_step
 
 
-def run(spec_path: Path, output_dir: Path) -> Path:
-    """Solve the given spec and write its report into output_dir. Returns the run's index.html path."""
-    solution_path = solve_step.solve(spec_path, output_dir)
-    return report_step.report(spec_path, solution_path, output_dir)
+def report(spec_path: Path, solution_path: Path, output_dir: Path) -> Path:
+    """Render solution_path (a solution.yaml solved from spec_path) into output_dir.
+    Returns the path to the run's index.html."""
+    spec = fixturespec.load_spec(spec_path)
+    team_ids = fixturespec.load_team_ids(spec_path)
+    fixtures = fixturesolution.load_solution(
+        solution_path, spec.parameters.teams, team_ids
+    )
+    return htmlreport.generate_report(
+        fixtures,
+        spec.parameters.teams,
+        spec.clubs,
+        output_dir,
+        excluded_fixtures=spec.parameters.excluded_fixtures,
+        name=spec.name,
+        draft=spec.draft,
+        description=spec.description,
+    )
 
 
 def main() -> None:
@@ -49,6 +59,7 @@ def main() -> None:
     parser.add_argument(
         "spec", type=Path, help="Path to the YAML fixture specification"
     )
+    parser.add_argument("solution", type=Path, help="Path to the solved solution.yaml")
     parser.add_argument(
         "output_dir", type=Path, help="Directory to write this run's HTML report into"
     )
@@ -66,7 +77,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    run_index_path = run(args.spec, args.output_dir)
+    run_index_path = report(args.spec, args.solution, args.output_dir)
     root_index_path = htmlreport.write_runs_index(args.runs_dir, args.root_index)
 
     print(f"Wrote run report to {run_index_path}")

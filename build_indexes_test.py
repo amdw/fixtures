@@ -55,6 +55,29 @@ class TestBuildIndexes(unittest.TestCase):
         self.assertTrue(self.root_index.exists())
         self.assertIn("2025-26-season", self.root_index.read_text())
 
+    def test_rebuilds_nested_run(self):
+        """A run doesn't need to sit directly under runs_dir -- e.g. several drafts
+        of a season grouped under a season folder -- and should still get its own
+        index.html rebuilt and be linked from the root index."""
+        run_dir = self.runs_dir / "2026-27" / "draft1"
+        run_dir.mkdir(parents=True)
+        (run_dir / "all-matches.html").write_text("<title>All matches</title>")
+
+        with patch(
+            "sys.argv",
+            [
+                "build_indexes.py",
+                "--runs-dir",
+                str(self.runs_dir),
+                "--root-index",
+                str(self.root_index),
+            ],
+        ):
+            build_indexes.main()
+
+        self.assertTrue((run_dir / "index.html").exists())
+        self.assertIn("runs/2026-27/draft1/index.html", self.root_index.read_text())
+
     def test_no_runs_dir(self):
         with patch(
             "sys.argv",

@@ -44,4 +44,4 @@ jobs:
 
       - name: Run tests
         run: |
-          pipenv run python run_tests.py --verbose
+          pipenv run python all_tests.py --verbose
