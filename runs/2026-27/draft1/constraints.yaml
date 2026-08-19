@@ -169,14 +169,26 @@ club_constraints:
     - '2027-04-13'
     - '2027-04-15'
   willesden-brent:
-    # Every Wednesday from 2026-10-01 to 2027-05-14 with exceptions removed.
+    # Season window per Willesden & Brent's preference update (2026-08-19):
+    # w/c 12th October 2026 to w/c 26th April 2027 (24 weeks) - they cease
+    # running at end of June, so this leaves lead-in time to their rundown.
+    # Wednesdays across that window, minus:
+    #   - mandatory avoid weeks w/c 21 Dec, 28 Dec, 4 Jan (Christmas/New Year)
+    #     and 29 Mar (Easter). Christmas/New Year is also covered by the
+    #     top-level avoid_dates below; the w/c 4 Jan and w/c 29 Mar away-side
+    #     blocks are in unavailable_away_dates below since they aren't.
+    #   - the optional club-level ask to avoid w/c 5th April (see
+    #     unavailable_away_dates below).
+    #
+    # Should division 2 end up with 9 teams, Willesden & Brent could instead
+    # commence w/c 5th October (subject to the same dates-to-avoid) and extend
+    # to w/c 17th May - not applied now since division 2 currently has 3 teams.
     #
     # Simon Liebesny also mentioned a personal (not team) preference to avoid the
     # weeks of 2026-10-05 and 2027-03-15 (i.e. Wednesdays 2026-10-07 and
     # 2027-03-17) - not excluded below since it's explicitly not a team
     # requirement. Anthony Fulton will confirm sometime after 17th August.
     home_dates:
-    - '2026-10-07'
     - '2026-10-14'
     - '2026-10-21'
     - '2026-10-28'
@@ -190,7 +202,7 @@ club_constraints:
     # 2026-12-23 and 2026-12-30 skipped: Christmas/New Year (top-level
     # avoid_dates covers this club too, so no unavailable_away_dates entry
     # is needed below).
-    - '2027-01-06'
+    # 2027-01-06 skipped: w/c 4 Jan, mandatory avoid week (New Year rundown).
     - '2027-01-13'
     - '2027-01-20'
     - '2027-01-27'
@@ -202,13 +214,37 @@ club_constraints:
     - '2027-03-10'
     - '2027-03-17'
     - '2027-03-24'
-    - '2027-03-31'
-    - '2027-04-07'
+    # 2027-03-31 skipped: w/c 29 Mar, mandatory avoid week (Easter).
+    # 2027-04-07 skipped: w/c 5 Apr, optional club-level date to avoid.
     - '2027-04-14'
     - '2027-04-21'
     - '2027-04-28'
-    - '2027-05-05'
-    - '2027-05-12'
+    # 2027-05-05 and 2027-05-12 dropped: beyond the new w/c 26 Apr season end.
+    unavailable_away_dates:
+    # w/c 4 Jan: mandatory avoid week (New Year rundown).
+    - '2027-01-04'
+    - '2027-01-05'
+    - '2027-01-06'
+    - '2027-01-07'
+    - '2027-01-08'
+    - '2027-01-09'
+    - '2027-01-10'
+    # w/c 29 Mar: mandatory avoid week (Easter).
+    - '2027-03-29'
+    - '2027-03-30'
+    - '2027-03-31'
+    - '2027-04-01'
+    - '2027-04-02'
+    - '2027-04-03'
+    - '2027-04-04'
+    # w/c 5 Apr: optional club-level date to avoid.
+    - '2027-04-05'
+    - '2027-04-06'
+    - '2027-04-07'
+    - '2027-04-08'
+    - '2027-04-09'
+    - '2027-04-10'
+    - '2027-04-11'
   metropolitan:
     # All Thursdays from Oct 2026 to end of May 2027, minus the
     # Christmas/New Year period (already covered by the top-level
