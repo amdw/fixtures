@@ -232,7 +232,8 @@ def _add_avoid_coscheduling_constraints(
 
         for window in date_windows(vars_by_date.keys(), constraint.within_days):
             window_vars = [v for d in window for v in vars_by_date[d]]
-            model.add(cp_model.LinearExpr.Sum(window_vars) <= 1)
+            if len(window_vars) > 1:
+                model.add(cp_model.LinearExpr.Sum(window_vars) <= 1)
 
 
 def _add_fixed_fixtures_constraints(
