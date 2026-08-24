@@ -17,11 +17,14 @@
 import collections
 import dataclasses
 import itertools
+import logging
 from collections.abc import Collection, Mapping, MutableMapping
 from datetime import date
 from typing import Any
 
 from ortools.sat.python import cp_model
+
+logger = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -340,8 +343,18 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
     )
     _add_fixed_fixtures_constraints(model, params.fixed_fixtures, vars_by_fixture_date)
 
+    # Guarded by isEnabledFor, not just left to logger.info's own lazy %-formatting,
+    # since model_stats()/response_stats() themselves have a real (if modest) cost to
+    # compute -- not just to format -- and that argument is evaluated eagerly either way.
+    if logger.isEnabledFor(logging.INFO):
+        logger.info("Model stats:\n%s", model.model_stats())
+
     solver = cp_model.CpSolver()
     status = solver.Solve(model)
+
+    if logger.isEnabledFor(logging.INFO):
+        logger.info("Solve stats:\n%s", solver.response_stats())
+
     if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
         result = []
         for (fixture, match_date), var in vars_by_fixture_date.items():

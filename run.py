@@ -31,6 +31,7 @@ re-solving -- run report.py directly against the existing solution.yaml.
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 import htmlreport
@@ -65,6 +66,8 @@ def main() -> None:
         help="Path of the top-level index.html to (re)generate (default: index.html)",
     )
     args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 
     run_index_path = run(args.spec, args.output_dir)
     root_index_path = htmlreport.write_runs_index(args.runs_dir, args.root_index)

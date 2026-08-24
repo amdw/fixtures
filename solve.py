@@ -30,6 +30,7 @@ steps together.
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 import fixturesolution
@@ -61,6 +62,8 @@ def main() -> None:
         help="Directory to write solution.yaml into (default: the spec file's own directory)",
     )
     args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 
     output_dir = args.output_dir if args.output_dir is not None else args.spec.parent
     solution_path = solve(args.spec, output_dir)
