@@ -281,13 +281,17 @@ _CLUB_CONSTRAINT_FIELD_KEYS = {
     "max_concurrent_home_matches",
     "max_home_dates_used",
     "teams",
+    "avoid_coscheduling_teams",
 }
 
 _TEAM_CONSTRAINT_FIELD_KEYS = {"home_dates", "unavailable_away_dates"}
 
+_AVOID_COSCHEDULING_FIELD_KEYS = {"teams", "within_days"}
+
 # Constraint types with a notion of a default, overridable per club. Other constraint
-# types (home_dates, unavailable_away_dates, max_home_dates_used, teams) have no
-# meaningful spec-wide default, so aren't accepted under 'defaults'.
+# types (home_dates, unavailable_away_dates, max_home_dates_used, teams,
+# avoid_coscheduling_teams) have no meaningful spec-wide default, so aren't accepted
+# under 'defaults'.
 _CLUB_CONSTRAINT_DEFAULTS_KEYS = {"max_concurrent_home_matches"}
 
 
@@ -299,6 +303,7 @@ class _ClubConstraints:
     max_home_dates_used: dict[str, int]
     team_home_dates: dict[fmodel.Team, list[date]]
     team_unavailable_away_dates: dict[fmodel.Team, list[date]]
+    avoid_coscheduling_teams: list[fmodel.AvoidCoschedulingConstraint]
 
 
 def _parse_club_constraints(
@@ -308,8 +313,8 @@ def _parse_club_constraints(
     path: Path,
 ) -> _ClubConstraints:
     """Parse the 'club_constraints' section: per-club home_dates, unavailable_away_dates,
-    max_concurrent_home_matches, max_home_dates_used and teams, keyed directly by club
-    ID.
+    max_concurrent_home_matches, max_home_dates_used, teams and
+    avoid_coscheduling_teams, keyed directly by club ID.
 
     An optional 'defaults' entry (a sibling of the club entries) supplies a spec-wide
     default for constraint types that support one (currently just
@@ -320,6 +325,10 @@ def _parse_club_constraints(
     A club's optional 'teams' entry holds per-team overrides/additions to that club's
     own home_dates/unavailable_away_dates, for clubs whose teams don't all share the
     same availability -- see _parse_club_team_constraints().
+
+    A club's optional 'avoid_coscheduling_teams' entry lists groups of that club's own
+    teams that shouldn't be scheduled too close together (e.g. adjacent-division teams
+    drawing from the same pool of players) -- see _parse_avoid_coscheduling_teams().
     """
     section_name = "club_constraints"
     section_spec = data.get(section_name, {})
@@ -354,6 +363,7 @@ def _parse_club_constraints(
     max_home_dates_used: dict[str, int] = {}
     team_home_dates: dict[fmodel.Team, list[date]] = {}
     team_unavailable_away_dates: dict[fmodel.Team, list[date]] = {}
+    avoid_coscheduling_teams: list[fmodel.AvoidCoschedulingConstraint] = []
     missing_max_concurrent: list[str] = []
 
     for club_id in clubs:
@@ -406,6 +416,15 @@ def _parse_club_constraints(
         team_home_dates.update(club_team_home_dates)
         team_unavailable_away_dates.update(club_team_unavailable_away_dates)
 
+        avoid_coscheduling_teams.extend(
+            _parse_avoid_coscheduling_teams(
+                club_spec.get("avoid_coscheduling_teams"),
+                club_id,
+                teams,
+                f"{path}: {section_name}[{club_id!r}].avoid_coscheduling_teams",
+            )
+        )
+
     if missing_max_concurrent:
         raise SpecError(
             f"{path}: {section_name} missing max_concurrent_home_matches for "
@@ -420,6 +439,7 @@ def _parse_club_constraints(
         max_home_dates_used=max_home_dates_used,
         team_home_dates=team_home_dates,
         team_unavailable_away_dates=team_unavailable_away_dates,
+        avoid_coscheduling_teams=avoid_coscheduling_teams,
     )
 
 
@@ -482,6 +502,78 @@ def _parse_club_team_constraints(
             )
 
     return team_home_dates, team_unavailable_away_dates
+
+
+def _parse_avoid_coscheduling_teams(
+    entries_spec: Any,
+    club_id: str,
+    teams: Mapping[str, fmodel.Team],
+    context: str,
+) -> list[fmodel.AvoidCoschedulingConstraint]:
+    """Parse a club_constraints entry's optional 'avoid_coscheduling_teams' list.
+
+    Each entry names a group of that club's own teams (all of which must belong to
+    this club) and an optional 'within_days' window (default 0, i.e. the same date):
+    the solver then allows at most one match involving any of those teams within any
+    window of that many days -- e.g. two teams that share players shouldn't both be
+    fielded on the same date.
+    """
+    if entries_spec is None:
+        return []
+    if not isinstance(entries_spec, list):
+        raise SpecError(f"{context} must be a list")
+
+    constraints: list[fmodel.AvoidCoschedulingConstraint] = []
+    for i, entry in enumerate(entries_spec):
+        entry_context = f"{context}[{i}]"
+        if not isinstance(entry, dict):
+            raise SpecError(f"{entry_context} must be a mapping")
+        unsupported = entry.keys() - _AVOID_COSCHEDULING_FIELD_KEYS
+        if unsupported:
+            raise SpecError(
+                f"{entry_context}.{sorted(unsupported)} not supported (only "
+                f"{sorted(_AVOID_COSCHEDULING_FIELD_KEYS)} are)"
+            )
+        if "teams" not in entry:
+            raise SpecError(f"{entry_context} missing required field 'teams'")
+
+        team_ids = entry["teams"]
+        if not isinstance(team_ids, list) or not team_ids:
+            raise SpecError(f"{entry_context}.teams must be a non-empty list")
+
+        entry_teams: list[fmodel.Team] = []
+        seen_team_ids: set[str] = set()
+        for team_id in team_ids:
+            if team_id in seen_team_ids:
+                raise SpecError(f"{entry_context}.teams: duplicate team {team_id!r}")
+            seen_team_ids.add(team_id)
+            if team_id not in teams:
+                raise SpecError(
+                    f"{entry_context}.teams references unknown team {team_id!r}"
+                )
+            team = teams[team_id]
+            if team.club != club_id:
+                raise SpecError(
+                    f"{entry_context}.teams: team {team_id!r} belongs to club "
+                    f"{team.club!r}, not {club_id!r}"
+                )
+            entry_teams.append(team)
+
+        within_days = 0
+        if "within_days" in entry:
+            within_days = _require_int(
+                entry["within_days"], f"{entry_context}.within_days"
+            )
+            if within_days < 0:
+                raise SpecError(f"{entry_context}.within_days must be >= 0")
+
+        constraints.append(
+            fmodel.AvoidCoschedulingConstraint(
+                teams=entry_teams, within_days=within_days
+            )
+        )
+
+    return constraints
 
 
 def _parse_fixed_fixtures(
@@ -733,6 +825,8 @@ def load_spec(spec_path: str | Path) -> Spec:
         kwargs["team_home_dates"] = team_home_dates
     if team_unavailable_away_dates:
         kwargs["team_unavailable_away_dates"] = team_unavailable_away_dates
+    if club_constraints.avoid_coscheduling_teams:
+        kwargs["avoid_coscheduling_teams"] = club_constraints.avoid_coscheduling_teams
 
     fixed_fixtures = _parse_fixed_fixtures(
         data, teams, home_dates, team_home_dates, path

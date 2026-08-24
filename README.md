@@ -130,6 +130,11 @@ club_constraints:
         home_dates: [2025-09-08]  # replaces (not narrows) hackney's home_dates above,
                                    # for hackney-5 only; must be a subset of them
         unavailable_away_dates: [2025-09-22]  # additional to hackney's own, above
+    avoid_coscheduling_teams:     # optional; groups of this club's own teams that
+                                   # shouldn't be scheduled too close together (e.g.
+                                   # they share players)
+      - teams: [hackney-1, hackney-5]
+        within_days: 0             # optional, default shown here (0 = same date)
 
 fixed_fixtures:                   # optional; pin specific fixtures to a specific date
   - home: albany-1
@@ -144,10 +149,11 @@ exclude_fixtures:                 # optional; withhold fixtures from scheduling 
 
 `club_constraints` groups every constraint that can vary by club — currently
 `home_dates`, `unavailable_away_dates`, `max_concurrent_home_matches`,
-`max_home_dates_used` and `teams` — under that club's own ID, alongside an
-optional `defaults` entry (a sibling of the club entries, not itself a club)
-for constraint types that support a spec-wide default overridable per club.
-Today that's just `max_concurrent_home_matches`; if
+`max_home_dates_used`, `teams` and `avoid_coscheduling_teams` — under that
+club's own ID, alongside an optional `defaults` entry (a sibling of the club
+entries, not itself a club) for constraint types that support a spec-wide
+default overridable per club. Today that's just
+`max_concurrent_home_matches`; if
 `club_constraints.defaults.max_concurrent_home_matches` is omitted, every
 club must have its own `max_concurrent_home_matches` entry — there's no
 built-in fallback value. `home_dates` and `unavailable_away_dates` default to
@@ -162,6 +168,18 @@ club's own `home_dates`); a team's `unavailable_away_dates`, if given, is
 additional to its club's own `unavailable_away_dates`, not a replacement for
 it. A team not listed under its club's `teams` just uses that club's dates
 as normal.
+
+A club's optional `avoid_coscheduling_teams` entry lists groups of that
+club's own teams that shouldn't be scheduled too close together — e.g.
+adjacent-division teams that draw from the same pool of players. Each entry
+gives a `teams` list (two or more of that club's own team IDs) and an
+optional `within_days` (default `0`): the solver then allows at most one
+match involving *any* of those teams — home or away — within any window of
+that many days, so `within_days: 0` (the default) means no two of them may
+share a date at all, while a higher value also keeps them some number of
+days apart. Unlike `teams`, entries here are additive — as many can be
+given as needed, e.g. one per adjacent pair of teams — and there's no
+requirement that every team be covered.
 
 Club and team IDs are your own stable keys (letters/digits/hyphens are safest,
 since they're also used to build report filenames) — used to cross-reference

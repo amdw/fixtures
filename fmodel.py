@@ -80,6 +80,18 @@ class MaxConcurrentHomeMatches:
         return self.overrides.get(d, self.default)
 
 
+@dataclasses.dataclass(frozen=True)
+class AvoidCoschedulingConstraint:
+    """At most one match involving any of `teams` may be scheduled within any window
+    of `within_days` days -- e.g. within_days=0 (the default) means no two of them
+    may share a date. Typically used for a club's own teams that draw from the same
+    pool of players (e.g. adjacent-division teams), but not restricted to that.
+    """
+
+    teams: Collection[Team]
+    within_days: int = 0
+
+
 def _check_no_duplicate_teams(teams: Collection[Team]) -> None:
     """Reject repeated teams: solve() relies on each (Fixture, date) pair mapping to
     at most one solver variable, which would break if the same team (by value) appeared
@@ -123,6 +135,7 @@ class Parameters:
     team_unavailable_away_dates: Mapping[Team, list[date]] = dataclasses.field(
         default_factory=dict
     )
+    avoid_coscheduling_teams: Collection[AvoidCoschedulingConstraint] = ()
 
     def __post_init__(self) -> None:
         _check_no_duplicate_teams(self.teams)
@@ -194,6 +207,32 @@ def _add_max_home_dates_used_constraints(
             )
             date_used_vars.append(date_used)
         model.add(cp_model.LinearExpr.Sum(date_used_vars) <= limit)
+
+
+def _add_avoid_coscheduling_constraints(
+    model: cp_model.CpModel,
+    constraints: Collection[AvoidCoschedulingConstraint],
+    vars_by_fixture_date: Mapping[tuple[Fixture, date], cp_model.IntVar],
+) -> None:
+    """For each AvoidCoschedulingConstraint, ensure at most one match involving any
+    of its teams is scheduled within any window of within_days days.
+    """
+    for constraint in constraints:
+        teams = set(constraint.teams)
+        # vars_by_fixture_date has exactly one variable per (fixture, date), so
+        # filtering it (rather than combining per-team variable lists, which each
+        # store the same variable for both the home and away team of a fixture)
+        # can't double-count a match between two teams that are both in `teams`.
+        vars_by_date: MutableMapping[date, list[cp_model.IntVar]] = (
+            collections.defaultdict(list)
+        )
+        for (fixture, d), var in vars_by_fixture_date.items():
+            if fixture.home_team in teams or fixture.away_team in teams:
+                vars_by_date[d].append(var)
+
+        for window in date_windows(vars_by_date.keys(), constraint.within_days):
+            window_vars = [v for d in window for v in vars_by_date[d]]
+            model.add(cp_model.LinearExpr.Sum(window_vars) <= 1)
 
 
 def _add_fixed_fixtures_constraints(
@@ -286,6 +325,9 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
 
     _add_max_home_dates_used_constraints(
         model, params.max_home_dates_used, vars_by_club_home_date
+    )
+    _add_avoid_coscheduling_constraints(
+        model, params.avoid_coscheduling_teams, vars_by_fixture_date
     )
     _add_fixed_fixtures_constraints(model, params.fixed_fixtures, vars_by_fixture_date)
 

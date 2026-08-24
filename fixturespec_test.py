@@ -873,6 +873,138 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "home dates"):
             fixturespec.load_spec(path)
 
+    def _with_albany_avoid_coscheduling(self, block: str) -> str:
+        """_THREE_TEAM_SPEC (which has two Albany teams) with the given
+        'avoid_coscheduling_teams:' block (already indented as it should appear)
+        nested under club_constraints.albany, alongside its home_dates."""
+        return _THREE_TEAM_SPEC.replace(
+            "  albany:\n    home_dates: [2025-09-01, 2025-10-01, 2025-11-01, 2025-12-01]\n",
+            "  albany:\n    home_dates: [2025-09-01, 2025-10-01, 2025-11-01, 2025-12-01]\n"
+            + block,
+        )
+
+    def test_avoid_coscheduling_teams_absent(self):
+        path = self._write(_THREE_TEAM_SPEC)
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.parameters.avoid_coscheduling_teams, ())
+
+    def test_avoid_coscheduling_teams_parsed(self):
+        path = self._write(
+            self._with_albany_avoid_coscheduling(
+                "    avoid_coscheduling_teams:\n      - teams: [albany-1, albany-2]\n"
+            )
+        )
+        spec = fixturespec.load_spec(path)
+        albany_1 = next(
+            t for t in spec.parameters.teams if t.club == "albany" and t.index == 1
+        )
+        albany_2 = next(
+            t for t in spec.parameters.teams if t.club == "albany" and t.index == 2
+        )
+        self.assertEqual(
+            list(spec.parameters.avoid_coscheduling_teams),
+            [
+                fmodel.AvoidCoschedulingConstraint(
+                    teams=[albany_1, albany_2], within_days=0
+                )
+            ],
+        )
+
+    def test_avoid_coscheduling_teams_within_days_parsed(self):
+        path = self._write(
+            self._with_albany_avoid_coscheduling(
+                "    avoid_coscheduling_teams:\n"
+                "      - teams: [albany-1, albany-2]\n"
+                "        within_days: 3\n"
+            )
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.parameters.avoid_coscheduling_teams[0].within_days, 3)
+
+    def test_avoid_coscheduling_teams_not_a_list(self):
+        path = self._write(
+            self._with_albany_avoid_coscheduling("    avoid_coscheduling_teams: {}\n")
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "list"):
+            fixturespec.load_spec(path)
+
+    def test_avoid_coscheduling_teams_entry_not_a_mapping(self):
+        path = self._write(
+            self._with_albany_avoid_coscheduling(
+                "    avoid_coscheduling_teams:\n      - just-a-string\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "mapping"):
+            fixturespec.load_spec(path)
+
+    def test_avoid_coscheduling_teams_missing_teams_field(self):
+        path = self._write(
+            self._with_albany_avoid_coscheduling(
+                "    avoid_coscheduling_teams:\n      - within_days: 1\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "teams"):
+            fixturespec.load_spec(path)
+
+    def test_avoid_coscheduling_teams_empty_teams_list(self):
+        path = self._write(
+            self._with_albany_avoid_coscheduling(
+                "    avoid_coscheduling_teams:\n      - teams: []\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "non-empty"):
+            fixturespec.load_spec(path)
+
+    def test_avoid_coscheduling_teams_duplicate_team(self):
+        path = self._write(
+            self._with_albany_avoid_coscheduling(
+                "    avoid_coscheduling_teams:\n      - teams: [albany-1, albany-1]\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "duplicate"):
+            fixturespec.load_spec(path)
+
+    def test_avoid_coscheduling_teams_unknown_team(self):
+        path = self._write(
+            self._with_albany_avoid_coscheduling(
+                "    avoid_coscheduling_teams:\n"
+                "      - teams: [albany-1, nonexistent]\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
+            fixturespec.load_spec(path)
+
+    def test_avoid_coscheduling_teams_team_belongs_to_different_club(self):
+        path = self._write(
+            self._with_albany_avoid_coscheduling(
+                "    avoid_coscheduling_teams:\n      - teams: [albany-1, hackney-1]\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "hackney-1"):
+            fixturespec.load_spec(path)
+
+    def test_avoid_coscheduling_teams_unsupported_field(self):
+        path = self._write(
+            self._with_albany_avoid_coscheduling(
+                "    avoid_coscheduling_teams:\n"
+                "      - teams: [albany-1, albany-2]\n"
+                "        venue: elsewhere\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
+            fixturespec.load_spec(path)
+
+    def test_avoid_coscheduling_teams_negative_within_days_rejected(self):
+        path = self._write(
+            self._with_albany_avoid_coscheduling(
+                "    avoid_coscheduling_teams:\n"
+                "      - teams: [albany-1, albany-2]\n"
+                "        within_days: -1\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "within_days"):
+            fixturespec.load_spec(path)
+
     def test_exclude_fixtures_absent(self):
         path = self._write(_MINIMAL_SPEC)
         spec = fixturespec.load_spec(path)

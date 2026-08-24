@@ -639,6 +639,171 @@ class TestTeamConstraints(unittest.TestCase):
         self.assertEqual(params.unavailable_away_dates_for(a1), set())
 
 
+class TestAvoidCoschedulingTeams(unittest.TestCase):
+    """Test cases for AvoidCoschedulingConstraint: at most one match involving any of
+    a given set of teams may be scheduled within any window of within_days days.
+    """
+
+    def test_within_days_defaults_to_zero(self):
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=2, club="A", index=2)
+        self.assertEqual(
+            fmodel.AvoidCoschedulingConstraint(teams=[a1, a2]).within_days, 0
+        )
+
+    def test_forces_different_dates_for_constrained_teams(self):
+        """A1 and A2 are in different divisions (so have no fixture between them
+        directly forcing a gap) and could otherwise both be scheduled at home on the
+        same one of A's two shared home dates; the coscheduling constraint forces
+        them apart. (X gets two well-separated home dates too, since the constraint
+        covers *all* of A1/A2's matches, home or away -- see
+        test_also_applies_to_away_matches -- not just their home ones; with only one
+        X date, A1 and A2's away legs would collide there instead.)"""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=2, club="A", index=2)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        x2 = fmodel.Team(division=2, club="X", index=2)
+        params = fmodel.Parameters(
+            teams=[a1, a2, x1, x2],
+            home_dates={
+                "A": [date(2025, 1, 1), date(2025, 1, 8)],
+                "X": [date(2025, 3, 1), date(2025, 3, 8)],
+            },
+            unavailable_away_dates={"A": [], "X": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=2),
+                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            },
+            min_gap_days=7,
+            avoid_coscheduling_teams=[
+                fmodel.AvoidCoschedulingConstraint(teams=[a1, a2])
+            ],
+        )
+        fixtures = list(fmodel.solve(params))
+        a1_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a1)
+        a2_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a2)
+        self.assertNotEqual(a1_home_date, a2_home_date)
+
+    def test_also_applies_to_away_matches(self):
+        """The constraint covers every match involving a constrained team, not just
+        its home ones -- so if X only has one home date, A1 and A2 can't both play
+        their away leg there, even though neither is hosting."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=2, club="A", index=2)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        x2 = fmodel.Team(division=2, club="X", index=2)
+        params = fmodel.Parameters(
+            teams=[a1, a2, x1, x2],
+            home_dates={
+                "A": [date(2025, 1, 1), date(2025, 1, 8)],
+                "X": [date(2025, 3, 1)],
+            },
+            unavailable_away_dates={"A": [], "X": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=2),
+                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            },
+            min_gap_days=7,
+            avoid_coscheduling_teams=[
+                fmodel.AvoidCoschedulingConstraint(teams=[a1, a2])
+            ],
+        )
+        with self.assertRaises(ValueError):
+            fmodel.solve(params)
+
+    def test_infeasible_when_only_one_shared_date_available(self):
+        """Same setup as test_forces_different_dates_for_constrained_teams, but A
+        only has one home date -- both A1 and A2 need it for their home leg, and the
+        coscheduling constraint forbids them sharing it. (X still gets two dates, to
+        isolate this from the away-match interaction covered by
+        test_also_applies_to_away_matches.)"""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=2, club="A", index=2)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        x2 = fmodel.Team(division=2, club="X", index=2)
+        params = fmodel.Parameters(
+            teams=[a1, a2, x1, x2],
+            home_dates={
+                "A": [date(2025, 1, 1)],
+                "X": [date(2025, 3, 1), date(2025, 3, 8)],
+            },
+            unavailable_away_dates={"A": [], "X": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=2),
+                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            },
+            min_gap_days=7,
+            avoid_coscheduling_teams=[
+                fmodel.AvoidCoschedulingConstraint(teams=[a1, a2])
+            ],
+        )
+        with self.assertRaises(ValueError):
+            fmodel.solve(params)
+
+    def test_within_days_window_enforced(self):
+        """With within_days=3, A1 and A2's home matches must land on dates more than
+        3 days apart -- of A's three candidate dates (Jan 1, 3, 10), only pairings
+        involving Jan 10 satisfy that, so the solver must pick one of those. (X's two
+        home dates, for A1/A2's away legs, are also more than 3 days apart, so they
+        don't introduce a second conflict of their own.)"""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=2, club="A", index=2)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        x2 = fmodel.Team(division=2, club="X", index=2)
+        params = fmodel.Parameters(
+            teams=[a1, a2, x1, x2],
+            home_dates={
+                "A": [date(2025, 1, 1), date(2025, 1, 3), date(2025, 1, 10)],
+                "X": [date(2025, 3, 1), date(2025, 3, 8)],
+            },
+            unavailable_away_dates={"A": [], "X": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=2),
+                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            },
+            min_gap_days=7,
+            avoid_coscheduling_teams=[
+                fmodel.AvoidCoschedulingConstraint(teams=[a1, a2], within_days=3)
+            ],
+        )
+        fixtures = list(fmodel.solve(params))
+        a1_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a1)
+        a2_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a2)
+        self.assertGreater(abs((a1_home_date - a2_home_date).days), 3)
+
+    def test_direct_fixture_between_constrained_teams_not_double_counted(self):
+        """A single match between two constrained teams should count once towards
+        the <=1 limit, not twice -- if the two teams' variables were combined
+        naively (e.g. by concatenating each team's own match list) rather than by
+        filtering the single var per (fixture, date), this fixture's variable would
+        be counted twice and wrongly made unschedulable."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=1, club="A", index=2)
+        params = fmodel.Parameters(
+            teams=[a1, a2],
+            home_dates={"A": [date(2025, 1, 1)]},
+            unavailable_away_dates={"A": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=1)
+            },
+            min_gap_days=7,
+            excluded_fixtures=[fmodel.Fixture(home_team=a2, away_team=a1)],
+            avoid_coscheduling_teams=[
+                fmodel.AvoidCoschedulingConstraint(teams=[a1, a2])
+            ],
+        )
+        fixtures = list(fmodel.solve(params))
+        self.assertEqual(
+            fixtures,
+            [
+                fmodel.ScheduledFixture(
+                    fixture=fmodel.Fixture(home_team=a1, away_team=a2),
+                    date=date(2025, 1, 1),
+                )
+            ],
+        )
+
+
 class TestDuplicateRejection(unittest.TestCase):
     """Parameters construction relies on each (Fixture, date) pair mapping to at most
     one solver variable; these are the two ways it could otherwise be violated."""
