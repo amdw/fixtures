@@ -280,11 +280,14 @@ _CLUB_CONSTRAINT_FIELD_KEYS = {
     "unavailable_away_dates",
     "max_concurrent_home_matches",
     "max_home_dates_used",
+    "teams",
 }
 
+_TEAM_CONSTRAINT_FIELD_KEYS = {"home_dates", "unavailable_away_dates"}
+
 # Constraint types with a notion of a default, overridable per club. Other constraint
-# types (home_dates, unavailable_away_dates, max_home_dates_used) have no meaningful
-# spec-wide default, so aren't accepted under 'defaults'.
+# types (home_dates, unavailable_away_dates, max_home_dates_used, teams) have no
+# meaningful spec-wide default, so aren't accepted under 'defaults'.
 _CLUB_CONSTRAINT_DEFAULTS_KEYS = {"max_concurrent_home_matches"}
 
 
@@ -294,19 +297,29 @@ class _ClubConstraints:
     unavailable_away_dates: dict[str, list[date]]
     max_concurrent_home_matches: dict[str, fmodel.MaxConcurrentHomeMatches]
     max_home_dates_used: dict[str, int]
+    team_home_dates: dict[fmodel.Team, list[date]]
+    team_unavailable_away_dates: dict[fmodel.Team, list[date]]
 
 
 def _parse_club_constraints(
-    data: Mapping[str, Any], clubs: Mapping[str, fmodel.Club], path: Path
+    data: Mapping[str, Any],
+    clubs: Mapping[str, fmodel.Club],
+    teams: Mapping[str, fmodel.Team],
+    path: Path,
 ) -> _ClubConstraints:
     """Parse the 'club_constraints' section: per-club home_dates, unavailable_away_dates,
-    max_concurrent_home_matches and max_home_dates_used, keyed directly by club ID.
+    max_concurrent_home_matches, max_home_dates_used and teams, keyed directly by club
+    ID.
 
     An optional 'defaults' entry (a sibling of the club entries) supplies a spec-wide
     default for constraint types that support one (currently just
     max_concurrent_home_matches); a club's own entry, if present, always takes
     precedence over 'defaults'. If 'defaults.max_concurrent_home_matches' is omitted,
     every club must have its own max_concurrent_home_matches entry.
+
+    A club's optional 'teams' entry holds per-team overrides/additions to that club's
+    own home_dates/unavailable_away_dates, for clubs whose teams don't all share the
+    same availability -- see _parse_club_team_constraints().
     """
     section_name = "club_constraints"
     section_spec = data.get(section_name, {})
@@ -339,6 +352,8 @@ def _parse_club_constraints(
     unavailable_away_dates: dict[str, list[date]] = {}
     max_concurrent_home_matches: dict[str, fmodel.MaxConcurrentHomeMatches] = {}
     max_home_dates_used: dict[str, int] = {}
+    team_home_dates: dict[fmodel.Team, list[date]] = {}
+    team_unavailable_away_dates: dict[fmodel.Team, list[date]] = {}
     missing_max_concurrent: list[str] = []
 
     for club_id in clubs:
@@ -379,6 +394,18 @@ def _parse_club_constraints(
                 f"{path}: {section_name}[{club_id!r}].max_home_dates_used",
             )
 
+        club_team_home_dates, club_team_unavailable_away_dates = (
+            _parse_club_team_constraints(
+                club_spec.get("teams", {}),
+                club_id,
+                teams,
+                home_dates[club_id],
+                f"{path}: {section_name}[{club_id!r}].teams",
+            )
+        )
+        team_home_dates.update(club_team_home_dates)
+        team_unavailable_away_dates.update(club_team_unavailable_away_dates)
+
     if missing_max_concurrent:
         raise SpecError(
             f"{path}: {section_name} missing max_concurrent_home_matches for "
@@ -391,20 +418,85 @@ def _parse_club_constraints(
         unavailable_away_dates=unavailable_away_dates,
         max_concurrent_home_matches=max_concurrent_home_matches,
         max_home_dates_used=max_home_dates_used,
+        team_home_dates=team_home_dates,
+        team_unavailable_away_dates=team_unavailable_away_dates,
     )
+
+
+def _parse_club_team_constraints(
+    teams_spec: Any,
+    club_id: str,
+    teams: Mapping[str, fmodel.Team],
+    club_home_dates: list[date],
+    context: str,
+) -> tuple[dict[fmodel.Team, list[date]], dict[fmodel.Team, list[date]]]:
+    """Parse a club_constraints entry's optional 'teams' sub-section: per-team
+    overrides/additions to that club's own home_dates/unavailable_away_dates, for
+    clubs whose teams don't all share the same availability.
+
+    A team's home_dates entry, if given, replaces its club's home_dates for that team
+    (not narrows it), and must be a subset of the club's home_dates. A team's
+    unavailable_away_dates entry, if given, is additional to its club's
+    unavailable_away_dates (not instead of it).
+    """
+    if not isinstance(teams_spec, dict):
+        raise SpecError(f"{context} must be a mapping")
+
+    team_home_dates: dict[fmodel.Team, list[date]] = {}
+    team_unavailable_away_dates: dict[fmodel.Team, list[date]] = {}
+    for team_id, team_spec in teams_spec.items():
+        team_context = f"{context}[{team_id!r}]"
+        if team_id not in teams:
+            raise SpecError(f"{team_context} references unknown team {team_id!r}")
+        team = teams[team_id]
+        if team.club != club_id:
+            raise SpecError(
+                f"{team_context}: team {team_id!r} belongs to club {team.club!r}, "
+                f"not {club_id!r}"
+            )
+        if not isinstance(team_spec, dict):
+            raise SpecError(f"{team_context} must be a mapping")
+        unsupported = team_spec.keys() - _TEAM_CONSTRAINT_FIELD_KEYS
+        if unsupported:
+            raise SpecError(
+                f"{team_context}.{sorted(unsupported)} not supported (only "
+                f"{sorted(_TEAM_CONSTRAINT_FIELD_KEYS)} are)"
+            )
+
+        if "home_dates" in team_spec:
+            dates = _parse_date_list(
+                team_spec["home_dates"], f"{team_context}.home_dates"
+            )
+            invalid = [d for d in dates if d not in club_home_dates]
+            if invalid:
+                raise SpecError(
+                    f"{team_context}.home_dates: {[d.isoformat() for d in invalid]} "
+                    f"not in {club_id!r}'s home_dates"
+                )
+            team_home_dates[team] = dates
+
+        if "unavailable_away_dates" in team_spec:
+            team_unavailable_away_dates[team] = _parse_date_list(
+                team_spec["unavailable_away_dates"],
+                f"{team_context}.unavailable_away_dates",
+            )
+
+    return team_home_dates, team_unavailable_away_dates
 
 
 def _parse_fixed_fixtures(
     data: Mapping[str, Any],
     teams: Mapping[str, fmodel.Team],
     home_dates: Mapping[str, list[date]],
+    team_home_dates: Mapping[fmodel.Team, list[date]],
     path: Path,
 ) -> list[fmodel.ScheduledFixture]:
     """Parse the optional 'fixed_fixtures' section: fixtures pinned to a specific date.
 
     Each entry references a home and away team (by team ID) and a date. The two
-    teams must be in the same division, and the date must be one of the home
-    team's club's allowed home dates.
+    teams must be in the same division, and the date must be one of the home team's
+    allowed home dates (its own club_constraints[club].teams[team].home_dates
+    override if it has one, otherwise its club's home_dates).
     """
     section_name = "fixed_fixtures"
     section_spec = data.get(section_name)
@@ -445,10 +537,13 @@ def _parse_fixed_fixtures(
             )
 
         fixture_date = _parse_date(entry["date"], f"{context}.date")
-        if fixture_date not in home_dates.get(home_team.club, []):
+        effective_home_dates = team_home_dates.get(
+            home_team, home_dates.get(home_team.club, [])
+        )
+        if fixture_date not in effective_home_dates:
             raise SpecError(
                 f"{context}: {fixture_date.isoformat()} is not one of {home_id!r}'s "
-                "club's home dates"
+                "allowed home dates"
             )
 
         fixed_fixtures.append(
@@ -619,21 +714,29 @@ def load_spec(spec_path: str | Path) -> Spec:
 
     avoid_dates = _parse_date_list(data.get("avoid_dates"), f"{path}: 'avoid_dates'")
 
-    club_constraints = _parse_club_constraints(data, clubs, path)
+    club_constraints = _parse_club_constraints(data, clubs, teams, path)
     home_dates = club_constraints.home_dates
     unavailable_away_dates = {
         club_id: sorted(set(dates) | set(avoid_dates))
         for club_id, dates in club_constraints.unavailable_away_dates.items()
     }
     max_concurrent_home_matches = club_constraints.max_concurrent_home_matches
+    team_home_dates = club_constraints.team_home_dates
+    team_unavailable_away_dates = club_constraints.team_unavailable_away_dates
 
     kwargs: dict[str, Any] = {}
     if "min_gap_days" in data:
         kwargs["min_gap_days"] = data["min_gap_days"]
     if club_constraints.max_home_dates_used:
         kwargs["max_home_dates_used"] = club_constraints.max_home_dates_used
+    if team_home_dates:
+        kwargs["team_home_dates"] = team_home_dates
+    if team_unavailable_away_dates:
+        kwargs["team_unavailable_away_dates"] = team_unavailable_away_dates
 
-    fixed_fixtures = _parse_fixed_fixtures(data, teams, home_dates, path)
+    fixed_fixtures = _parse_fixed_fixtures(
+        data, teams, home_dates, team_home_dates, path
+    )
     if fixed_fixtures:
         kwargs["fixed_fixtures"] = fixed_fixtures
 

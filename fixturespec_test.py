@@ -612,7 +612,7 @@ divisions:
 club_constraints:
   albany:
     home_dates: [2025-09-01]
-    teams: {}
+    venue: {}
 """)
         with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
             fixturespec.load_spec(path)
@@ -766,6 +766,109 @@ club_constraints:
             "  - home: hackney-1\n"
             "    away: albany-1\n"
             "    date: 2025-09-16\n"  # not one of hackney's home dates
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "home dates"):
+            fixturespec.load_spec(path)
+
+    def _with_albany_teams(self, teams_block: str) -> str:
+        """_MINIMAL_SPEC with the given 'teams:' block (already indented as it should
+        appear) nested under club_constraints.albany, alongside its home_dates."""
+        return _MINIMAL_SPEC.replace(
+            "    home_dates: [2025-09-01, 2025-09-29]\n"
+            "    unavailable_away_dates: [2025-12-25]\n",
+            "    home_dates: [2025-09-01, 2025-09-29]\n"
+            "    unavailable_away_dates: [2025-12-25]\n" + teams_block,
+        )
+
+    def test_team_constraints_absent(self):
+        path = self._write(_MINIMAL_SPEC)
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.parameters.team_home_dates, {})
+        self.assertEqual(spec.parameters.team_unavailable_away_dates, {})
+
+    def test_team_constraints_home_dates_override(self):
+        path = self._write(
+            self._with_albany_teams(
+                "    teams:\n      albany-1:\n        home_dates: [2025-09-01]\n"
+            )
+        )
+        spec = fixturespec.load_spec(path)
+        albany_1 = next(t for t in spec.parameters.teams if t.club == "albany")
+        self.assertEqual(
+            spec.parameters.team_home_dates, {albany_1: [date(2025, 9, 1)]}
+        )
+
+    def test_team_constraints_home_dates_must_be_subset_of_clubs(self):
+        path = self._write(
+            self._with_albany_teams(
+                "    teams:\n      albany-1:\n"
+                # 2025-09-16 is not one of albany's home_dates in _MINIMAL_SPEC
+                "        home_dates: [2025-09-01, 2025-09-16]\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "home_dates"):
+            fixturespec.load_spec(path)
+
+    def test_team_constraints_unavailable_away_dates_additive(self):
+        path = self._write(
+            self._with_albany_teams(
+                "    teams:\n      albany-1:\n"
+                "        unavailable_away_dates: [2025-10-01]\n"
+            )
+        )
+        spec = fixturespec.load_spec(path)
+        albany_1 = next(t for t in spec.parameters.teams if t.club == "albany")
+        self.assertEqual(
+            spec.parameters.team_unavailable_away_dates,
+            {albany_1: [date(2025, 10, 1)]},
+        )
+        # Additive: the club-level unavailable_away_dates entry is untouched.
+        self.assertEqual(
+            spec.parameters.unavailable_away_dates["albany"], [date(2025, 12, 25)]
+        )
+
+    def test_team_constraints_unknown_team(self):
+        path = self._write(
+            self._with_albany_teams(
+                "    teams:\n      nonexistent:\n        home_dates: [2025-09-01]\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
+            fixturespec.load_spec(path)
+
+    def test_team_constraints_team_belongs_to_different_club(self):
+        """A team can only be listed under its own club's club_constraints entry."""
+        path = self._write(
+            self._with_albany_teams(
+                "    teams:\n      hackney-1:\n        home_dates: [2025-09-01]\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "hackney-1"):
+            fixturespec.load_spec(path)
+
+    def test_team_constraints_unsupported_field(self):
+        path = self._write(
+            self._with_albany_teams(
+                "    teams:\n      albany-1:\n        max_concurrent_home_matches: 2\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
+            fixturespec.load_spec(path)
+
+    def test_fixed_fixtures_date_must_be_one_of_teams_own_home_dates(self):
+        """When a team has a club_constraints[club].teams[team].home_dates override,
+        fixed_fixtures validates against that override, not the club's full
+        home_dates list."""
+        path = self._write(
+            self._with_albany_teams(
+                "    teams:\n      albany-1:\n        home_dates: [2025-09-01]\n"
+            )
+            + "fixed_fixtures:\n"
+            "  - home: albany-1\n"
+            "    away: hackney-1\n"
+            # 2025-09-29 is one of albany's club-level home_dates but not in
+            # albany-1's own override above.
+            "    date: 2025-09-29\n"
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "home dates"):
             fixturespec.load_spec(path)

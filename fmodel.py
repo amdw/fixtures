@@ -19,6 +19,7 @@ import dataclasses
 import itertools
 from collections.abc import Collection, Mapping, MutableMapping
 from datetime import date
+from typing import Any
 
 from ortools.sat.python import cp_model
 
@@ -91,18 +92,16 @@ def _check_no_duplicate_teams(teams: Collection[Team]) -> None:
         seen.add(team)
 
 
-def _check_no_duplicate_home_dates(home_dates: Mapping[ClubT, list[date]]) -> None:
-    """Reject repeated dates in a club's home_dates: solve() relies on each (Fixture,
-    date) pair mapping to at most one solver variable, which would break if a date
-    appeared twice in the same club's home_dates list.
+def _check_no_duplicate_home_dates(home_dates: Mapping[Any, list[date]]) -> None:
+    """Reject repeated dates in a club's (or team's) home_dates: solve() relies on
+    each (Fixture, date) pair mapping to at most one solver variable, which would
+    break if a date appeared twice in the same home_dates list.
     """
-    for club, dates in home_dates.items():
+    for key, dates in home_dates.items():
         seen: set[date] = set()
         for d in dates:
             if d in seen:
-                raise ValueError(
-                    f"Duplicate home date {d.isoformat()} for club {club!r}"
-                )
+                raise ValueError(f"Duplicate home date {d.isoformat()} for {key!r}")
             seen.add(d)
 
 
@@ -117,14 +116,34 @@ class Parameters:
     fixed_fixtures: Collection[ScheduledFixture] = ()
     excluded_fixtures: Collection[Fixture] = ()
     latest_internal_match_date: date | None = None
+    # Per-team overrides/additions to a club's home_dates/unavailable_away_dates, for
+    # clubs whose teams don't all share the same availability (e.g. different squads
+    # of players). A team not present here just uses its club's dates as before.
+    team_home_dates: Mapping[Team, list[date]] = dataclasses.field(default_factory=dict)
+    team_unavailable_away_dates: Mapping[Team, list[date]] = dataclasses.field(
+        default_factory=dict
+    )
 
     def __post_init__(self) -> None:
         _check_no_duplicate_teams(self.teams)
         _check_no_duplicate_home_dates(self.home_dates)
+        _check_no_duplicate_home_dates(self.team_home_dates)
 
     def max_concurrent_home_matches_for(self, club: ClubT, d: date) -> int:
         """The most home matches `club` may host on date `d`."""
         return self.max_concurrent_home_matches[club].for_date(d)
+
+    def home_dates_for(self, team: Team) -> list[date]:
+        """The candidate home dates for `team`: its own override if it has one
+        (team_home_dates), otherwise its club's home_dates."""
+        return self.team_home_dates.get(team, self.home_dates[team.club])
+
+    def unavailable_away_dates_for(self, team: Team) -> Collection[date]:
+        """The dates `team` can't play away: its club's unavailable_away_dates, plus
+        any team-specific additions (team_unavailable_away_dates)."""
+        return set(self.unavailable_away_dates.get(team.club, ())) | set(
+            self.team_unavailable_away_dates.get(team, ())
+        )
 
 
 def date_windows(dates: Collection[date], window_days: int) -> list[frozenset[date]]:
@@ -226,8 +245,8 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
             if fixture in excluded:
                 continue
             is_internal = home_team.club == away_team.club
-            for match_date in params.home_dates[home_team.club]:
-                if match_date in params.unavailable_away_dates.get(away_team.club, []):
+            for match_date in params.home_dates_for(home_team):
+                if match_date in params.unavailable_away_dates_for(away_team):
                     continue
                 if (
                     is_internal
