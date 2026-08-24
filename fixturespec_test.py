@@ -919,7 +919,8 @@ club_constraints:
             )
         )
         spec = fixturespec.load_spec(path)
-        self.assertEqual(spec.parameters.avoid_coscheduling_teams[0].within_days, 3)
+        constraints = list(spec.parameters.avoid_coscheduling_teams)
+        self.assertEqual(constraints[0].within_days, 3)
 
     def test_avoid_coscheduling_teams_not_a_list(self):
         path = self._write(
