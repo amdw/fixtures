@@ -284,7 +284,7 @@ _CLUB_CONSTRAINT_FIELD_KEYS = {
     "avoid_coscheduling_teams",
 }
 
-_TEAM_CONSTRAINT_FIELD_KEYS = {"home_dates", "unavailable_away_dates"}
+_TEAM_CONSTRAINT_FIELD_KEYS = {"unavailable_home_dates", "unavailable_away_dates"}
 
 _AVOID_COSCHEDULING_FIELD_KEYS = {"teams", "within_days"}
 
@@ -454,10 +454,12 @@ def _parse_club_team_constraints(
     overrides/additions to that club's own home_dates/unavailable_away_dates, for
     clubs whose teams don't all share the same availability.
 
-    A team's home_dates entry, if given, replaces its club's home_dates for that team
-    (not narrows it), and must be a subset of the club's home_dates. A team's
-    unavailable_away_dates entry, if given, is additional to its club's
-    unavailable_away_dates (not instead of it).
+    A team's unavailable_home_dates entry, if given, lists dates from the club's own
+    home_dates on which that team specifically can't host (e.g. its venue slot is
+    taken by another of the club's teams); the team's effective home dates are the
+    club's home_dates minus these, and every entry must be one of the club's
+    home_dates. A team's unavailable_away_dates entry, if given, is additional to its
+    club's unavailable_away_dates (not instead of it).
     """
     if not isinstance(teams_spec, dict):
         raise SpecError(f"{context} must be a mapping")
@@ -483,17 +485,22 @@ def _parse_club_team_constraints(
                 f"{sorted(_TEAM_CONSTRAINT_FIELD_KEYS)} are)"
             )
 
-        if "home_dates" in team_spec:
-            dates = _parse_date_list(
-                team_spec["home_dates"], f"{team_context}.home_dates"
+        if "unavailable_home_dates" in team_spec:
+            excluded = _parse_date_list(
+                team_spec["unavailable_home_dates"],
+                f"{team_context}.unavailable_home_dates",
             )
-            invalid = [d for d in dates if d not in club_home_dates]
+            invalid = [d for d in excluded if d not in club_home_dates]
             if invalid:
                 raise SpecError(
-                    f"{team_context}.home_dates: {[d.isoformat() for d in invalid]} "
-                    f"not in {club_id!r}'s home_dates"
+                    f"{team_context}.unavailable_home_dates: "
+                    f"{[d.isoformat() for d in invalid]} not in {club_id!r}'s "
+                    "home_dates"
                 )
-            team_home_dates[team] = dates
+            excluded_set = set(excluded)
+            team_home_dates[team] = [
+                d for d in club_home_dates if d not in excluded_set
+            ]
 
         if "unavailable_away_dates" in team_spec:
             team_unavailable_away_dates[team] = _parse_date_list(
@@ -587,8 +594,8 @@ def _parse_fixed_fixtures(
 
     Each entry references a home and away team (by team ID) and a date. The two
     teams must be in the same division, and the date must be one of the home team's
-    allowed home dates (its own club_constraints[club].teams[team].home_dates
-    override if it has one, otherwise its club's home_dates).
+    allowed home dates (its club's home_dates, minus any
+    club_constraints[club].teams[team].unavailable_home_dates for that team).
     """
     section_name = "fixed_fixtures"
     section_spec = data.get(section_name)

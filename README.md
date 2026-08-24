@@ -127,8 +127,9 @@ club_constraints:
     teams:                        # optional; per-team overrides/additions, for clubs
                                    # whose teams don't all share the same availability
       hackney-5:
-        home_dates: [2025-09-08]  # replaces (not narrows) hackney's home_dates above,
-                                   # for hackney-5 only; must be a subset of them
+        unavailable_home_dates: [2025-09-08]  # excludes this date, from hackney's
+                                   # home_dates above, for hackney-5 only; must be
+                                   # one of hackney's own home_dates
         unavailable_away_dates: [2025-09-22]  # additional to hackney's own, above
     avoid_coscheduling_teams:     # optional; groups of this club's own teams that
                                    # shouldn't be scheduled too close together (e.g.
@@ -162,12 +163,12 @@ empty if a club's entry omits them (or the club has no entry at all).
 A club's optional `teams` entry holds per-team overrides/additions to that
 club's own `home_dates`/`unavailable_away_dates`, for clubs whose teams
 don't all share the same availability (e.g. different squads of players) —
-see the `hackney-5` example above. A team's `home_dates`, if given, replaces
-that team's candidate home dates entirely (it must be a subset of its
-club's own `home_dates`); a team's `unavailable_away_dates`, if given, is
-additional to its club's own `unavailable_away_dates`, not a replacement for
-it. A team not listed under its club's `teams` just uses that club's dates
-as normal.
+see the `hackney-5` example above. A team's `unavailable_home_dates`, if
+given, excludes those dates from its club's own `home_dates` for that team
+only (each must be one of its club's own `home_dates`); a team's
+`unavailable_away_dates`, if given, is additional to its club's own
+`unavailable_away_dates`, not a replacement for it. A team not listed under
+its club's `teams` just uses that club's dates as normal.
 
 A club's optional `avoid_coscheduling_teams` entry lists groups of that
 club's own teams that shouldn't be scheduled too close together — e.g.
@@ -194,8 +195,9 @@ can be added to `fixturespec.py` and `fmodel.Parameters` as they're needed.
 specific date, forcing them into the solved schedule as given rather than
 letting the solver choose. For each entry, `home` and `away` must be teams
 in the same division, and `date` must be one of the home team's allowed
-home dates (its own `club_constraints.<club>.teams.<team>.home_dates`
-override if it has one, otherwise its club's `home_dates`).
+home dates (its club's `home_dates`, minus any
+`club_constraints.<club>.teams.<team>.unavailable_home_dates` for that
+team).
 
 `exclude_fixtures` withholds fixtures from scheduling entirely — e.g. to
 arrange in a later run, once dates are confirmed — rather than pinning
