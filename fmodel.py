@@ -212,27 +212,28 @@ def _add_max_home_dates_used_constraints(
 def _add_avoid_coscheduling_constraints(
     model: cp_model.CpModel,
     constraints: Collection[AvoidCoschedulingConstraint],
-    vars_by_fixture_date: Mapping[tuple[Fixture, date], cp_model.IntVar],
+    vars_by_team_date: Mapping[Team, Mapping[date, list[cp_model.IntVar]]],
 ) -> None:
     """For each AvoidCoschedulingConstraint, ensure at most one match involving any
     of its teams is scheduled within any window of within_days days.
     """
     for constraint in constraints:
-        teams = set(constraint.teams)
-        # vars_by_fixture_date has exactly one variable per (fixture, date), so
-        # filtering it (rather than combining per-team variable lists, which each
-        # store the same variable for both the home and away team of a fixture)
-        # can't double-count a match between two teams that are both in `teams`.
-        vars_by_date: MutableMapping[date, list[cp_model.IntVar]] = (
-            collections.defaultdict(list)
+        # vars_by_team_date stores the same variable for both the home and away
+        # team of a fixture, so a match between two teams that are both in
+        # `constraint.teams` would be combined twice; key by id(var) per date to
+        # avoid double-counting it.
+        vars_by_date: MutableMapping[date, dict[int, cp_model.IntVar]] = (
+            collections.defaultdict(dict)
         )
-        for (fixture, d), var in vars_by_fixture_date.items():
-            if fixture.home_team in teams or fixture.away_team in teams:
-                vars_by_date[d].append(var)
+        for team in constraint.teams:
+            for d, team_vars in vars_by_team_date.get(team, {}).items():
+                for var in team_vars:
+                    vars_by_date[d][id(var)] = var
 
         for window in date_windows(vars_by_date.keys(), constraint.within_days):
-            window_vars = [v for d in window for v in vars_by_date[d]]
-            model.add(cp_model.LinearExpr.Sum(window_vars) <= 1)
+            window_vars = [v for d in window for v in vars_by_date[d].values()]
+            if len(window_vars) > 1:
+                model.add(cp_model.LinearExpr.Sum(window_vars) <= 1)
 
 
 def _add_fixed_fixtures_constraints(
@@ -327,7 +328,7 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
         model, params.max_home_dates_used, vars_by_club_home_date
     )
     _add_avoid_coscheduling_constraints(
-        model, params.avoid_coscheduling_teams, vars_by_fixture_date
+        model, params.avoid_coscheduling_teams, vars_by_team_date
     )
     _add_fixed_fixtures_constraints(model, params.fixed_fixtures, vars_by_fixture_date)
 
