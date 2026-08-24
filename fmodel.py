@@ -323,8 +323,11 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
         model.add(cp_model.LinearExpr.Sum(fixture_vars) == 1)
 
     for team_vars_by_date in vars_by_team_date.values():
-        # Each team can play at most one match in each window
-        for window in date_windows(team_vars_by_date.keys(), params.min_gap_days):
+        # Each team can play at most one match in each window. date_windows groups
+        # dates up to and including window_days apart, so pass min_gap_days - 1: a
+        # gap of exactly min_gap_days (e.g. two matches a week apart when
+        # min_gap_days=7) must be allowed, not treated as a violation.
+        for window in date_windows(team_vars_by_date.keys(), params.min_gap_days - 1):
             window_vars = [v for d in window for v in team_vars_by_date[d]]
             model.add(cp_model.LinearExpr.Sum(window_vars) <= 1)
 
