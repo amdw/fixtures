@@ -365,4 +365,6 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
                 result.append(ScheduledFixture(fixture=fixture, date=match_date))
         return result
     else:
-        raise ValueError("No solution found")
+        raise ValueError(
+            f"No solution found (solver status: {solver.StatusName(status)})"
+        )
