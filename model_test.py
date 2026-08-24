@@ -393,6 +393,62 @@ class TestFixedFixtures(unittest.TestCase):
         )
         self.assertNotEqual(reverse.date, date(2025, 1, 1))
 
+    def test_reverse_fixture_exactly_min_gap_days_apart_is_allowed(self):
+        """Regression test: a gap of exactly min_gap_days satisfies a *minimum*
+        gap of min_gap_days, so two fixed fixtures for the same pair of teams
+        that many days apart must be schedulable, not rejected as too close."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=1, club="A", index=2)
+        fixed = [
+            fmodel.ScheduledFixture(
+                fixture=fmodel.Fixture(home_team=a1, away_team=a2),
+                date=date(2025, 1, 1),
+            ),
+            fmodel.ScheduledFixture(
+                fixture=fmodel.Fixture(home_team=a2, away_team=a1),
+                date=date(2025, 1, 8),
+            ),
+        ]
+        params = fmodel.Parameters(
+            teams=[a1, a2],
+            home_dates={"A": [date(2025, 1, 1), date(2025, 1, 8)]},
+            unavailable_away_dates={"A": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=None)
+            },
+            min_gap_days=7,
+            fixed_fixtures=fixed,
+        )
+        fixtures = list(fmodel.solve(params))
+        self.assertCountEqual(fixtures, fixed)
+
+    def test_reverse_fixture_one_day_inside_min_gap_days_is_rejected(self):
+        """A gap one day short of min_gap_days must still be rejected."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=1, club="A", index=2)
+        fixed = [
+            fmodel.ScheduledFixture(
+                fixture=fmodel.Fixture(home_team=a1, away_team=a2),
+                date=date(2025, 1, 1),
+            ),
+            fmodel.ScheduledFixture(
+                fixture=fmodel.Fixture(home_team=a2, away_team=a1),
+                date=date(2025, 1, 7),
+            ),
+        ]
+        params = fmodel.Parameters(
+            teams=[a1, a2],
+            home_dates={"A": [date(2025, 1, 1), date(2025, 1, 7)]},
+            unavailable_away_dates={"A": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=None)
+            },
+            min_gap_days=7,
+            fixed_fixtures=fixed,
+        )
+        with self.assertRaises(ValueError):
+            fmodel.solve(params)
+
 
 class TestLatestInternalMatchDate(unittest.TestCase):
     """Test cases for the latest_internal_match_date constraint."""
