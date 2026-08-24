@@ -95,6 +95,12 @@ def _require_bool(value: Any, context: str) -> bool:
     return value
 
 
+def _require_int_or_none(value: Any, context: str) -> int | None:
+    if value is None:
+        return None
+    return _require_int(value, context)
+
+
 def _parse_date(value: Any, context: str) -> date:
     """Coerce a YAML scalar into a date.
 
@@ -248,7 +254,12 @@ def _parse_divisions(
 def _parse_max_concurrent_home_matches_value(
     value: Any, context: str
 ) -> fmodel.MaxConcurrentHomeMatches:
-    if isinstance(value, int) and not isinstance(value, bool):
+    """A club's max_concurrent_home_matches value: either a plain integer, null (no
+    limit from this mechanism -- see fmodel.MaxConcurrentHomeMatches), or a mapping
+    with 'default' (an integer or null) and optionally 'overrides' (a date-keyed
+    mapping of integer-or-null overrides of that default).
+    """
+    if value is None or (isinstance(value, int) and not isinstance(value, bool)):
         return fmodel.MaxConcurrentHomeMatches(default=value)
     if isinstance(value, dict):
         unsupported = value.keys() - {"default", "overrides"}
@@ -256,22 +267,22 @@ def _parse_max_concurrent_home_matches_value(
             raise SpecError(f"{context}: unsupported field(s) {sorted(unsupported)}")
         if "default" not in value:
             raise SpecError(f"{context} missing required field 'default'")
-        default = _require_int(value["default"], f"{context}.default")
+        default = _require_int_or_none(value["default"], f"{context}.default")
 
         overrides_spec = value.get("overrides")
-        overrides: dict[date, int] = {}
+        overrides: dict[date, int | None] = {}
         if overrides_spec is not None:
             if not isinstance(overrides_spec, dict):
                 raise SpecError(f"{context}.overrides must be a mapping")
             for date_key, count in overrides_spec.items():
                 override_date = _parse_date(date_key, f"{context}.overrides")
-                overrides[override_date] = _require_int(
+                overrides[override_date] = _require_int_or_none(
                     count, f"{context}.overrides[{date_key!r}]"
                 )
         return fmodel.MaxConcurrentHomeMatches(default=default, overrides=overrides)
     raise SpecError(
-        f"{context}: expected an integer, or a mapping with 'default' and optionally "
-        f"'overrides', got {value!r}"
+        f"{context}: expected an integer, null (unlimited), or a mapping with "
+        f"'default' and optionally 'overrides', got {value!r}"
     )
 
 

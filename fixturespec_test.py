@@ -328,6 +328,39 @@ class TestLoadSpec(unittest.TestCase):
             fmodel.MaxConcurrentHomeMatches(default=2, overrides={date(2025, 9, 1): 3}),
         )
 
+    def test_max_concurrent_home_matches_null_shorthand(self):
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    max_concurrent_home_matches: null\n"
+            "  hackney:\n"
+            "    max_concurrent_home_matches: 1\n"
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(
+            spec.parameters.max_concurrent_home_matches["albany"],
+            fmodel.MaxConcurrentHomeMatches(default=None),
+        )
+
+    def test_max_concurrent_home_matches_null_default_with_override(self):
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    max_concurrent_home_matches:\n"
+            "      default: null\n"
+            "      overrides:\n"
+            "        2025-09-01: 3\n"
+            "  hackney:\n"
+            "    max_concurrent_home_matches: 1\n"
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(
+            spec.parameters.max_concurrent_home_matches["albany"],
+            fmodel.MaxConcurrentHomeMatches(
+                default=None, overrides={date(2025, 9, 1): 3}
+            ),
+        )
+
     def test_max_concurrent_home_matches_missing_default(self):
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"

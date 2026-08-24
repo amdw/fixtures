@@ -804,6 +804,91 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
         )
 
 
+class TestMaxConcurrentHomeMatchesUnlimited(unittest.TestCase):
+    """Test cases for MaxConcurrentHomeMatches(default=None) / overrides=None: no
+    limit imposed by this mechanism, as opposed to a finite one.
+    """
+
+    def test_finite_default_makes_it_infeasible(self):
+        """A has two teams (different divisions, so no direct fixture forces them
+        apart) but only one home date; with a limit of 1, both teams needing to host
+        on that one date is infeasible."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=2, club="A", index=2)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        x2 = fmodel.Team(division=2, club="X", index=2)
+        params = fmodel.Parameters(
+            teams=[a1, a2, x1, x2],
+            home_dates={
+                "A": [date(2025, 1, 1)],
+                "X": [date(2025, 3, 1), date(2025, 3, 8)],
+            },
+            unavailable_away_dates={"A": [], "X": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=1),
+                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            },
+            min_gap_days=7,
+        )
+        with self.assertRaises(ValueError):
+            fmodel.solve(params)
+
+    def test_none_default_lifts_the_limit(self):
+        """Same setup, but A's default is None -- both A1 and A2 can now host on
+        their one shared date."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=2, club="A", index=2)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        x2 = fmodel.Team(division=2, club="X", index=2)
+        params = fmodel.Parameters(
+            teams=[a1, a2, x1, x2],
+            home_dates={
+                "A": [date(2025, 1, 1)],
+                "X": [date(2025, 3, 1), date(2025, 3, 8)],
+            },
+            unavailable_away_dates={"A": [], "X": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=None),
+                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            },
+            min_gap_days=7,
+        )
+        fixtures = list(fmodel.solve(params))
+        a1_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a1)
+        a2_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a2)
+        self.assertEqual(a1_home_date, date(2025, 1, 1))
+        self.assertEqual(a2_home_date, date(2025, 1, 1))
+
+    def test_none_override_lifts_the_limit_for_one_date_only(self):
+        """A's default limit of 1 applies generally, but is overridden to None (no
+        limit) specifically on 2025-01-01 -- so both A1 and A2 can host there, even
+        though a finite default of 1 would otherwise forbid it."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=2, club="A", index=2)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        x2 = fmodel.Team(division=2, club="X", index=2)
+        params = fmodel.Parameters(
+            teams=[a1, a2, x1, x2],
+            home_dates={
+                "A": [date(2025, 1, 1)],
+                "X": [date(2025, 3, 1), date(2025, 3, 8)],
+            },
+            unavailable_away_dates={"A": [], "X": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(
+                    default=1, overrides={date(2025, 1, 1): None}
+                ),
+                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            },
+            min_gap_days=7,
+        )
+        fixtures = list(fmodel.solve(params))
+        a1_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a1)
+        a2_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a2)
+        self.assertEqual(a1_home_date, date(2025, 1, 1))
+        self.assertEqual(a2_home_date, date(2025, 1, 1))
+
+
 class TestDuplicateRejection(unittest.TestCase):
     """Parameters construction relies on each (Fixture, date) pair mapping to at most
     one solver variable; these are the two ways it could otherwise be violated."""

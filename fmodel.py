@@ -71,12 +71,18 @@ class Club:
 
 @dataclasses.dataclass(frozen=True)
 class MaxConcurrentHomeMatches:
-    """A club's home-match concurrency limit: a default, overridable for specific dates."""
+    """A club's home-match concurrency limit: a default, overridable for specific
+    dates. A value of None (for the default or an override) means no limit is
+    imposed by this mechanism -- e.g. for a club whose concurrency is already
+    bounded by another constraint (such as avoid_coscheduling_teams), where adding
+    an explicit number here would just be a redundant, easy-to-forget-to-update
+    restatement of that bound.
+    """
 
-    default: int
-    overrides: Mapping[date, int] = dataclasses.field(default_factory=dict)
+    default: int | None
+    overrides: Mapping[date, int | None] = dataclasses.field(default_factory=dict)
 
-    def for_date(self, d: date) -> int:
+    def for_date(self, d: date) -> int | None:
         return self.overrides.get(d, self.default)
 
 
@@ -142,8 +148,8 @@ class Parameters:
         _check_no_duplicate_home_dates(self.home_dates)
         _check_no_duplicate_home_dates(self.team_home_dates)
 
-    def max_concurrent_home_matches_for(self, club: ClubT, d: date) -> int:
-        """The most home matches `club` may host on date `d`."""
+    def max_concurrent_home_matches_for(self, club: ClubT, d: date) -> int | None:
+        """The most home matches `club` may host on date `d`, or None if unlimited."""
         return self.max_concurrent_home_matches[club].for_date(d)
 
     def home_dates_for(self, team: Team) -> list[date]:
@@ -321,8 +327,10 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
 
     for (club, match_date), club_home_date_vars in vars_by_club_home_date.items():
         # Each club can host at most max_concurrent_home_matches matches per date
+        # (None means unlimited: no constraint to add).
         max_matches = params.max_concurrent_home_matches_for(club, match_date)
-        model.add(cp_model.LinearExpr.Sum(club_home_date_vars) <= max_matches)
+        if max_matches is not None:
+            model.add(cp_model.LinearExpr.Sum(club_home_date_vars) <= max_matches)
 
     _add_max_home_dates_used_constraints(
         model, params.max_home_dates_used, vars_by_club_home_date
