@@ -1,0 +1,8 @@
+LICENSE
+README.md
+pyproject.toml
+fixtures.egg-info/PKG-INFO
+fixtures.egg-info/SOURCES.txt
+fixtures.egg-info/dependency_links.txt
+fixtures.egg-info/requires.txt
+fixtures.egg-info/top_level.txt

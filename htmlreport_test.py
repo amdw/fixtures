@@ -528,5 +528,159 @@ class TestFindRunDirs(unittest.TestCase):
         )
 
 
+class TestSortOrder(unittest.TestCase):
+    """Verify that table rows are emitted in the correct sort order."""
+
+    def setUp(self):
+        super().setUp()
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.output_dir = Path(self._tmpdir.name) / "out"
+
+        self.clubs = {
+            "alpha": _club("Alpha"),
+            "beta": _club("Beta"),
+            "gamma": _club("Gamma"),
+        }
+        # Two teams per club in div 1, plus one team each in div 2
+        self.alpha1 = fmodel.Team(division=1, club="alpha", index=1)
+        self.alpha2 = fmodel.Team(division=1, club="alpha", index=2)
+        self.beta1 = fmodel.Team(division=1, club="beta", index=1)
+        self.gamma1 = fmodel.Team(division=2, club="gamma", index=1)
+        self.gamma2 = fmodel.Team(division=2, club="gamma", index=2)
+
+    def _rows_in_order(self, html_content: str) -> list[list[str]]:
+        """Return the text of all <tr> rows (not the header) in order."""
+        rows = []
+        for tr in html_content.split("<tr>")[
+            2:
+        ]:  # skip the opening of the first header
+            cell_texts = []
+            for td in tr.split("<td>")[1:]:
+                cell_texts.append(
+                    td.split("</td>")[0]
+                    .replace("<strong>", "")
+                    .replace("</strong>", "")
+                )
+            if cell_texts:
+                rows.append(cell_texts)
+        return rows
+
+    def _page_rows(self, path: Path) -> list[list[str]]:
+        return self._rows_in_order(path.read_text())
+
+    def test_all_matches_sorted_by_date_then_division_then_home_club(self):
+        """All-matches table: sort by date, then division, then home club."""
+        fixtures = [
+            # Same date, same division: Beta vs Alpha before Alpha vs Gamma? No: Alpha < Beta
+            _sf(self.beta1, self.alpha1, date(2025, 9, 1)),
+            _sf(self.alpha1, self.beta1, date(2025, 9, 1)),
+            # Earlier date
+            _sf(self.gamma1, self.gamma2, date(2025, 8, 25)),
+        ]
+        teams = [self.alpha1, self.alpha2, self.beta1, self.gamma1, self.gamma2]
+        htmlreport.generate_report(fixtures, teams, self.clubs, self.output_dir)
+        rows = self._page_rows(self.output_dir / "all-matches.html")
+        # Gamma fixture: date 2025-08-25, div 2
+        # Alpha vs Beta: date 2025-09-01, div 1
+        # Beta vs Alpha: date 2025-09-01, div 1
+        # Sort: date first -> 2025-08-25 before 2025-09-01
+        self.assertIn("Gamma 1", rows[0][2])
+        # Within same date+division: home club "Alpha" < "Beta"
+        self.assertIn("Alpha 1", rows[1][2])
+        self.assertIn("Beta 1", rows[2][2])
+
+    def test_all_matches_same_date_division_home_club_sorted_by_home_index(self):
+        """Same date, division, home club: sort by home team index."""
+        fixtures = [
+            _sf(self.alpha2, self.beta1, date(2025, 9, 1)),
+            _sf(self.alpha1, self.beta1, date(2025, 9, 1)),
+        ]
+        teams = [self.alpha1, self.alpha2, self.beta1]
+        htmlreport.generate_report(fixtures, teams, self.clubs, self.output_dir)
+        rows = self._page_rows(self.output_dir / "all-matches.html")
+        self.assertIn("Alpha 1", rows[0][2])
+        self.assertIn("Alpha 2", rows[1][2])
+
+    def test_all_matches_same_date_div_home_sorted_by_away_club_then_index(self):
+        """Same date, division, home club+index: sort by away club then away index."""
+        fixtures = [
+            _sf(self.alpha1, self.gamma1, date(2025, 9, 1)),
+            _sf(self.alpha1, self.beta1, date(2025, 9, 1)),
+        ]
+        teams = [self.alpha1, self.beta1, self.gamma1, self.gamma2]
+        htmlreport.generate_report(fixtures, teams, self.clubs, self.output_dir)
+        rows = self._page_rows(self.output_dir / "all-matches.html")
+        # Beta < Gamma alphabetically
+        self.assertIn("Beta 1", rows[0][3])
+        self.assertIn("Gamma 1", rows[1][3])
+
+    def test_division_page_same_date_sorted_by_home_club_index_away(self):
+        """Division page: same date sorted by home club, home index, away club, away index."""
+        fixtures = [
+            _sf(self.beta1, self.alpha1, date(2025, 9, 1)),
+            _sf(self.alpha1, self.beta1, date(2025, 9, 1)),
+        ]
+        teams = [self.alpha1, self.alpha2, self.beta1]
+        htmlreport.generate_report(fixtures, teams, self.clubs, self.output_dir)
+        rows = self._page_rows(self.output_dir / "division-1.html")
+        self.assertIn("Alpha 1", rows[0][1])
+        self.assertIn("Beta 1", rows[1][1])
+
+    def test_team_page_same_date_sorted_by_opponent_club_then_index(self):
+        """Team page: same date sorted by opponent club name, then opponent index."""
+        fixtures = [
+            _sf(self.alpha1, self.gamma1, date(2025, 9, 1)),
+            _sf(self.alpha1, self.beta1, date(2025, 9, 1)),
+        ]
+        teams = [self.alpha1, self.beta1, self.gamma1, self.gamma2]
+        htmlreport.generate_report(fixtures, teams, self.clubs, self.output_dir)
+        # Alpha 1 page: first table is consolidated (with div), then per-team
+        # Find Alpha 1 section
+        alpha_page = (self.output_dir / "club-alpha.html").read_text()
+        alpha1_section = alpha_page.split('<h2 id="alpha-1">')[1].split("<h2")[0]
+        alpha1_rows = self._rows_in_order(alpha1_section)
+        # Beta < Gamma, so Beta opponent first
+        self.assertIn("Beta 1", alpha1_rows[0][1])
+        self.assertIn("Gamma 1", alpha1_rows[1][1])
+
+    def test_excluded_all_matches_sorted_by_division_then_home_club(self):
+        """Excluded fixtures in all-matches table: sort by division, home club, home index."""
+        excluded = [
+            fmodel.Fixture(home_team=self.gamma1, away_team=self.gamma2),  # div 2
+            fmodel.Fixture(home_team=self.beta1, away_team=self.alpha1),  # div 1
+            fmodel.Fixture(home_team=self.alpha1, away_team=self.beta1),  # div 1
+        ]
+        teams = [self.alpha1, self.alpha2, self.beta1, self.gamma1, self.gamma2]
+        htmlreport.generate_report(
+            [], teams, self.clubs, self.output_dir, excluded_fixtures=excluded
+        )
+        rows = self._page_rows(self.output_dir / "all-matches.html")
+        # div 1 before div 2; within div 1: Alpha < Beta
+        self.assertEqual(rows[0][1], "1")  # div column
+        self.assertIn("Alpha 1", rows[0][2])
+        self.assertEqual(rows[1][1], "1")
+        self.assertIn("Beta 1", rows[1][2])
+        self.assertEqual(rows[2][1], "2")
+        self.assertIn("Gamma 1", rows[2][2])
+
+    def test_excluded_team_rows_sorted_by_opponent_club_then_index(self):
+        """Excluded team rows: sort by opponent club name, then opponent index."""
+        excluded = [
+            fmodel.Fixture(home_team=self.alpha1, away_team=self.gamma1),
+            fmodel.Fixture(home_team=self.alpha1, away_team=self.beta1),
+        ]
+        teams = [self.alpha1, self.beta1, self.gamma1, self.gamma2]
+        htmlreport.generate_report(
+            [], teams, self.clubs, self.output_dir, excluded_fixtures=excluded
+        )
+        alpha_page = (self.output_dir / "club-alpha.html").read_text()
+        alpha1_section = alpha_page.split('<h2 id="alpha-1">')[1].split("<h2")[0]
+        alpha1_rows = self._rows_in_order(alpha1_section)
+        # Beta < Gamma
+        self.assertIn("Beta 1", alpha1_rows[0][1])
+        self.assertIn("Gamma 1", alpha1_rows[1][1])
+
+
 if __name__ == "__main__":
     unittest.main()
