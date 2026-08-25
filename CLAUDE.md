@@ -19,16 +19,29 @@ fails, or `pipenv --venv` reports no venv for this project):
   stalling — e.g. run `pipenv install --dev` and prefix commands with
   `pipenv run`, or otherwise set up the dependencies from `Pipfile`.
 
-## Before committing
+## Before considering a change ready to commit
 
-Before creating any git commit, run all of CI's build steps locally and
-confirm they pass (see `.github/workflows/ci.yml` for the authoritative
-list):
+As soon as a change is otherwise complete — regardless of whether you are
+about to run `git commit` yourself right away, or an interactive session
+means that step is left to the user and may happen later, or not at all —
+run all of CI's build steps locally and confirm they pass (see
+`.github/workflows/ci.yml` for the authoritative list):
 
 - `ruff format --check .`
 - `ruff check .`
 - `mypy .`
 - `python all_tests.py`
 
-Fix any failures (e.g. reformat with `ruff format .`) before committing,
-rather than committing and fixing up afterwards.
+Fix any failures (e.g. reformat with `ruff format .`) as part of finishing
+the change, rather than presenting or committing it and fixing up afterwards.
+
+## Before running `git commit` itself
+
+- If you are running interactively, with a user able to respond, do not run
+  `git commit` until the user has had the opportunity to review the change,
+  even if they asked you to implement something that would naturally end in
+  a commit. Finish the work (including the checks above), present it, and
+  wait for the user to confirm before committing.
+- If you are running non-interactively (e.g. as an autonomous coding agent
+  with no user available to review), there is nobody to review the change
+  first, so go ahead and commit once the checks above pass.
