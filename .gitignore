@@ -3,6 +3,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 *.pyc
+*.egg-info/
 
 # Index pages are fully derived from the report files under runs/ and are
 # rebuilt on demand (run.py / build_indexes.py) and at Pages deploy time, so
