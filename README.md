@@ -124,7 +124,7 @@ club_constraints:
       overrides:                  # per-date overrides of that club's default
         2025-09-08: 3
     max_home_dates_used: 1        # optional; caps how many of these home dates get used
-    teams:                        # optional; per-team overrides/additions, for clubs
+    teams:                        # optional; per-team exclusions, for clubs
                                    # whose teams don't all share the same availability
       hackney-5:
         unavailable_home_dates: [2025-09-08]  # excludes this date, from hackney's
@@ -171,15 +171,16 @@ number of teams, since a club can never host more simultaneous home matches
 than it has teams — needs no such special-casing: the solver recognises this
 case itself and skips adding a constraint for it.
 
-A club's optional `teams` entry holds per-team overrides/additions to that
-club's own `home_dates`/`unavailable_away_dates`, for clubs whose teams
-don't all share the same availability (e.g. different squads of players) —
-see the `hackney-5` example above. A team's `unavailable_home_dates`, if
-given, excludes those dates from its club's own `home_dates` for that team
-only (each must be one of its club's own `home_dates`); a team's
-`unavailable_away_dates`, if given, is additional to its club's own
-`unavailable_away_dates`, not a replacement for it. A team not listed under
-its club's `teams` just uses that club's dates as normal.
+A club's optional `teams` entry holds per-team exclusions, for clubs whose
+teams don't all share the same availability (e.g. different squads of
+players) — see the `hackney-5` example above. Home dates are always
+specified at the club level; per-team variations are supported only via
+exclusions. A team's `unavailable_home_dates`, if given, excludes those
+dates from its club's own `home_dates` for that team only (each must be one
+of its club's own `home_dates`); a team's `unavailable_away_dates`, if
+given, is additional to its club's own `unavailable_away_dates`, not a
+replacement for it. A team not listed under its club's `teams` just uses
+that club's dates as normal.
 
 A club's optional `avoid_coscheduling_teams` entry lists groups of that
 club's own teams that shouldn't be scheduled too close together — e.g.

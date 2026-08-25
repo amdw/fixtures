@@ -333,9 +333,10 @@ def _parse_club_constraints(
     precedence over 'defaults'. If 'defaults.max_concurrent_home_matches' is omitted,
     every club must have its own max_concurrent_home_matches entry.
 
-    A club's optional 'teams' entry holds per-team overrides/additions to that club's
-    own home_dates/unavailable_away_dates, for clubs whose teams don't all share the
-    same availability -- see _parse_club_team_constraints().
+    A club's optional 'teams' entry holds per-team exclusions, for clubs whose teams
+    don't all share the same availability. Home dates are always specified at the club
+    level; per-team variations are supported only via exclusions -- see
+    _parse_club_team_constraints().
 
     A club's optional 'avoid_coscheduling_teams' entry lists groups of that club's own
     teams that shouldn't be scheduled too close together (e.g. adjacent-division teams
@@ -462,8 +463,9 @@ def _parse_club_team_constraints(
     context: str,
 ) -> tuple[dict[fmodel.Team, list[date]], dict[fmodel.Team, list[date]]]:
     """Parse a club_constraints entry's optional 'teams' sub-section: per-team
-    overrides/additions to that club's own home_dates/unavailable_away_dates, for
-    clubs whose teams don't all share the same availability.
+    exclusions for clubs whose teams don't all share the same availability.
+    Home dates are always specified at the club level; per-team variations are
+    supported only via exclusions.
 
     A team's unavailable_home_dates entry, if given, lists dates from the club's own
     home_dates on which that team specifically can't host (e.g. its venue slot is

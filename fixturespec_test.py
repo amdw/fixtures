@@ -893,6 +893,18 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
             fixturespec.load_spec(path)
 
+    def test_team_constraints_home_dates_not_supported(self):
+        """Per-team home_dates are not supported; only exclusions via
+        unavailable_home_dates are. home_dates at the team level should be
+        rejected as an unsupported field."""
+        path = self._write(
+            self._with_albany_teams(
+                "    teams:\n      albany-1:\n        home_dates: [2025-09-01]\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
+            fixturespec.load_spec(path)
+
     def test_fixed_fixtures_date_must_be_one_of_teams_own_home_dates(self):
         """When a team has a club_constraints[club].teams[team].unavailable_home_dates
         entry, fixed_fixtures validates against the club's home_dates minus that
