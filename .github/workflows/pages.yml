@@ -46,7 +46,7 @@ jobs:
         run: |
           mkdir -p _site
           cp index.html _site/index.html
-          cp spec-schema.html schema_doc.css schema_doc.min.js _site/
+          cp -r schema-docs _site/schema-docs
           if [ -d runs ]; then cp -r runs _site/runs; fi
 
       - name: Upload pages artifact

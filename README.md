@@ -100,8 +100,8 @@ fixtures, and more. For the full field-by-field reference, see:
 
 - **[spec-schema.json](spec-schema.json)**, the JSON Schema every field is
   defined in (rendered to a browsable reference page at
-  <https://amdw.github.io/fixtures/spec-schema.html>, published alongside
-  every other run's report by the same GitHub Pages build -- see
+  <https://amdw.github.io/fixtures/schema-docs/spec-schema.html>, published
+  alongside every other run's report by the same GitHub Pages build -- see
   "Publishing via GitHub Pages" below). Adding a
   `# yaml-language-server: $schema=<path-to-spec-schema.json>` comment atop a
   spec file also gets you inline validation and autocomplete while editing it,
@@ -186,9 +186,9 @@ python genfixtures.py
 
 ### Publishing via GitHub Pages
 
-The root `index.html`, `spec-schema.html` (plus its `schema_doc.css` and
-`schema_doc.min.js` support files) and everything under `runs/` are plain
-static HTML, published from the `main` branch at
+The root `index.html`, `schema-docs/spec-schema.html` (plus whatever support
+files `json-schema-for-humans` copies alongside it) and everything under
+`runs/` are plain static HTML, published from the `main` branch at
 <https://amdw.github.io/fixtures/> by `.github/workflows/pages.yml`. All of
 these are build artifacts, not source -- gitignored, and regenerated before
 every deploy from whatever `runs/*/` folders and `spec-schema.json` are
@@ -213,7 +213,8 @@ and serve that instead:
 
 ```bash
 mkdir -p _site
-cp index.html spec-schema.html schema_doc.css schema_doc.min.js _site/
+cp index.html _site/index.html
+cp -r schema-docs _site/schema-docs
 cp -r runs _site/runs
 python -m http.server --directory _site
 ```

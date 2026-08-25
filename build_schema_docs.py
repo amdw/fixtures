@@ -42,10 +42,12 @@ def main() -> None:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path("spec-schema.html"),
-        help="Path of the HTML page to (re)generate (default: spec-schema.html)",
+        default=Path("schema-docs/spec-schema.html"),
+        help="Path of the HTML page to (re)generate (default: schema-docs/spec-schema.html)",
     )
     args = parser.parse_args()
+
+    args.out.parent.mkdir(parents=True, exist_ok=True)
 
     config = GenerationConfiguration(show_breadcrumbs=False, with_footer=False)
     generate_from_filename(args.schema, str(args.out), config=config)
