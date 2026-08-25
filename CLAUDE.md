@@ -1,23 +1,24 @@
 # Agent instructions
 
-This project uses `pipenv` to manage its Python virtualenv (see `Pipfile`).
+This project uses `uv` to manage its Python virtualenv (see `pyproject.toml`
+and `uv.lock`).
 
 Agents are expected to be run in a shell where that virtualenv is already
-activated (e.g. via `pipenv shell`, or invoked as `pipenv run <agent>`), so
-that plain commands like `python foo.py` or `pytest` work without a
-`pipenv run` prefix.
+activated (e.g. via `source .venv/bin/activate`, or invoked as `uv run
+<agent>`), so that plain commands like `python foo.py` or `pytest` work
+without a `uv run` prefix.
 
 If the virtualenv does not appear to be active (e.g. `python -c "import ortools"`
-fails, or `pipenv --venv` reports no venv for this project):
+fails):
 
 - If you are running interactively, with a user able to respond, do not work
-  around it by prefixing every command with `pipenv run`. Instead, stop and
+  around it by prefixing every command with `uv run`. Instead, stop and
   ask the user to restart the agent from within the activated virtualenv.
 - If you are running non-interactively (e.g. as an autonomous coding agent
   with no user available to respond), there is nobody to ask, so proceed
   using whatever means necessary to get a working environment instead of
-  stalling — e.g. run `pipenv install --dev` and prefix commands with
-  `pipenv run`, or otherwise set up the dependencies from `Pipfile`.
+  stalling — e.g. run `uv sync --dev` and prefix commands with `uv run`, or
+  otherwise set up the dependencies from `pyproject.toml`.
 
 ## Before considering a change ready to commit
 

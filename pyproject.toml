@@ -1,3 +1,27 @@
+[project]
+name = "fixtures"
+version = "0.1.0"
+description = "Middlesex League fixture schedule generator"
+requires-python = ">=3.14"
+dependencies = [
+    "ortools",
+    "pyyaml",
+]
+
+[dependency-groups]
+dev = [
+    "hypothesis",
+    "ruff",
+    "mypy",
+    "types-pyyaml",
+    "jsonschema",
+    "types-jsonschema",
+    "json-schema-for-humans",
+]
+
+[tool.uv]
+package = false
+
 [tool.ruff]
 # Same as Black.
 line-length = 88

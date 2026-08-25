@@ -23,24 +23,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.14"
 
       - name: Rebuild index pages
         run: python3 build_indexes.py
 
-      - name: Install pipenv
-        run: |
-          python3 -m pip install --upgrade pip
-          pip install pipenv
-
       - name: Install dependencies
-        run: pipenv install --dev --deploy
+        run: uv sync --dev --locked
 
       - name: Rebuild schema reference page
-        run: pipenv run python3 build_schema_docs.py
+        run: uv run python3 build_schema_docs.py
 
       - name: Assemble site
         run: |
