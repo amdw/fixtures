@@ -166,6 +166,10 @@ no limit is imposed by this mechanism on that club/date — e.g. for a club
 whose concurrency is already bounded by another constraint, such as a full
 set of `avoid_coscheduling_teams` pairings across its teams, where restating
 that bound as a number here would be redundant and easy to leave stale.
+A value that's simply set high enough to never bind — i.e. >= the club's
+number of teams, since a club can never host more simultaneous home matches
+than it has teams — needs no such special-casing: the solver recognises this
+case itself and skips adding a constraint for it.
 
 A club's optional `teams` entry holds per-team overrides/additions to that
 club's own `home_dates`/`unavailable_away_dates`, for clubs whose teams

@@ -16,6 +16,7 @@
 
 import collections
 import dataclasses
+import functools
 import itertools
 import logging
 from collections.abc import Collection, Mapping, MutableMapping
@@ -151,9 +152,21 @@ class Parameters:
         _check_no_duplicate_home_dates(self.home_dates)
         _check_no_duplicate_home_dates(self.team_home_dates)
 
+    @functools.cached_property
+    def _teams_per_club(self) -> Mapping[ClubT, int]:
+        return collections.Counter(team.club for team in self.teams)
+
     def max_concurrent_home_matches_for(self, club: ClubT, d: date) -> int | None:
-        """The most home matches `club` may host on date `d`, or None if unlimited."""
-        return self.max_concurrent_home_matches[club].for_date(d)
+        """The most home matches `club` may host on date `d`, or None if unlimited.
+
+        A configured limit that is >= the club's own number of teams is reported as
+        unlimited too: the club can never field more simultaneous home matches than
+        it has teams, so such a limit could never actually bind.
+        """
+        limit = self.max_concurrent_home_matches[club].for_date(d)
+        if limit is not None and limit >= self._teams_per_club[club]:
+            return None
+        return limit
 
     def home_dates_for(self, team: Team) -> list[date]:
         """The candidate home dates for `team`: its own override if it has one

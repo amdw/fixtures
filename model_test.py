@@ -102,6 +102,11 @@ class TestSolve(unittest.TestCase):
 
         for (club, fixture_date), count in home_fixtures_by_club_date.items():
             limit = self.params.max_concurrent_home_matches_for(club, fixture_date)
+            # None means unlimited -- including a configured limit that's >= the
+            # club's number of teams, which can never actually bind (see
+            # TestMaxConcurrentHomeMatchesFor) -- so there's nothing to check.
+            if limit is None:
+                continue
             self.assertLessEqual(
                 count,
                 limit,
@@ -238,6 +243,45 @@ class TestSolve(unittest.TestCase):
             0,
             "Expected no fixtures to be scheduled due to impossible constraints",
         )
+
+
+class TestMaxConcurrentHomeMatchesFor(unittest.TestCase):
+    """A configured max_concurrent_home_matches limit that is >= a club's number of
+    teams can never actually restrict anything (the club can never field more
+    simultaneous home matches than it has teams), so max_concurrent_home_matches_for()
+    should report it as unlimited (None) too. See issue #22.
+    """
+
+    def _params(self, num_teams, limit):
+        teams = [
+            fmodel.Team(division=1, club="A", index=i) for i in range(1, num_teams + 1)
+        ]
+        return fmodel.Parameters(
+            teams=teams,
+            home_dates={"A": [date(2025, 1, 1)]},
+            unavailable_away_dates={"A": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=limit),
+            },
+        )
+
+    def test_limit_below_team_count_is_kept(self):
+        params = self._params(num_teams=3, limit=2)
+        self.assertEqual(
+            params.max_concurrent_home_matches_for("A", date(2025, 1, 1)), 2
+        )
+
+    def test_limit_equal_to_team_count_is_reported_as_unlimited(self):
+        params = self._params(num_teams=2, limit=2)
+        self.assertIsNone(params.max_concurrent_home_matches_for("A", date(2025, 1, 1)))
+
+    def test_limit_above_team_count_is_reported_as_unlimited(self):
+        params = self._params(num_teams=2, limit=5)
+        self.assertIsNone(params.max_concurrent_home_matches_for("A", date(2025, 1, 1)))
+
+    def test_explicit_unlimited_stays_unlimited(self):
+        params = self._params(num_teams=2, limit=None)
+        self.assertIsNone(params.max_concurrent_home_matches_for("A", date(2025, 1, 1)))
 
 
 class TestMaxHomeDatesUsed(unittest.TestCase):
