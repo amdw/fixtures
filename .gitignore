@@ -10,10 +10,8 @@ __pycache__/
 /index.html
 runs/*/index.html
 
-# The schema reference page (and its support CSS/JS, copied alongside it by
-# json-schema-for-humans) is fully derived from spec-schema.json and is
-# rebuilt on demand (build_schema_docs.py) and at Pages deploy time, so none
-# of it needs to be committed.
-/spec-schema.html
-/schema_doc.css
-/schema_doc.min.js
+# The schema reference page (and whatever support files json-schema-for-humans
+# copies alongside it) is fully derived from spec-schema.json and is rebuilt
+# on demand (build_schema_docs.py) and at Pages deploy time, so none of it
+# needs to be committed.
+/schema-docs/
