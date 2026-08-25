@@ -22,9 +22,13 @@
     a { color: #0645ad; }
     nav ul { list-style: none; padding: 0; }
     nav li { margin-bottom: 0.3rem; }
+    nav ul ul { padding-left: 1.2rem; margin-top: 0.3rem; }
     .venue { margin-top: -0.5rem; margin-bottom: 1.5rem; color: #333; }
     ul.venues { padding-left: 1.2rem; }
     ul.venues li { margin-bottom: 0.3rem; }
+    .anchor-link { margin-left: 0.4rem; font-size: 0.8em; text-decoration: none;
+                    color: #888; }
+    .anchor-link:hover { color: #0645ad; }
 
     @media (max-width: 40rem) {
         body { margin: 1rem; }
@@ -72,7 +76,7 @@
 </tbody>
 </table>
 </div>
-<h2>Hackney 1</h2>
+<h2 id="hackney-1">Hackney 1 <a class="anchor-link" href="#hackney-1" aria-label="Link to Hackney 1">🔗</a></h2>
 <h3>Division 1</h3>
 <div class="table-scroll">
 <table>
@@ -95,7 +99,7 @@
 </tbody>
 </table>
 </div>
-<h2>Hackney 2</h2>
+<h2 id="hackney-2">Hackney 2 <a class="anchor-link" href="#hackney-2" aria-label="Link to Hackney 2">🔗</a></h2>
 <h3>Division 3</h3>
 <div class="table-scroll">
 <table>

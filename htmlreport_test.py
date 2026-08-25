@@ -185,13 +185,28 @@ class TestGenerateReport(unittest.TestCase):
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
         # 3 distinct fixtures touch Harrow (incl. the Harrow 1 v Harrow 2 derby); the
         # consolidated table must list each exactly once, not twice for the derby.
-        consolidated_table = harrow_page.split("<h2>")[0]
+        consolidated_table = harrow_page.split("<h2")[0]
         self.assertEqual(consolidated_table.count("<tr>"), 4)  # header + 3 fixtures
-        self.assertIn("<h2>Harrow 1</h2>", harrow_page)
-        self.assertIn("<h2>Harrow 2</h2>", harrow_page)
+        self.assertIn('<h2 id="harrow-1">Harrow 1', harrow_page)
+        self.assertIn('<h2 id="harrow-2">Harrow 2', harrow_page)
         # Harrow 1's own table should list all 3 of its fixtures (2 external + the derby)
-        harrow1_section = harrow_page.split("<h2>Harrow 1</h2>")[1].split("<h2>")[0]
+        harrow1_section = harrow_page.split('<h2 id="harrow-1">')[1].split("<h2")[0]
         self.assertEqual(harrow1_section.count("<tr>"), 4)  # header + 3 fixtures
+
+    def test_team_heading_has_stable_anchor_id(self):
+        harrow_page = (self.output_dir / "club-harrow.html").read_text()
+        self.assertIn('<h2 id="harrow-1">', harrow_page)
+        self.assertIn('<h2 id="harrow-2">', harrow_page)
+        willesden_page = (self.output_dir / "club-willesden-brent.html").read_text()
+        # A name_override should be slugified for the anchor, same as everywhere else.
+        self.assertIn('<h2 id="willesden-warriors">', willesden_page)
+
+    def test_team_heading_has_self_link_icon_pointing_at_its_own_anchor(self):
+        harrow_page = (self.output_dir / "club-harrow.html").read_text()
+        self.assertIn(
+            '<a class="anchor-link" href="#harrow-1" aria-label="Link to Harrow 1">',
+            harrow_page,
+        )
 
     def test_club_page_header_shows_venue_name_and_address(self):
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
@@ -375,15 +390,15 @@ class TestExcludedFixturesInReport(unittest.TestCase):
 
     def test_club_page_consolidated_shows_excluded_fixture(self):
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
-        consolidated_table = harrow_page.split("<h2>")[0]
+        consolidated_table = harrow_page.split("<h2")[0]
         self.assertIn("TBC", consolidated_table)
         ealing_page = (self.output_dir / "club-ealing.html").read_text()
-        consolidated_table = ealing_page.split("<h2>")[0]
+        consolidated_table = ealing_page.split("<h2")[0]
         self.assertIn("TBC", consolidated_table)
 
     def test_team_page_shows_excluded_fixture_with_blank_days_since(self):
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
-        harrow2_section = harrow_page.split("<h2>Harrow 2</h2>")[1].split("<h2>")[0]
+        harrow2_section = harrow_page.split('<h2 id="harrow-2">')[1].split("<h2")[0]
         expected_row = (
             "<tr><td><strong>TBC</strong></td><td>Ealing 1</td><td>Home</td>"
             "<td>Harrow Leisure Centre</td><td>19:30</td><td>75+15</td><td></td></tr>"
@@ -392,7 +407,7 @@ class TestExcludedFixturesInReport(unittest.TestCase):
 
     def test_team_not_involved_in_excluded_fixture_unaffected(self):
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
-        harrow1_section = harrow_page.split("<h2>Harrow 1</h2>")[1].split("<h2>")[0]
+        harrow1_section = harrow_page.split('<h2 id="harrow-1">')[1].split("<h2")[0]
         self.assertNotIn("TBC", harrow1_section)
 
     def test_no_excluded_fixtures_by_default(self):
