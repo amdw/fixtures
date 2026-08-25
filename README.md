@@ -7,19 +7,18 @@ constraint solver.
 
 ## Setup
 
-Install Python (tested on 3.14) and Pipenv.
+Install Python (tested on 3.14) and [uv](https://docs.astral.sh/uv/).
 
 From the root of the repo:
 
 ```bash
-pipenv install --dev
-pipenv shell
+uv sync --dev
+source .venv/bin/activate
 ```
 
-Alternatively, prefix individual commands with `pipenv run` (e.g. `pipenv run
-python all_tests.py`) instead of entering a `pipenv shell` session — useful
-in non-interactive contexts, since the venv already exists once
-`pipenv install --dev` has been run.
+Alternatively, prefix individual commands with `uv run` (e.g. `uv run python
+all_tests.py`) instead of activating the venv — useful in non-interactive
+contexts, since the venv already exists once `uv sync --dev` has been run.
 
 ## New run setup
 
@@ -166,13 +165,13 @@ python all_tests.py
 
 ```bash
 # Format code with Ruff
-pipenv run ruff format .
+uv run ruff format .
 
 # Check for code issues (add --fix to auto-fix where possible)
-pipenv run ruff check .
+uv run ruff check .
 
 # Run the type checker
-pipenv run mypy .
+uv run mypy .
 ```
 
 ### Generating synthetic test fixtures
@@ -201,7 +200,7 @@ deploy:
 
 ```bash
 python build_indexes.py
-pipenv run python3 build_schema_docs.py
+uv run python3 build_schema_docs.py
 python -m http.server
 ```
 
