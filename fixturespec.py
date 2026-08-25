@@ -14,7 +14,8 @@
 
 """Load league fixture specifications (clubs, teams, divisions and constraints) from YAML files.
 
-See README.md for a description of the expected YAML structure.
+See spec-schema.json (rendered to HTML by build_schema_docs.py) for a description
+of the expected YAML structure; README.md covers how to use it.
 """
 
 from __future__ import annotations

@@ -31,10 +31,22 @@ jobs:
       - name: Rebuild index pages
         run: python3 build_indexes.py
 
+      - name: Install pipenv
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install pipenv
+
+      - name: Install dependencies
+        run: pipenv install --dev --deploy
+
+      - name: Rebuild schema reference page
+        run: pipenv run python3 build_schema_docs.py
+
       - name: Assemble site
         run: |
           mkdir -p _site
           cp index.html _site/index.html
+          cp spec-schema.html schema_doc.css schema_doc.min.js _site/
           if [ -d runs ]; then cp -r runs _site/runs; fi
 
       - name: Upload pages artifact

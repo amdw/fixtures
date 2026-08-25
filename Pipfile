@@ -12,6 +12,9 @@ hypothesis = "*"
 ruff = "*"
 mypy = "*"
 types-pyyaml = "*"
+jsonschema = "*"
+types-jsonschema = "*"
+json-schema-for-humans = "*"
 
 [requires]
 python_version = "3.14"
