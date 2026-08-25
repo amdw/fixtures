@@ -1,8 +1,18 @@
+# Python-generated files
 __pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Tool caches
 .hypothesis/
 .mypy_cache/
 .ruff_cache/
-*.pyc
 
 # Index pages are fully derived from the report files under runs/ and are
 # rebuilt on demand (run.py / build_indexes.py) and at Pages deploy time, so
