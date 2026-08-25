@@ -50,6 +50,7 @@ known-first-party = ["fmodel", "genfixtures"]
 "solve.py" = ["T201"]  # Allow print statements in solve CLI
 "report.py" = ["T201"]  # Allow print statements in report CLI
 "build_indexes.py" = ["T201"]  # Allow print statements in index-rebuild CLI
+"build_schema_docs.py" = ["T201"]  # Allow print statements in schema-docs CLI
 
 [tool.mypy]
 # Basic configuration
@@ -77,6 +78,11 @@ no_implicit_optional = false
 [[tool.mypy.overrides]]
 module = ["helpers_test", "model_test"]
 ignore_errors = true
+
+# No type stubs published for this package
+[[tool.mypy.overrides]]
+module = ["json_schema_for_humans.*"]
+ignore_missing_imports = true
 
 [tool.pytest]
 # If pytest is installed, configure test discovery
