@@ -57,6 +57,9 @@ _STYLE = """
     .venue { margin-top: -0.5rem; margin-bottom: 1.5rem; color: #333; }
     ul.venues { padding-left: 1.2rem; }
     ul.venues li { margin-bottom: 0.3rem; }
+    .anchor-link { margin-left: 0.4rem; font-size: 0.8em; text-decoration: none;
+                   color: #888; visibility: hidden; }
+    h2:hover .anchor-link { visibility: visible; }
 
     @media (max-width: 40rem) {
         body { margin: 1rem; }
@@ -490,7 +493,12 @@ def generate_report(
                 for f in excluded_fixtures
                 if f.home_team == team or f.away_team == team
             ]
-            body += f"<h2>{html.escape(_team_name(team, clubs))}</h2>\n"
+            team_name = html.escape(_team_name(team, clubs))
+            team_slug = slugify(_team_name(team, clubs))
+            body += (
+                f'<h2 id="{team_slug}">{team_name}'
+                f' <a class="anchor-link" href="#{team_slug}">§</a></h2>\n'
+            )
             body += f"<h3>Division {team.division}</h3>\n"
             body += _table(
                 _TEAM_MATCH_HEADERS,
