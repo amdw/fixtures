@@ -57,6 +57,9 @@ _STYLE = """
     .venue { margin-top: -0.5rem; margin-bottom: 1.5rem; color: #333; }
     ul.venues { padding-left: 1.2rem; }
     ul.venues li { margin-bottom: 0.3rem; }
+    .anchor-link { margin-left: 0.4rem; font-size: 0.8em; text-decoration: none;
+                    color: #888; }
+    .anchor-link:hover { color: #0645ad; }
 
     @media (max-width: 40rem) {
         body { margin: 1rem; }
@@ -327,6 +330,17 @@ def _excluded_team_rows(
     return rows
 
 
+def _anchored_heading(level: int, text: str, anchor_id: str) -> str:
+    """An <hN> heading with a stable id, plus a small self-link icon next to it so
+    the anchor is discoverable and its URL easy to grab (e.g. to copy or bookmark)."""
+    escaped = html.escape(text)
+    return (
+        f'<h{level} id="{anchor_id}">{escaped} '
+        f'<a class="anchor-link" href="#{anchor_id}" aria-label="Link to {escaped}">'
+        f"\U0001f517</a></h{level}>\n"
+    )
+
+
 def _venue_header(club: fmodel.Club) -> str:
     return (
         f'<p class="venue"><strong>{html.escape(club.home_venue_name)}</strong><br>\n'
@@ -490,7 +504,8 @@ def generate_report(
                 for f in excluded_fixtures
                 if f.home_team == team or f.away_team == team
             ]
-            body += f"<h2>{html.escape(_team_name(team, clubs))}</h2>\n"
+            team_name = _team_name(team, clubs)
+            body += _anchored_heading(2, team_name, slugify(team_name))
             body += f"<h3>Division {team.division}</h3>\n"
             body += _table(
                 _TEAM_MATCH_HEADERS,
