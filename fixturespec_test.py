@@ -834,7 +834,13 @@ club_constraints:
             spec.parameters.team_home_dates, {albany_1: [date(2025, 9, 1)]}
         )
 
-    def test_team_constraints_unavailable_home_dates_must_be_subset_of_clubs(self):
+    def test_team_constraints_unavailable_home_dates_not_yet_in_clubs_logs_warning(
+        self,
+    ):
+        """An unavailable_home_dates entry not currently in the club's home_dates
+        (e.g. a date held in reserve, commented out) is accepted rather than
+        rejected -- it just has no effect yet -- but logs a warning so the mismatch
+        isn't silently missed."""
         path = self._write(
             self._with_albany_teams(
                 "    teams:\n      albany-1:\n"
@@ -842,8 +848,18 @@ club_constraints:
                 "        unavailable_home_dates: [2025-09-16]\n"
             )
         )
-        with self.assertRaisesRegex(fixturespec.SpecError, "home_dates"):
-            fixturespec.load_spec(path)
+        with self.assertLogs("fixturespec", level="WARNING") as logs:
+            spec = fixturespec.load_spec(path)
+        self.assertIn("2025-09-16", logs.output[0])
+        self.assertIn("albany", logs.output[0])
+        albany_1 = next(t for t in spec.parameters.teams if t.club == "albany")
+        # The exclusion has no effect since 2025-09-16 isn't one of albany's
+        # home_dates in the first place: albany-1's effective home dates are just
+        # albany's full home_dates list, unchanged.
+        self.assertEqual(
+            spec.parameters.team_home_dates,
+            {albany_1: [date(2025, 9, 1), date(2025, 9, 29)]},
+        )
 
     def test_team_constraints_unavailable_away_dates_additive(self):
         path = self._write(
