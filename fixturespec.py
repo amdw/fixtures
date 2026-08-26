@@ -23,6 +23,7 @@ from __future__ import annotations
 import collections
 import dataclasses
 import itertools
+import logging
 from collections.abc import Mapping
 from datetime import date, datetime
 from pathlib import Path
@@ -31,6 +32,8 @@ from typing import Any
 import yaml
 
 import fmodel
+
+logger = logging.getLogger(__name__)
 
 
 class SpecError(ValueError):
@@ -468,12 +471,16 @@ def _parse_club_team_constraints(
     Home dates are always specified at the club level; per-team variations are
     supported only via exclusions.
 
-    A team's unavailable_home_dates entry, if given, lists dates from the club's own
-    home_dates on which that team specifically can't host (e.g. its venue slot is
-    taken by another of the club's teams); the team's effective home dates are the
-    club's home_dates minus these, and every entry must be one of the club's
-    home_dates. A team's unavailable_away_dates entry, if given, is additional to its
-    club's unavailable_away_dates (not instead of it).
+    A team's unavailable_home_dates entry, if given, lists dates on which that team
+    specifically can't host (e.g. its venue slot is taken by another of the club's
+    teams); the team's effective home dates are the club's home_dates minus these.
+    An entry not currently in the club's home_dates (e.g. a date commented out and
+    held in reserve) has no effect yet but isn't an error -- this lets a team's
+    unavailability be recorded ahead of that date being added to (or uncommented
+    from) home_dates later, without needing to remember to add it then; a warning is
+    logged so the mismatch isn't silently missed. A team's unavailable_away_dates
+    entry, if given, is additional to its club's unavailable_away_dates (not instead
+    of it).
     """
     if not isinstance(teams_spec, dict):
         raise SpecError(f"{context} must be a mapping")
@@ -504,12 +511,15 @@ def _parse_club_team_constraints(
                 team_spec["unavailable_home_dates"],
                 f"{team_context}.unavailable_home_dates",
             )
-            invalid = [d for d in excluded if d not in club_home_dates]
-            if invalid:
-                raise SpecError(
-                    f"{team_context}.unavailable_home_dates: "
-                    f"{[d.isoformat() for d in invalid]} not in {club_id!r}'s "
-                    "home_dates"
+            not_yet_active = [d for d in excluded if d not in club_home_dates]
+            if not_yet_active:
+                logger.warning(
+                    "%s.unavailable_home_dates: %s not currently in %r's "
+                    "home_dates (ok if held in reserve there; has no effect "
+                    "until it is)",
+                    team_context,
+                    [d.isoformat() for d in not_yet_active],
+                    club_id,
                 )
             excluded_set = set(excluded)
             team_home_dates[team] = [

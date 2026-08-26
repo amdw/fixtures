@@ -235,7 +235,7 @@
       "properties": {
         "unavailable_home_dates": {
           "type": "array",
-          "description": "Excludes these dates from this club's own 'home_dates', for this team only. Each entry must be one of the club's own home_dates.",
+          "description": "Excludes these dates from this club's own 'home_dates', for this team only. An entry that isn't currently one of the club's own home_dates (e.g. a date held in reserve, commented out) is allowed -- it just has no effect until that date is added -- though fixturespec.py logs a warning for it.",
           "items": { "$ref": "#/$defs/date" },
           "uniqueItems": true
         },
