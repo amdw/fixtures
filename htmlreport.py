@@ -179,19 +179,52 @@ def _team_name(team: fmodel.Team, clubs: Mapping[str, fmodel.Club]) -> str:
     return f"{clubs[team.club].name} {team.index}"
 
 
-def _by_date(
-    fixtures: Collection[fmodel.ScheduledFixture], clubs: Mapping[str, fmodel.Club]
+def _team_sort_key(
+    team: fmodel.Team, clubs: Mapping[str, fmodel.Club]
+) -> tuple[str, int]:
+    """(club name, team index) of a team, used as a sort tie-break throughout."""
+    return (clubs[team.club].name, team.index)
+
+
+def _by_date_home_away(
+    fixtures: Collection[fmodel.ScheduledFixture],
+    clubs: Mapping[str, fmodel.Club],
+    with_division: bool,
 ) -> list[fmodel.ScheduledFixture]:
-    return sorted(
-        fixtures, key=lambda sf: (sf.date, _team_name(sf.fixture.home_team, clubs))
-    )
+    def key(sf: fmodel.ScheduledFixture) -> tuple:
+        home_team = sf.fixture.home_team
+        division_part = (home_team.division,) if with_division else ()
+        return (
+            sf.date,
+            *division_part,
+            *_team_sort_key(home_team, clubs),
+            *_team_sort_key(sf.fixture.away_team, clubs),
+        )
+
+    return sorted(fixtures, key=key)
+
+
+def _by_date_opponent(
+    team: fmodel.Team,
+    fixtures: Collection[fmodel.ScheduledFixture],
+    clubs: Mapping[str, fmodel.Club],
+) -> list[fmodel.ScheduledFixture]:
+    def key(sf: fmodel.ScheduledFixture) -> tuple:
+        opponent = (
+            sf.fixture.away_team
+            if sf.fixture.home_team == team
+            else sf.fixture.home_team
+        )
+        return (sf.date, *_team_sort_key(opponent, clubs))
+
+    return sorted(fixtures, key=key)
 
 
 def _rows_with_division(
     fixtures: Collection[fmodel.ScheduledFixture], clubs: Mapping[str, fmodel.Club]
 ) -> list[list[str]]:
     rows = []
-    for sf in _by_date(fixtures, clubs):
+    for sf in _by_date_home_away(fixtures, clubs, with_division=True):
         home_club = clubs[sf.fixture.home_team.club]
         rows.append(
             [
@@ -211,7 +244,7 @@ def _rows(
     fixtures: Collection[fmodel.ScheduledFixture], clubs: Mapping[str, fmodel.Club]
 ) -> list[list[str]]:
     rows = []
-    for sf in _by_date(fixtures, clubs):
+    for sf in _by_date_home_away(fixtures, clubs, with_division=False):
         home_club = clubs[sf.fixture.home_team.club]
         rows.append(
             [
@@ -237,7 +270,7 @@ def _team_rows(
 ) -> list[list[str]]:
     rows = []
     prev_date: date | None = None
-    for sf in _by_date(fixtures, clubs):
+    for sf in _by_date_opponent(team, fixtures, clubs):
         is_home = sf.fixture.home_team == team
         opponent = sf.fixture.away_team if is_home else sf.fixture.home_team
         home_club = clubs[sf.fixture.home_team.club]
@@ -256,17 +289,27 @@ def _team_rows(
     return rows
 
 
-def _by_home_team_name(
-    fixtures: Collection[fmodel.Fixture], clubs: Mapping[str, fmodel.Club]
+def _by_home_away(
+    fixtures: Collection[fmodel.Fixture],
+    clubs: Mapping[str, fmodel.Club],
+    with_division: bool,
 ) -> list[fmodel.Fixture]:
-    return sorted(fixtures, key=lambda f: _team_name(f.home_team, clubs))
+    def key(f: fmodel.Fixture) -> tuple:
+        division_part = (f.home_team.division,) if with_division else ()
+        return (
+            *division_part,
+            *_team_sort_key(f.home_team, clubs),
+            *_team_sort_key(f.away_team, clubs),
+        )
+
+    return sorted(fixtures, key=key)
 
 
 def _excluded_rows_with_division(
     fixtures: Collection[fmodel.Fixture], clubs: Mapping[str, fmodel.Club]
 ) -> list[list[str]]:
     rows = []
-    for f in _by_home_team_name(fixtures, clubs):
+    for f in _by_home_away(fixtures, clubs, with_division=True):
         home_club = clubs[f.home_team.club]
         rows.append(
             [
@@ -286,7 +329,7 @@ def _excluded_rows(
     fixtures: Collection[fmodel.Fixture], clubs: Mapping[str, fmodel.Club]
 ) -> list[list[str]]:
     rows = []
-    for f in _by_home_team_name(fixtures, clubs):
+    for f in _by_home_away(fixtures, clubs, with_division=False):
         home_club = clubs[f.home_team.club]
         rows.append(
             [
@@ -309,7 +352,7 @@ def _excluded_team_rows(
     rows = []
     for f in sorted(
         fixtures,
-        key=lambda f: _team_name(
+        key=lambda f: _team_sort_key(
             f.away_team if f.home_team == team else f.home_team, clubs
         ),
     ):
