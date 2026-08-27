@@ -2,8 +2,8 @@
 
 ## Introduction
 
-This repo generates Middlesex League fixture schedules using an OR-Tools
-constraint solver.
+This repo generates Middlesex League fixture schedules using an [OR-Tools
+constraint solver](https://developers.google.com/optimization/cp).
 
 ## Setup
 
