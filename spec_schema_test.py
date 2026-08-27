@@ -145,7 +145,7 @@ class SpecSchemaTest(unittest.TestCase):
         self._assert_valid(_FULL_EXAMPLE)
 
     def test_committed_example_run_is_valid(self):
-        spec_path = Path(__file__).parent / "runs" / "example" / "2025-26-season.yaml"
+        spec_path = Path(__file__).parent / "runs" / "example" / "spec.yaml"
         self._assert_valid(spec_path.read_text())
 
 

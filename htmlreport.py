@@ -14,11 +14,11 @@
 
 """Render a solved fixture list as a set of linked HTML pages.
 
-The index pages (both the per-run index.html and the top-level runs index)
-are derived purely from the report files present on disk, so they can be
-(re)built at any time -- e.g. by build_indexes.py during a GitHub Pages
-deploy -- without needing the original fixtures/teams data or any
-third-party dependency.
+The index-building helpers here (build_run_index and write_runs_index) derive
+the per-run and top-level index.html pages purely from the report files present
+on disk, without needing the original fixtures/teams data or any third-party
+dependency. build_html.py calls them after re-rendering the report pages during
+a GitHub Pages deploy.
 """
 
 from __future__ import annotations
