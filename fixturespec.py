@@ -301,7 +301,7 @@ _CLUB_CONSTRAINT_FIELD_KEYS = {
 
 _TEAM_CONSTRAINT_FIELD_KEYS = {"unavailable_home_dates", "unavailable_away_dates"}
 
-_AVOID_COSCHEDULING_FIELD_KEYS = {"teams", "within_days"}
+_AVOID_COSCHEDULING_FIELD_KEYS = {"teams", "within_days", "applies_to"}
 
 # Constraint types with a notion of a default, overridable per club. Other constraint
 # types (home_dates, unavailable_away_dates, max_home_dates_used, teams,
@@ -544,10 +544,11 @@ def _parse_avoid_coscheduling_teams(
     """Parse a club_constraints entry's optional 'avoid_coscheduling_teams' list.
 
     Each entry names a group of that club's own teams (all of which must belong to
-    this club) and an optional 'within_days' window (default 0, i.e. the same date):
-    the solver then allows at most one match involving any of those teams within any
-    window of that many days -- e.g. two teams that share players shouldn't both be
-    fielded on the same date.
+    this club), an optional 'within_days' window (default 0, i.e. the same date), and
+    an optional 'applies_to' scope ('home', 'away' or the default 'both'): the solver
+    then allows at most one match involving any of those teams -- counting only the
+    matches of the kind named by 'applies_to' -- within any window of that many days,
+    e.g. two teams that share players shouldn't both be fielded on the same date.
     """
     if entries_spec is None:
         return []
@@ -598,9 +599,20 @@ def _parse_avoid_coscheduling_teams(
             if within_days < 0:
                 raise SpecError(f"{entry_context}.within_days must be >= 0")
 
+        applies_to = fmodel.CoschedulingScope.BOTH
+        if "applies_to" in entry:
+            try:
+                applies_to = fmodel.CoschedulingScope(entry["applies_to"])
+            except ValueError:
+                allowed = ", ".join(repr(s.value) for s in fmodel.CoschedulingScope)
+                raise SpecError(
+                    f"{entry_context}.applies_to must be one of {allowed}, got "
+                    f"{entry['applies_to']!r}"
+                ) from None
+
         constraints.append(
             fmodel.AvoidCoschedulingConstraint(
-                teams=entry_teams, within_days=within_days
+                teams=entry_teams, within_days=within_days, applies_to=applies_to
             )
         )
 

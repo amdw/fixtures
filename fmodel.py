@@ -16,6 +16,7 @@
 
 import collections
 import dataclasses
+import enum
 import functools
 import itertools
 import logging
@@ -90,16 +91,32 @@ class MaxConcurrentHomeMatches:
         return self.overrides.get(d, self.default)
 
 
+class CoschedulingScope(enum.Enum):
+    """Which of an AvoidCoschedulingConstraint's teams' matches are counted towards
+    its limit: only their home matches, only their away matches, or both."""
+
+    HOME = "home"
+    AWAY = "away"
+    BOTH = "both"
+
+
 @dataclasses.dataclass(frozen=True)
 class AvoidCoschedulingConstraint:
     """At most one match involving any of `teams` may be scheduled within any window
     of `within_days` days -- e.g. within_days=0 (the default) means no two of them
     may share a date. Typically used for a club's own teams that draw from the same
     pool of players (e.g. adjacent-division teams), but not restricted to that.
+
+    `applies_to` narrows which of those teams' matches count: CoschedulingScope.HOME
+    only their home matches, CoschedulingScope.AWAY only their away matches,
+    CoschedulingScope.BOTH (the default) every match they play. So an AWAY constraint
+    keeps the teams' away fixtures on separate dates while still allowing one to play
+    away on a night another is hosting.
     """
 
     teams: Collection[Team]
     within_days: int = 0
+    applies_to: CoschedulingScope = CoschedulingScope.BOTH
 
 
 def _check_no_duplicate_teams(teams: Collection[Team]) -> None:
@@ -242,26 +259,36 @@ def _add_max_home_dates_used_constraints(
 def _add_avoid_coscheduling_constraints(
     model: cp_model.CpModel,
     constraints: Collection[AvoidCoschedulingConstraint],
-    vars_by_team_date: Mapping[Team, Mapping[date, list[cp_model.IntVar]]],
+    vars_by_fixture_date: Mapping[tuple[Fixture, date], cp_model.IntVar],
 ) -> None:
     """For each AvoidCoschedulingConstraint, ensure at most one match involving any
-    of its teams is scheduled within any window of within_days days.
+    of its teams is scheduled within any window of within_days days. The constraint's
+    `applies_to` scope limits which of those teams' matches are counted -- home only,
+    away only, or (by default) both.
     """
     for constraint in constraints:
-        # vars_by_team_date stores the same variable for both the home and away
-        # team of a fixture, so a match between two teams that are both in
-        # `constraint.teams` would be combined twice; key by id(var) per date to
-        # avoid double-counting it.
-        vars_by_date: MutableMapping[date, dict[int, cp_model.IntVar]] = (
-            collections.defaultdict(dict)
+        team_set = set(constraint.teams)
+        count_home = constraint.applies_to in (
+            CoschedulingScope.HOME,
+            CoschedulingScope.BOTH,
         )
-        for team in constraint.teams:
-            for d, team_vars in vars_by_team_date.get(team, {}).items():
-                for var in team_vars:
-                    vars_by_date[d][id(var)] = var
+        count_away = constraint.applies_to in (
+            CoschedulingScope.AWAY,
+            CoschedulingScope.BOTH,
+        )
+        # Each (fixture, date) maps to a single variable, visited once here, so a
+        # match between two teams both in `constraint.teams` is counted once.
+        vars_by_date: MutableMapping[date, list[cp_model.IntVar]] = (
+            collections.defaultdict(list)
+        )
+        for (fixture, d), var in vars_by_fixture_date.items():
+            if (count_home and fixture.home_team in team_set) or (
+                count_away and fixture.away_team in team_set
+            ):
+                vars_by_date[d].append(var)
 
         for window in date_windows(vars_by_date.keys(), constraint.within_days):
-            window_vars = [v for d in window for v in vars_by_date[d].values()]
+            window_vars = [v for d in window for v in vars_by_date[d]]
             if len(window_vars) > 1:
                 model.add(cp_model.LinearExpr.Sum(window_vars) <= 1)
 
@@ -370,7 +397,7 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
         model, params.max_home_dates_used, vars_by_club_home_date
     )
     _add_avoid_coscheduling_constraints(
-        model, params.avoid_coscheduling_teams, vars_by_team_date
+        model, params.avoid_coscheduling_teams, vars_by_fixture_date
     )
     _add_fixed_fixtures_constraints(model, params.fixed_fixtures, vars_by_fixture_date)
 

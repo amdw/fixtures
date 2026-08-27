@@ -989,6 +989,39 @@ club_constraints:
         constraints = list(spec.parameters.avoid_coscheduling_teams)
         self.assertEqual(constraints[0].within_days, 3)
 
+    def test_avoid_coscheduling_teams_applies_to_defaults_to_both(self):
+        path = self._write(
+            self._with_albany_avoid_coscheduling(
+                "    avoid_coscheduling_teams:\n      - teams: [albany-1, albany-2]\n"
+            )
+        )
+        spec = fixturespec.load_spec(path)
+        constraints = list(spec.parameters.avoid_coscheduling_teams)
+        self.assertEqual(constraints[0].applies_to, fmodel.CoschedulingScope.BOTH)
+
+    def test_avoid_coscheduling_teams_applies_to_parsed(self):
+        path = self._write(
+            self._with_albany_avoid_coscheduling(
+                "    avoid_coscheduling_teams:\n"
+                "      - teams: [albany-1, albany-2]\n"
+                "        applies_to: away\n"
+            )
+        )
+        spec = fixturespec.load_spec(path)
+        constraints = list(spec.parameters.avoid_coscheduling_teams)
+        self.assertEqual(constraints[0].applies_to, fmodel.CoschedulingScope.AWAY)
+
+    def test_avoid_coscheduling_teams_invalid_applies_to_rejected(self):
+        path = self._write(
+            self._with_albany_avoid_coscheduling(
+                "    avoid_coscheduling_teams:\n"
+                "      - teams: [albany-1, albany-2]\n"
+                "        applies_to: sometimes\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "applies_to"):
+            fixturespec.load_spec(path)
+
     def test_avoid_coscheduling_teams_not_a_list(self):
         path = self._write(
             self._with_albany_avoid_coscheduling("    avoid_coscheduling_teams: {}\n")

@@ -264,6 +264,12 @@
           "default": 0,
           "minimum": 0,
           "description": "The solver allows at most one match involving any of 'teams' -- home or away -- within any window of this many days. The default, 0, means no two of them may share a date at all; a higher value also keeps them some number of days apart."
+        },
+        "applies_to": {
+          "type": "string",
+          "enum": ["home", "away", "both"],
+          "default": "both",
+          "description": "Which of the listed teams' matches the limit counts: 'home' only their home matches, 'away' only their away matches, or 'both' (the default) every match they play. E.g. 'away' keeps these teams' away fixtures on separate dates while still allowing one to play away on a night another is hosting."
         }
       }
     },
