@@ -596,6 +596,96 @@ class TestLatestInternalMatchDate(unittest.TestCase):
         self.assertTrue(internal_dates)
 
 
+class TestEarliestMatchDate(unittest.TestCase):
+    """Test cases for the earliest_match_date constraint.
+
+    Division 1 here has only 3 teams (A1, A2, B1), so every pair of the 4
+    fixtures that club A hosts (A1 v A2, A2 v A1, A1 v B1, A2 v B1) shares a
+    team -- with only 3 teams to draw from, any two of those 4 fixtures must
+    involve at least one of the same two teams. That means all 4 need distinct
+    dates regardless of max_concurrent_home_matches, so club A's home_dates
+    below deliberately has some slack (6 dates) beyond that minimum of 4, to
+    leave room for a cutoff to remove some of them and still solve.
+    """
+
+    def _params(self, **kwargs):
+        teams = [
+            fmodel.Team(division=1, club="A", index=1),
+            fmodel.Team(division=1, club="A", index=2),
+            fmodel.Team(division=1, club="B", index=1),
+        ]
+        home_dates = {
+            "A": [
+                date(2025, 1, 1),
+                date(2025, 1, 8),
+                date(2025, 2, 1),
+                date(2025, 2, 8),
+                date(2025, 3, 1),
+                date(2025, 3, 8),
+            ],
+            "B": [date(2025, 5, 1), date(2025, 6, 1)],
+        }
+        return fmodel.Parameters(
+            teams=teams,
+            home_dates=home_dates,
+            unavailable_away_dates={"A": [], "B": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=2),
+                "B": fmodel.MaxConcurrentHomeMatches(default=1),
+            },
+            min_gap_days=7,
+            **kwargs,
+        )
+
+    def test_new_fixtures_respect_the_cutoff(self):
+        """A cutoff that excludes some (but not all) of club A's dates still
+        leaves enough of them (4, the minimum -- see class docstring) to solve."""
+        params = self._params(earliest_match_date=date(2025, 2, 1))
+        fixtures = list(fmodel.solve(params))
+        self.assertTrue(fixtures)
+        for sf in fixtures:
+            self.assertGreaterEqual(sf.date, date(2025, 2, 1))
+
+    def test_cutoff_after_all_of_a_clubs_home_dates_drops_its_fixtures(self):
+        """A cutoff after all of club A's home dates (but before club B's) makes
+        every A-hosted fixture unschedulable -- each has zero candidate
+        variables, so (consistent with
+        TestLatestInternalMatchDate.test_cutoff_before_any_home_date_drops_the_internal_fixture)
+        it's silently left out of the result rather than erroring. B-hosted
+        fixtures are unaffected since none of B's dates are excluded.
+        """
+        params = self._params(earliest_match_date=date(2025, 4, 1))
+        fixtures = list(fmodel.solve(params))
+        self.assertFalse([sf for sf in fixtures if sf.fixture.home_team.club == "A"])
+        self.assertTrue([sf for sf in fixtures if sf.fixture.home_team.club == "B"])
+
+    def test_fixed_fixture_before_cutoff_still_solves(self):
+        """Unlike latest_internal_match_date, a fixed fixture dated before the cutoff
+        is not rejected: fixed_fixtures represents matches that are already
+        committed (possibly already played), so an old date there is expected --
+        this is what lets the solver be re-run after some home dates have passed
+        without breaking on fixtures already fixed to those dates.
+        """
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=1, club="A", index=2)
+        fixed = fmodel.ScheduledFixture(
+            fixture=fmodel.Fixture(home_team=a1, away_team=a2), date=date(2025, 1, 1)
+        )
+        params = self._params(
+            fixed_fixtures=[fixed], earliest_match_date=date(2025, 2, 1)
+        )
+        fixtures = list(fmodel.solve(params))
+        self.assertIn(fixed, fixtures)
+
+    def test_no_cutoff_by_default(self):
+        """Without earliest_match_date, all 6 fixtures solve as normal (the tight
+        4-distinct-A-dates requirement from the class docstring, with no cutoff
+        trimming club A's 6 candidate dates, is comfortably satisfiable)."""
+        params = self._params()
+        fixtures = list(fmodel.solve(params))
+        self.assertEqual(len(fixtures), 6)
+
+
 class TestExcludedFixtures(unittest.TestCase):
     """Test cases for the excluded_fixtures parameter."""
 

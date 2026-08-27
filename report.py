@@ -20,8 +20,7 @@ Usage:
 
 This can be re-run at any time to regenerate the HTML report -- e.g. after
 changing report formatting -- without re-solving, as long as solution.yaml
-still matches the teams described in spec.yaml. run.py runs solve.py and
-report.py together in one step.
+still matches the teams described in spec.yaml.
 """
 
 from __future__ import annotations

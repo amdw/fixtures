@@ -16,6 +16,7 @@
 
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 import fixturesolution
@@ -98,6 +99,29 @@ class TestSolve(unittest.TestCase):
         solve.solve(self.spec_path, output_dir)
 
         self.assertIn("fixtures:", (output_dir / "solution.yaml").read_text())
+
+    def test_earliest_match_date_excludes_earlier_home_dates(self):
+        """Albany has two candidate home dates (2025-09-01 and 2025-09-29); a cutoff
+        that excludes the earlier one should still solve, using the later one."""
+        output_dir = self.dir / "out"
+        solution_path = solve.solve(
+            self.spec_path, output_dir, earliest_match_date=date(2025, 9, 2)
+        )
+        loaded = fixturesolution.load_solution(
+            solution_path,
+            [
+                fmodel.Team(division=1, club="albany", index=1),
+                fmodel.Team(division=1, club="hackney", index=1),
+            ],
+            {"albany-1": ("albany", 1), "hackney-1": ("hackney", 1)},
+        )
+        for sf in loaded:
+            self.assertGreaterEqual(sf.date, date(2025, 9, 2))
+
+    def test_no_cutoff_by_default(self):
+        output_dir = self.dir / "out"
+        solution_path = solve.solve(self.spec_path, output_dir)
+        self.assertTrue(solution_path.exists())
 
 
 if __name__ == "__main__":
