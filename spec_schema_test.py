@@ -96,6 +96,7 @@ club_constraints:
     avoid_coscheduling_teams:
       - teams: [hackney-1, hackney-5]
         within_days: 0
+        applies_to: away
 
 fixed_fixtures:
   - home: albany-1

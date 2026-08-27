@@ -841,6 +841,14 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
             fmodel.AvoidCoschedulingConstraint(teams=[a1, a2]).within_days, 0
         )
 
+    def test_applies_to_defaults_to_both(self):
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=2, club="A", index=2)
+        self.assertEqual(
+            fmodel.AvoidCoschedulingConstraint(teams=[a1, a2]).applies_to,
+            fmodel.CoschedulingScope.BOTH,
+        )
+
     def test_forces_different_dates_for_constrained_teams(self):
         """A1 and A2 are in different divisions (so have no fixture between them
         directly forcing a gap) and could otherwise both be scheduled at home on the
@@ -992,6 +1000,125 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
                 )
             ],
         )
+
+    def test_applies_to_away_allows_shared_home_date(self):
+        """With applies_to=AWAY the constraint ignores home matches: A1 and A2 may
+        both host on A's single home date (which BOTH would forbid -- cf
+        test_infeasible_when_only_one_shared_date_available), while X's two dates keep
+        their away legs apart."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=2, club="A", index=2)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        x2 = fmodel.Team(division=2, club="X", index=2)
+        params = fmodel.Parameters(
+            teams=[a1, a2, x1, x2],
+            home_dates={
+                "A": [date(2025, 1, 1)],
+                "X": [date(2025, 3, 1), date(2025, 3, 8)],
+            },
+            unavailable_away_dates={"A": [], "X": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=2),
+                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            },
+            min_gap_days=7,
+            avoid_coscheduling_teams=[
+                fmodel.AvoidCoschedulingConstraint(
+                    teams=[a1, a2], applies_to=fmodel.CoschedulingScope.AWAY
+                )
+            ],
+        )
+        fixtures = list(fmodel.solve(params))
+        a1_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a1)
+        a2_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a2)
+        self.assertEqual(a1_home_date, a2_home_date)
+
+    def test_applies_to_away_still_separates_away_legs(self):
+        """applies_to=AWAY still constrains away matches: with only one X home date,
+        A1 and A2 can't both play their away leg there."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=2, club="A", index=2)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        x2 = fmodel.Team(division=2, club="X", index=2)
+        params = fmodel.Parameters(
+            teams=[a1, a2, x1, x2],
+            home_dates={
+                "A": [date(2025, 1, 1), date(2025, 1, 8)],
+                "X": [date(2025, 3, 1)],
+            },
+            unavailable_away_dates={"A": [], "X": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=2),
+                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            },
+            min_gap_days=7,
+            avoid_coscheduling_teams=[
+                fmodel.AvoidCoschedulingConstraint(
+                    teams=[a1, a2], applies_to=fmodel.CoschedulingScope.AWAY
+                )
+            ],
+        )
+        with self.assertRaises(ValueError):
+            fmodel.solve(params)
+
+    def test_applies_to_home_ignores_away_collision(self):
+        """With applies_to=HOME the constraint ignores away matches: A1 and A2 may
+        both play their away leg on X's single home date, while A's two dates keep
+        their home legs apart."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=2, club="A", index=2)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        x2 = fmodel.Team(division=2, club="X", index=2)
+        params = fmodel.Parameters(
+            teams=[a1, a2, x1, x2],
+            home_dates={
+                "A": [date(2025, 1, 1), date(2025, 1, 8)],
+                "X": [date(2025, 3, 1)],
+            },
+            unavailable_away_dates={"A": [], "X": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=2),
+                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            },
+            min_gap_days=7,
+            avoid_coscheduling_teams=[
+                fmodel.AvoidCoschedulingConstraint(
+                    teams=[a1, a2], applies_to=fmodel.CoschedulingScope.HOME
+                )
+            ],
+        )
+        fixtures = list(fmodel.solve(params))
+        a1_away_date = next(sf.date for sf in fixtures if sf.fixture.away_team == a1)
+        a2_away_date = next(sf.date for sf in fixtures if sf.fixture.away_team == a2)
+        self.assertEqual(a1_away_date, a2_away_date)
+
+    def test_applies_to_home_still_separates_home_legs(self):
+        """applies_to=HOME still constrains home matches: with only one A home date,
+        A1 and A2 can't both host there."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=2, club="A", index=2)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        x2 = fmodel.Team(division=2, club="X", index=2)
+        params = fmodel.Parameters(
+            teams=[a1, a2, x1, x2],
+            home_dates={
+                "A": [date(2025, 1, 1)],
+                "X": [date(2025, 3, 1), date(2025, 3, 8)],
+            },
+            unavailable_away_dates={"A": [], "X": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=2),
+                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            },
+            min_gap_days=7,
+            avoid_coscheduling_teams=[
+                fmodel.AvoidCoschedulingConstraint(
+                    teams=[a1, a2], applies_to=fmodel.CoschedulingScope.HOME
+                )
+            ],
+        )
+        with self.assertRaises(ValueError):
+            fmodel.solve(params)
 
 
 class TestMaxConcurrentHomeMatchesUnlimited(unittest.TestCase):
