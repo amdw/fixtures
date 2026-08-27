@@ -24,32 +24,31 @@ contexts, since the venv already exists once `uv sync --dev` has been run.
 
 Describe the clubs, teams, divisions and constraints in a YAML specification
 file, placed inside the run folder you want its output written to (e.g.
-`runs/2025-26-season/spec.yaml`), then run the solver against it:
-
-```bash
-python run.py runs/2025-26-season/spec.yaml runs/2025-26-season
-```
-
-This solves the fixtures and writes the HTML report alongside the spec in
-`runs/2025-26-season/`. Re-running it overwrites the previous solution and
-report in place, so it's safe to rerun after editing the spec.
-
-`run.py` is just two separate steps run back to back, each usable on its own:
+`runs/2025-26-season/spec.yaml`), then run the solver against it, followed by
+the report generator:
 
 ```bash
 python solve.py runs/2025-26-season/spec.yaml
 python report.py runs/2025-26-season/spec.yaml runs/2025-26-season/solution.yaml runs/2025-26-season
 ```
 
+This solves the fixtures and writes the HTML report alongside the spec in
+`runs/2025-26-season/`. Re-running both overwrites the previous solution and
+report in place, so it's safe to rerun after editing the spec.
+
 `solve.py` runs the constraint solver and writes its result to a
 `solution.yaml` file (canonical, solver-independent) next to the spec,
 defaulting the output directory to the spec file's own directory.
 `report.py` turns a `solution.yaml` back into the HTML report, reading the
 original spec alongside it for club/venue/name and excluded-fixture details
-that aren't part of the solution itself. This split means the HTML report can
-be regenerated -- e.g. after a report formatting change -- without
-re-running the (comparatively slow) solver: just rerun `report.py` against
-the existing `solution.yaml`.
+that aren't part of the solution itself. Keeping these as two separate steps
+(rather than one combined command) means the HTML report can be regenerated
+-- e.g. after a report formatting change -- without re-running the
+(comparatively slow) solver: just rerun `report.py` against the existing
+`solution.yaml`. It also keeps solve-only flags (e.g. `--earliest-match-date`,
+which excludes newly scheduled fixtures before a given date, defaulting to
+today) on `solve.py` alone, rather than needing to be added to a combined
+command too.
 
 ### Spec format
 
@@ -192,7 +191,7 @@ files `json-schema-for-humans` copies alongside it) and everything under
 these are build artifacts, not source -- gitignored, and regenerated before
 every deploy from whatever `runs/*/` folders and `spec-schema.json` are
 committed, by `build_indexes.py` and `build_schema_docs.py` respectively.
-`build_indexes.py` has no third-party dependencies (unlike `run.py`, it needs
+`build_indexes.py` has no third-party dependencies (unlike `solve.py`, it needs
 neither ortools nor pyyaml); `build_schema_docs.py` needs
 `json-schema-for-humans`, so the workflow installs the dev dependencies
 first. Run either locally any time you want to preview without a full

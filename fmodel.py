@@ -138,6 +138,14 @@ class Parameters:
     fixed_fixtures: Collection[ScheduledFixture] = ()
     excluded_fixtures: Collection[Fixture] = ()
     latest_internal_match_date: date | None = None
+    # Excludes candidate dates before this one from newly scheduled fixtures -- e.g.
+    # so re-running the solver after some home dates have already passed doesn't
+    # place a fixture in the past. Unlike latest_internal_match_date, a fixed_fixtures
+    # entry dated before this cutoff is *not* rejected: fixed_fixtures records matches
+    # that are already committed (possibly already played), so an old date there is
+    # expected, not an error, and must keep solving correctly however far into the
+    # season this is re-run.
+    earliest_match_date: date | None = None
     # Per-team overrides/additions to a club's home_dates/unavailable_away_dates, for
     # clubs whose teams don't all share the same availability (e.g. different squads
     # of players). A team not present here just uses its club's dates as before.
@@ -300,6 +308,7 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
     )
 
     excluded = set(params.excluded_fixtures)
+    fixed_fixture_keys = {(sf.fixture, sf.date) for sf in params.fixed_fixtures}
 
     for division_teams in teams_by_division.values():
         for home_team, away_team in itertools.permutations(division_teams, 2):
@@ -314,6 +323,12 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
                     is_internal
                     and params.latest_internal_match_date is not None
                     and match_date > params.latest_internal_match_date
+                ):
+                    continue
+                if (
+                    params.earliest_match_date is not None
+                    and match_date < params.earliest_match_date
+                    and (fixture, match_date) not in fixed_fixture_keys
                 ):
                     continue
                 var = model.new_bool_var(

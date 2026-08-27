@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://amdw.github.io/fixtures/spec-schema.json",
   "title": "Fixture specification",
-  "description": "Describes the clubs, teams, divisions and constraints for a season, for input to the constraint solver (solve.py / run.py). This schema documents the format; it is not itself consulted by the solver -- fixturespec.py parses and validates spec files independently, with its own error messages.",
+  "description": "Describes the clubs, teams, divisions and constraints for a season, for input to the constraint solver (solve.py). This schema documents the format; it is not itself consulted by the solver -- fixturespec.py parses and validates spec files independently, with its own error messages.",
   "type": "object",
   "additionalProperties": false,
   "required": ["clubs", "teams", "divisions", "club_constraints"],

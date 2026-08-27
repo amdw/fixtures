@@ -15,7 +15,7 @@
 """Rebuild the top-level and per-run index.html pages from whatever report files
 are present under runs/.
 
-This has no third-party dependencies (unlike run.py, it doesn't need ortools or
+This has no third-party dependencies (unlike solve.py, it doesn't need ortools or
 pyyaml), so it's cheap to run in CI -- see .github/workflows/pages.yml, which
 runs it before every Pages deploy so index pages never need to be committed or
 hand-maintained.
