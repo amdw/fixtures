@@ -28,11 +28,11 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Rebuild index pages
-        run: python3 build_indexes.py
-
       - name: Install dependencies
         run: uv sync --dev --locked
+
+      - name: Rebuild all run HTML (report and index pages)
+        run: uv run python3 build_html.py
 
       - name: Rebuild schema reference page
         run: uv run python3 build_schema_docs.py

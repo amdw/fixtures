@@ -8,11 +8,13 @@ dist/
 wheels/
 *.egg-info
 
-# Index pages are fully derived from the report files under runs/ and are
-# rebuilt on demand (report.py / build_indexes.py) and at Pages deploy time,
-# so they don't need to be committed.
+# Every HTML page under runs/, and the top-level index.html, is fully derived
+# from the committed spec.yaml + solution.yaml of each run (the report pages via
+# report.py / build_reports.py, the index pages via build_indexes.py on top of
+# those), and is regenerated on demand and at Pages deploy time, so none of it
+# needs to be committed.
 /index.html
-runs/*/index.html
+runs/**/*.html
 
 # The schema reference page (and whatever support files json-schema-for-humans
 # copies alongside it) is fully derived from spec-schema.json and is rebuilt

@@ -23,9 +23,9 @@ contexts, since the venv already exists once `uv sync --dev` has been run.
 ## New run setup
 
 Describe the clubs, teams, divisions and constraints in a YAML specification
-file, placed inside the run folder you want its output written to (e.g.
-`runs/2025-26-season/spec.yaml`), then run the solver against it, followed by
-the report generator:
+file named `spec.yaml`, placed inside the run folder you want its output
+written to (e.g. `runs/2025-26-season/spec.yaml`), then run the solver against
+it, followed by the report generator:
 
 ```bash
 python solve.py runs/2025-26-season/spec.yaml
@@ -35,6 +35,12 @@ python report.py runs/2025-26-season/spec.yaml runs/2025-26-season/solution.yaml
 This solves the fixtures and writes the HTML report alongside the spec in
 `runs/2025-26-season/`. Re-running both overwrites the previous solution and
 report in place, so it's safe to rerun after editing the spec.
+
+Only `spec.yaml` and `solution.yaml` need committing: the HTML report is a
+build artifact, regenerated from that pair on every GitHub Pages deploy (and
+gitignored) -- see "Publishing via GitHub Pages" below. The fixed `spec.yaml`
+name is what lets the deploy discover each run folder; running `report.py`
+by hand is only needed to preview report-formatting changes locally.
 
 `solve.py` runs the constraint solver and writes its result to a
 `solution.yaml` file (canonical, solver-independent) next to the spec,
@@ -106,11 +112,11 @@ fixtures, and more. For the full field-by-field reference, see:
   in any editor using the [YAML language
   server](https://github.com/redhat-developer/yaml-language-server) (e.g. VS
   Code's `redhat.vscode-yaml` extension) -- see
-  [`runs/example/2025-26-season.yaml`](runs/example/2025-26-season.yaml) for
-  an example.
-- **[`runs/example/2025-26-season.yaml`](runs/example/2025-26-season.yaml)**,
-  a full worked example with its generated report checked in alongside it at
-  [`runs/example/`](runs/example/).
+  [`runs/example/spec.yaml`](runs/example/spec.yaml) for an example.
+- **[`runs/example/spec.yaml`](runs/example/spec.yaml)**, a full worked
+  example; its `solution.yaml` sits alongside it in
+  [`runs/example/`](runs/example/), and its report renders into the same
+  folder (locally via `report.py`, and on every Pages deploy).
 
 New constraint types can be added to `fixturespec.py` and `fmodel.Parameters`
 as they're needed; `spec-schema.json` should be kept in step with them (a
@@ -144,8 +150,12 @@ team's division and display name.
 - `club-<id>.html` — one page per club, headed by that club's full venue
   name and address, with a consolidated table of all the club's matches
   followed by one table per team
-- `index.html` — links to all of the above (a build artifact, fully derived
-  from the files above; see "Publishing via GitHub Pages" below)
+- `index.html` — links to all of the above
+
+None of these HTML pages are committed: they're all build artifacts, derived
+from `spec.yaml` + `solution.yaml` (the report pages) and from each other (the
+index pages), and regenerated on every GitHub Pages deploy -- see "Publishing
+via GitHub Pages" below.
 
 Venue name (not the address), start time and time limit on each match are
 always the *home* team's club's values. If the spec sets `name`, every page
@@ -189,16 +199,22 @@ files `json-schema-for-humans` copies alongside it) and everything under
 `runs/` are plain static HTML, published from the `main` branch at
 <https://amdw.github.io/fixtures/> by `.github/workflows/pages.yml`. All of
 these are build artifacts, not source -- gitignored, and regenerated before
-every deploy from whatever `runs/*/` folders and `spec-schema.json` are
-committed, by `build_indexes.py` and `build_schema_docs.py` respectively.
-`build_indexes.py` has no third-party dependencies (unlike `solve.py`, it needs
-neither ortools nor pyyaml); `build_schema_docs.py` needs
-`json-schema-for-humans`, so the workflow installs the dev dependencies
-first. Run either locally any time you want to preview without a full
-deploy:
+every deploy from whatever `runs/*/` folders (each a committed `spec.yaml` +
+`solution.yaml` pair) and `spec-schema.json` are committed:
+
+- `build_html.py` regenerates every HTML page under `runs/` -- the report
+  pages *and* the per-run and top-level index pages -- from each run folder's
+  `spec.yaml` + `solution.yaml`. It renders the report pages via `report.py`,
+  so it needs the same dependencies (`pyyaml`, and `ortools` via `fmodel`); it
+  does *not* re-run the (slow) solver.
+- `build_schema_docs.py` renders `spec-schema.json`; it needs
+  `json-schema-for-humans`.
+
+The workflow installs the dev dependencies first, so both can run. Run them
+locally any time you want to preview without a full deploy:
 
 ```bash
-python build_indexes.py
+uv run python3 build_html.py
 uv run python3 build_schema_docs.py
 python -m http.server
 ```

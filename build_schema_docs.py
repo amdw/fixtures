@@ -15,11 +15,10 @@
 
 """Render spec-schema.json to a static HTML reference page.
 
-Unlike build_indexes.py, this does need a third-party dependency
-(json-schema-for-humans), so .github/workflows/pages.yml installs the dev
-dependencies before running it. Run it locally with `uv run python3
-build_schema_docs.py` any time you want to preview the reference page without
-going through a full Pages deploy.
+This needs a third-party dependency (json-schema-for-humans), so
+.github/workflows/pages.yml installs the dev dependencies before running it. Run
+it locally with `uv run python3 build_schema_docs.py` any time you want to
+preview the reference page without going through a full Pages deploy.
 """
 
 from __future__ import annotations
