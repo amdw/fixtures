@@ -13,12 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Render spec-schema.json to a static HTML reference page.
+"""Render spec-schema.json to a static HTML reference page under _site/.
 
 This needs a third-party dependency (json-schema-for-humans), so
-.github/workflows/pages.yml installs the dev dependencies before running it. Run
-it locally with `uv run python3 build_schema_docs.py` any time you want to
-preview the reference page without going through a full Pages deploy.
+.github/workflows/pages.yml installs the dev dependencies before running it. It
+writes straight into _site/ (alongside the run reports built by build_html.py),
+which the Pages workflow uploads as-is. Run it locally with `uv run python3
+build_schema_docs.py` any time you want to preview the reference page without
+going through a full Pages deploy.
 """
 
 from __future__ import annotations
@@ -41,8 +43,8 @@ def main() -> None:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path("schema-docs/spec-schema.html"),
-        help="Path of the HTML page to (re)generate (default: schema-docs/spec-schema.html)",
+        default=Path("_site/schema-docs/spec-schema.html"),
+        help="Path of the HTML page to (re)generate (default: _site/schema-docs/spec-schema.html)",
     )
     args = parser.parse_args()
 

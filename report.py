@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """Render a solution.yaml (as written by solve.py), plus its original spec (for
-team/club/exclusion metadata), as a set of HTML report pages.
+team/club/exclusion metadata), as a set of HTML report pages for one run.
 
 Usage:
     python report.py <spec.yaml> <solution.yaml> <output_dir>
@@ -21,6 +21,9 @@ Usage:
 This can be re-run at any time to regenerate the HTML report -- e.g. after
 changing report formatting -- without re-solving, as long as solution.yaml
 still matches the teams described in spec.yaml.
+
+It renders a single run's pages only. To (re)build the whole published site --
+every run's report plus the top-level index -- into _site/, run build_html.py.
 """
 
 from __future__ import annotations
@@ -62,25 +65,11 @@ def main() -> None:
     parser.add_argument(
         "output_dir", type=Path, help="Directory to write this run's HTML report into"
     )
-    parser.add_argument(
-        "--runs-dir",
-        type=Path,
-        default=Path("runs"),
-        help="Directory scanned to rebuild the top-level runs index (default: runs)",
-    )
-    parser.add_argument(
-        "--root-index",
-        type=Path,
-        default=Path("index.html"),
-        help="Path of the top-level index.html to (re)generate (default: index.html)",
-    )
     args = parser.parse_args()
 
     run_index_path = report(args.spec, args.solution, args.output_dir)
-    root_index_path = htmlreport.write_runs_index(args.runs_dir, args.root_index)
 
     print(f"Wrote run report to {run_index_path}")
-    print(f"Updated top-level index at {root_index_path}")
 
 
 if __name__ == "__main__":
