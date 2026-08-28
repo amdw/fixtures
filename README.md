@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This repo generates Middlesex League fixture schedules using an [OR-Tools
+This repo generates [Middlesex League](https://www.middlesexchess.com/mcca-for-chess-clubs/middlesex-league) fixture schedules using an [OR-Tools
 constraint solver](https://developers.google.com/optimization/cp).
 
 ## Setup
