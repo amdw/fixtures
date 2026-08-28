@@ -15,18 +15,18 @@
 """Assemble the published site under _site/ from each run's committed spec + solution.
 
 For each directory anywhere under runs/ that holds both a spec.yaml and a
-solution.yaml, this renders that run's report pages (all-matches.html,
-division-<n>.html, club-<id>.html and the run's index.html) into the matching
-path under _site/runs/; it then writes the top-level _site/index.html linking
-them all. Together with the schema reference page (build_schema_docs.py writes it
-into the same _site/), that's the entire site the Pages workflow deploys -- it
-just uploads _site/ as-is, with no copy step -- so nothing under _site/ needs to
-be committed. See .github/workflows/pages.yml, which runs this before every
-deploy.
+solution.yaml, this renders that run's report files (all-matches.html,
+division-<n>.html, club-<id>.html, the run's index.html, and the all-matches.csv
+/ all-matches-by-team.csv exports) into the matching path under _site/runs/; it
+then writes the top-level _site/index.html linking them all. Together with the
+schema reference page (build_schema_docs.py writes it into the same _site/),
+that's the entire site the Pages workflow deploys -- it just uploads _site/
+as-is, with no copy step -- so nothing under _site/ needs to be committed. See
+.github/workflows/pages.yml, which runs this before every deploy.
 
-It renders the report pages from source via report.py, so it needs the same
+It renders each run from source via report.py, so it needs the same
 dependencies (pyyaml, and ortools via fmodel). It does *not* re-run the solver:
-it only turns each committed solution.yaml back into HTML, so it stays fast
+it only turns each committed solution.yaml back into a report, so it stays fast
 enough to run on every deploy.
 """
 

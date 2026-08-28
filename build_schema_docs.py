@@ -17,7 +17,7 @@
 
 This needs a third-party dependency (json-schema-for-humans), so
 .github/workflows/pages.yml installs the dev dependencies before running it. It
-writes straight into _site/ (alongside the run reports built by build_html.py),
+writes straight into _site/ (alongside the run reports built by build_site.py),
 which the Pages workflow uploads as-is. Run it locally with `uv run python3
 build_schema_docs.py` any time you want to preview the reference page without
 going through a full Pages deploy.

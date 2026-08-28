@@ -77,6 +77,20 @@ class TestReport(unittest.TestCase):
         self.assertTrue((self.output_dir / "all-matches.html").exists())
         self.assertIn("Test Season", (self.output_dir / "all-matches.html").read_text())
 
+    def test_also_writes_csv_exports(self):
+        report.report(self.spec_path, self.solution_path, self.output_dir)
+
+        for name in ("all-matches.csv", "all-matches-by-team.csv"):
+            self.assertTrue((self.output_dir / name).exists(), f"{name} not written")
+        self.assertIn("Albany 1", (self.output_dir / "all-matches.csv").read_text())
+
+    def test_run_index_links_to_the_csv_exports(self):
+        report.report(self.spec_path, self.solution_path, self.output_dir)
+
+        index = (self.output_dir / "index.html").read_text()
+        self.assertIn('href="all-matches.csv"', index)
+        self.assertIn('href="all-matches-by-team.csv"', index)
+
     def test_does_not_require_resolving(self):
         """Deleting nothing but the intermediate solving step should still work:
         report.py only reads solution.yaml, never calls fmodel.solve()."""

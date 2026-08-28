@@ -31,8 +31,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev --locked
 
-      - name: Build run HTML into _site (report and index pages)
-        run: uv run python3 build_html.py
+      - name: Build run reports into _site (HTML pages, CSV exports, index)
+        run: uv run python3 build_site.py
 
       - name: Build schema reference page into _site
         run: uv run python3 build_schema_docs.py
