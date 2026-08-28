@@ -33,23 +33,23 @@ python solve.py runs/2025-26-season/spec.yaml
 This writes `solution.yaml` next to the spec. Re-running overwrites it in
 place, so it's safe to rerun after editing the spec.
 
-Only `spec.yaml` and `solution.yaml` are committed: the HTML report is a build
-artifact, assembled from that pair under `_site/` on every GitHub Pages deploy
-(and gitignored) -- see "Publishing via GitHub Pages" below. The fixed
-`spec.yaml` name is what lets the deploy discover each run folder. To preview
-the report locally without deploying, run `build_html.py` (see that section);
-`report.py` renders a single run's pages into a directory you name, which is
-mainly useful when iterating on report formatting.
+Only `spec.yaml` and `solution.yaml` are committed: the report (HTML pages plus
+CSV exports) is a build artifact, assembled from that pair under `_site/` on
+every GitHub Pages deploy (and gitignored) -- see "Publishing via GitHub Pages"
+below. The fixed `spec.yaml` name is what lets the deploy discover each run
+folder. To preview the report locally without deploying, run `build_site.py`
+(see that section); `report.py` renders a single run's files into a directory
+you name, which is mainly useful when iterating on report formatting.
 
 `solve.py` runs the constraint solver and writes its result to a
 `solution.yaml` file (canonical, solver-independent) next to the spec,
 defaulting the output directory to the spec file's own directory.
-`report.py` turns a `solution.yaml` back into the HTML report, reading the
-original spec alongside it for club/venue/name and excluded-fixture details
-that aren't part of the solution itself. Keeping these as two separate steps
-(rather than one combined command) means the HTML report can be regenerated
--- e.g. after a report formatting change -- without re-running the
-(comparatively slow) solver: just rerun the report build against the existing
+`report.py` turns a `solution.yaml` back into the report (HTML and CSV),
+reading the original spec alongside it for club/venue/name and excluded-fixture
+details that aren't part of the solution itself. Keeping these as two separate
+steps (rather than one combined command) means the report can be regenerated
+-- e.g. after a formatting change -- without re-running the (comparatively
+slow) solver: just rerun the report build against the existing
 `solution.yaml`. It also keeps solve-only flags (e.g. `--earliest-match-date`,
 which excludes newly scheduled fixtures before a given date, defaulting to
 today) on `solve.py` alone, rather than needing to be added to a combined
@@ -115,7 +115,7 @@ fixtures, and more. For the full field-by-field reference, see:
 - **[`runs/example/spec.yaml`](runs/example/spec.yaml)**, a full worked
   example; its `solution.yaml` sits alongside it in
   [`runs/example/`](runs/example/), and its report is built into
-  `_site/runs/example/` (locally via `build_html.py`, and on every Pages
+  `_site/runs/example/` (locally via `build_site.py`, and on every Pages
   deploy).
 
 New constraint types can be added to `fixturespec.py` and `fmodel.Parameters`
@@ -150,17 +150,33 @@ The report build writes, for each run, into `_site/runs/<run path>/`:
 - `club-<id>.html` — one page per club, headed by that club's full venue
   name and address, with a consolidated table of all the club's matches
   followed by one table per team
-- `index.html` — links to all of the above
+- `all-matches.csv` — one row per match, `home_team` vs `away_team`, with
+  `date` (ISO `yyyy-mm-dd`), `division`, and the home club's `venue`,
+  `venue_address`, `start_time` and `time_limit`
+- `all-matches-by-team.csv` — two rows per match, one from each team's point
+  of view (`team`, `opponent`, `home_or_away`), so a club can filter its own
+  team's fixtures straight into a calendar
 
-None of these HTML pages are committed: they're all build artifacts, derived
-from `spec.yaml` + `solution.yaml` (the report pages) and from each other (the
-index pages), and regenerated on every GitHub Pages deploy -- see "Publishing
-via GitHub Pages" below.
+Each team appears as its display name, its club's name (`*_club`) and its
+index within that club (`*_index`), so the club and team number are available
+directly even when the display name is a `name_override`.
+- `index.html` — links to all of the above (the two CSV files are linked from
+  its "All matches" section)
+
+Both CSV files cover every division, and list withheld matches (a spec's
+`exclude_fixtures`) with an empty `date`, mirroring the HTML report's "TBC"
+rows.
+
+None of these files are committed: they're all build artifacts, derived from
+`spec.yaml` + `solution.yaml` (the report pages and CSV) and from each other
+(the index pages), and regenerated on every GitHub Pages deploy -- see
+"Publishing via GitHub Pages" below.
 
 Venue name (not the address), start time and time limit on each match are
-always the *home* team's club's values. If the spec sets `name`, every page
-shows it in a banner above the page title; if `draft: true` is also set,
-that banner is made prominent and prefixed "DRAFT".
+always the *home* team's club's values. If the spec sets `name`, every HTML
+page shows it in a banner above the page title; if `draft: true` is also set,
+that banner is made prominent and prefixed "DRAFT". (The CSV files carry the
+fixture data only, with no such banner.)
 
 ## Development
 
@@ -201,12 +217,11 @@ not source -- gitignored, and regenerated before every deploy from whatever
 `runs/*/` folders (each a committed `spec.yaml` + `solution.yaml` pair) and
 `spec-schema.json` are committed:
 
-- `build_html.py` builds every run's report pages into
-  `_site/runs/<run path>/` -- the per-fixture pages *and* the per-run and
-  top-level index pages -- from each run folder's `spec.yaml` +
-  `solution.yaml`. It renders the report pages via `report.py`, so it needs the
-  same dependencies (`pyyaml`, and `ortools` via `fmodel`); it does *not*
-  re-run the (slow) solver.
+- `build_site.py` builds every run's report into `_site/runs/<run path>/` --
+  the per-fixture HTML pages, the per-run and top-level index pages, *and* the
+  CSV exports -- from each run folder's `spec.yaml` + `solution.yaml`. It runs
+  `report.py` per run, so it needs the same dependencies (`pyyaml`, and
+  `ortools` via `fmodel`); it does *not* re-run the (slow) solver.
 - `build_schema_docs.py` renders `spec-schema.json` into
   `_site/schema-docs/`; it needs `json-schema-for-humans`.
 
@@ -216,7 +231,7 @@ dependencies first, so both scripts can run. Run them locally any time you
 want a preview that exactly matches what gets deployed:
 
 ```bash
-uv run python3 build_html.py
+uv run python3 build_site.py
 uv run python3 build_schema_docs.py
 python -m http.server --directory _site
 ```

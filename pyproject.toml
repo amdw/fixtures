@@ -72,7 +72,7 @@ known-first-party = ["fmodel", "genfixtures"]
 "genfixtures.py" = ["T201"]  # Allow print statements in fixtures generator
 "solve.py" = ["T201"]  # Allow print statements in solve CLI
 "report.py" = ["T201"]  # Allow print statements in report CLI
-"build_html.py" = ["T201"]  # Allow print statements in HTML-rebuild CLI
+"build_site.py" = ["T201"]  # Allow print statements in site-assembly CLI
 "build_schema_docs.py" = ["T201"]  # Allow print statements in schema-docs CLI
 
 [tool.mypy]

@@ -13,17 +13,18 @@
 # limitations under the License.
 
 """Render a solution.yaml (as written by solve.py), plus its original spec (for
-team/club/exclusion metadata), as a set of HTML report pages for one run.
+team/club/exclusion metadata), as the HTML report pages and CSV exports for one
+run.
 
 Usage:
     python report.py <spec.yaml> <solution.yaml> <output_dir>
 
-This can be re-run at any time to regenerate the HTML report -- e.g. after
-changing report formatting -- without re-solving, as long as solution.yaml
-still matches the teams described in spec.yaml.
+This can be re-run at any time to regenerate the report -- e.g. after changing
+report formatting -- without re-solving, as long as solution.yaml still matches
+the teams described in spec.yaml.
 
-It renders a single run's pages only. To (re)build the whole published site --
-every run's report plus the top-level index -- into _site/, run build_html.py.
+It renders a single run's files only. To (re)build the whole published site --
+every run's report plus the top-level index -- into _site/, run build_site.py.
 """
 
 from __future__ import annotations
@@ -31,18 +32,27 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import csvreport
 import fixturesolution
 import fixturespec
 import htmlreport
 
 
 def report(spec_path: Path, solution_path: Path, output_dir: Path) -> Path:
-    """Render solution_path (a solution.yaml solved from spec_path) into output_dir.
-    Returns the path to the run's index.html."""
+    """Render solution_path (a solution.yaml solved from spec_path) into output_dir,
+    as the HTML report pages and the CSV exports. Returns the path to the run's
+    index.html."""
     spec = fixturespec.load_spec(spec_path)
     team_ids = fixturespec.load_team_ids(spec_path)
     fixtures = fixturesolution.load_solution(
         solution_path, spec.parameters.teams, team_ids
+    )
+    csvreport.generate_csv(
+        fixtures,
+        spec.parameters.teams,
+        spec.clubs,
+        output_dir,
+        excluded_fixtures=spec.parameters.excluded_fixtures,
     )
     return htmlreport.generate_report(
         fixtures,
@@ -69,7 +79,7 @@ def main() -> None:
 
     run_index_path = report(args.spec, args.solution, args.output_dir)
 
-    print(f"Wrote run report to {run_index_path}")
+    print(f"Wrote run report (HTML and CSV) to {run_index_path.parent}")
 
 
 if __name__ == "__main__":

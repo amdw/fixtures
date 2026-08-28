@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Test cases for the HTML-rebuilding CLI used by the Pages workflow."""
+"""Test cases for the site-assembly CLI used by the Pages workflow."""
 
 import shutil
 import tempfile
@@ -20,7 +20,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import build_html
+import build_site
 import solve
 
 _SPEC = """
@@ -85,7 +85,7 @@ class TestFindRunSpecs(unittest.TestCase):
             (d / "spec.yaml").write_text("clubs: {}\n")
             (d / "solution.yaml").write_text("fixtures: []\n")
 
-        self.assertEqual(build_html.find_run_specs(self.runs_dir), [nested, flat])
+        self.assertEqual(build_site.find_run_specs(self.runs_dir), [nested, flat])
 
     def test_ignores_dirs_missing_spec_or_solution(self):
         (self.runs_dir / "spec-only").mkdir(parents=True)
@@ -93,10 +93,10 @@ class TestFindRunSpecs(unittest.TestCase):
         (self.runs_dir / "solution-only").mkdir(parents=True)
         (self.runs_dir / "solution-only" / "solution.yaml").write_text("fixtures: []\n")
 
-        self.assertEqual(build_html.find_run_specs(self.runs_dir), [])
+        self.assertEqual(build_site.find_run_specs(self.runs_dir), [])
 
     def test_missing_runs_dir(self):
-        self.assertEqual(build_html.find_run_specs(self.runs_dir), [])
+        self.assertEqual(build_site.find_run_specs(self.runs_dir), [])
 
 
 class TestBuildReports(unittest.TestCase):
@@ -113,14 +113,14 @@ class TestBuildReports(unittest.TestCase):
         with patch(
             "sys.argv",
             [
-                "build_html.py",
+                "build_site.py",
                 "--runs-dir",
                 str(self.runs_dir),
                 "--out-dir",
                 str(self.out_dir),
             ],
         ):
-            build_html.main()
+            build_site.main()
 
     def test_regenerates_report_and_index_pages_from_source(self):
         flat = self.runs_dir / "example"
@@ -132,7 +132,13 @@ class TestBuildReports(unittest.TestCase):
 
         for rel in (Path("example"), Path("2026-27") / "draft1"):
             out_run = self.out_dir / "runs" / rel
-            for page in ("all-matches.html", "division-1.html", "index.html"):
+            for page in (
+                "all-matches.html",
+                "division-1.html",
+                "index.html",
+                "all-matches.csv",
+                "all-matches-by-team.csv",
+            ):
                 self.assertTrue(
                     (out_run / page).exists(), f"{out_run / page} not written"
                 )
@@ -150,10 +156,13 @@ class TestBuildReports(unittest.TestCase):
 
         self._run_cli()
 
+        strays = sorted(
+            p.name
+            for p in (self.runs_dir / "example").iterdir()
+            if p.name not in ("spec.yaml", "solution.yaml")
+        )
         self.assertEqual(
-            list((self.runs_dir / "example").glob("*.html")),
-            [],
-            "build_html.py should not write HTML back into the source runs dir",
+            strays, [], f"build_site.py wrote {strays} back into the source runs dir"
         )
 
     def test_drops_runs_removed_from_the_source(self):

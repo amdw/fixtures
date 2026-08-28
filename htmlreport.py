@@ -17,7 +17,7 @@
 The index-building helpers here (build_run_index and write_runs_index) derive
 the per-run and top-level index.html pages purely from the report files present
 on disk, without needing the original fixtures/teams data or any third-party
-dependency. build_html.py calls them after re-rendering the report pages during
+dependency. build_site.py calls them after re-rendering the report pages during
 a GitHub Pages deploy.
 """
 
@@ -31,6 +31,8 @@ from collections.abc import Collection, Mapping
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import reportdata
 
 if TYPE_CHECKING:
     import fmodel
@@ -173,65 +175,18 @@ def _table(headers: list[str], rows: list[list[str]]) -> str:
     )
 
 
-def _team_name(team: fmodel.Team, clubs: Mapping[str, fmodel.Club]) -> str:
-    if team.name_override:
-        return team.name_override
-    return f"{clubs[team.club].name} {team.index}"
-
-
-def _team_sort_key(
-    team: fmodel.Team, clubs: Mapping[str, fmodel.Club]
-) -> tuple[str, int]:
-    """(club name, team index) of a team, used as a sort tie-break throughout."""
-    return (clubs[team.club].name, team.index)
-
-
-def _by_date_home_away(
-    fixtures: Collection[fmodel.ScheduledFixture],
-    clubs: Mapping[str, fmodel.Club],
-    with_division: bool,
-) -> list[fmodel.ScheduledFixture]:
-    def key(sf: fmodel.ScheduledFixture) -> tuple:
-        home_team = sf.fixture.home_team
-        division_part = (home_team.division,) if with_division else ()
-        return (
-            sf.date,
-            *division_part,
-            *_team_sort_key(home_team, clubs),
-            *_team_sort_key(sf.fixture.away_team, clubs),
-        )
-
-    return sorted(fixtures, key=key)
-
-
-def _by_date_opponent(
-    team: fmodel.Team,
-    fixtures: Collection[fmodel.ScheduledFixture],
-    clubs: Mapping[str, fmodel.Club],
-) -> list[fmodel.ScheduledFixture]:
-    def key(sf: fmodel.ScheduledFixture) -> tuple:
-        opponent = (
-            sf.fixture.away_team
-            if sf.fixture.home_team == team
-            else sf.fixture.home_team
-        )
-        return (sf.date, *_team_sort_key(opponent, clubs))
-
-    return sorted(fixtures, key=key)
-
-
 def _rows_with_division(
     fixtures: Collection[fmodel.ScheduledFixture], clubs: Mapping[str, fmodel.Club]
 ) -> list[list[str]]:
     rows = []
-    for sf in _by_date_home_away(fixtures, clubs, with_division=True):
+    for sf in reportdata.by_date_home_away(fixtures, clubs, with_division=True):
         home_club = clubs[sf.fixture.home_team.club]
         rows.append(
             [
                 _fmt_date(sf.date),
                 str(sf.fixture.home_team.division),
-                _team_name(sf.fixture.home_team, clubs),
-                _team_name(sf.fixture.away_team, clubs),
+                reportdata.team_name(sf.fixture.home_team, clubs),
+                reportdata.team_name(sf.fixture.away_team, clubs),
                 home_club.home_venue_name,
                 home_club.home_start_time,
                 home_club.home_time_limit,
@@ -244,13 +199,13 @@ def _rows(
     fixtures: Collection[fmodel.ScheduledFixture], clubs: Mapping[str, fmodel.Club]
 ) -> list[list[str]]:
     rows = []
-    for sf in _by_date_home_away(fixtures, clubs, with_division=False):
+    for sf in reportdata.by_date_home_away(fixtures, clubs, with_division=False):
         home_club = clubs[sf.fixture.home_team.club]
         rows.append(
             [
                 _fmt_date(sf.date),
-                _team_name(sf.fixture.home_team, clubs),
-                _team_name(sf.fixture.away_team, clubs),
+                reportdata.team_name(sf.fixture.home_team, clubs),
+                reportdata.team_name(sf.fixture.away_team, clubs),
                 home_club.home_venue_name,
                 home_club.home_start_time,
                 home_club.home_time_limit,
@@ -270,14 +225,14 @@ def _team_rows(
 ) -> list[list[str]]:
     rows = []
     prev_date: date | None = None
-    for sf in _by_date_opponent(team, fixtures, clubs):
+    for sf in reportdata.by_date_opponent(team, fixtures, clubs):
         is_home = sf.fixture.home_team == team
         opponent = sf.fixture.away_team if is_home else sf.fixture.home_team
         home_club = clubs[sf.fixture.home_team.club]
         rows.append(
             [
                 _fmt_date(sf.date),
-                _team_name(opponent, clubs),
+                reportdata.team_name(opponent, clubs),
                 "Home" if is_home else "Away",
                 home_club.home_venue_name,
                 home_club.home_start_time,
@@ -289,34 +244,18 @@ def _team_rows(
     return rows
 
 
-def _by_home_away(
-    fixtures: Collection[fmodel.Fixture],
-    clubs: Mapping[str, fmodel.Club],
-    with_division: bool,
-) -> list[fmodel.Fixture]:
-    def key(f: fmodel.Fixture) -> tuple:
-        division_part = (f.home_team.division,) if with_division else ()
-        return (
-            *division_part,
-            *_team_sort_key(f.home_team, clubs),
-            *_team_sort_key(f.away_team, clubs),
-        )
-
-    return sorted(fixtures, key=key)
-
-
 def _excluded_rows_with_division(
     fixtures: Collection[fmodel.Fixture], clubs: Mapping[str, fmodel.Club]
 ) -> list[list[str]]:
     rows = []
-    for f in _by_home_away(fixtures, clubs, with_division=True):
+    for f in reportdata.by_home_away(fixtures, clubs, with_division=True):
         home_club = clubs[f.home_team.club]
         rows.append(
             [
                 "TBC",
                 str(f.home_team.division),
-                _team_name(f.home_team, clubs),
-                _team_name(f.away_team, clubs),
+                reportdata.team_name(f.home_team, clubs),
+                reportdata.team_name(f.away_team, clubs),
                 home_club.home_venue_name,
                 home_club.home_start_time,
                 home_club.home_time_limit,
@@ -329,13 +268,13 @@ def _excluded_rows(
     fixtures: Collection[fmodel.Fixture], clubs: Mapping[str, fmodel.Club]
 ) -> list[list[str]]:
     rows = []
-    for f in _by_home_away(fixtures, clubs, with_division=False):
+    for f in reportdata.by_home_away(fixtures, clubs, with_division=False):
         home_club = clubs[f.home_team.club]
         rows.append(
             [
                 "TBC",
-                _team_name(f.home_team, clubs),
-                _team_name(f.away_team, clubs),
+                reportdata.team_name(f.home_team, clubs),
+                reportdata.team_name(f.away_team, clubs),
                 home_club.home_venue_name,
                 home_club.home_start_time,
                 home_club.home_time_limit,
@@ -352,7 +291,7 @@ def _excluded_team_rows(
     rows = []
     for f in sorted(
         fixtures,
-        key=lambda f: _team_sort_key(
+        key=lambda f: reportdata.team_sort_key(
             f.away_team if f.home_team == team else f.home_team, clubs
         ),
     ):
@@ -362,7 +301,7 @@ def _excluded_team_rows(
         rows.append(
             [
                 "TBC",
-                _team_name(opponent, clubs),
+                reportdata.team_name(opponent, clubs),
                 "Home" if is_home else "Away",
                 home_club.home_venue_name,
                 home_club.home_start_time,
@@ -547,7 +486,7 @@ def generate_report(
                 for f in excluded_fixtures
                 if f.home_team == team or f.away_team == team
             ]
-            team_name = _team_name(team, clubs)
+            team_name = reportdata.team_name(team, clubs)
             body += _anchored_heading(2, team_name, slugify(team_name))
             body += f"<h3>Division {team.division}</h3>\n"
             body += _table(
@@ -569,8 +508,17 @@ def build_run_index(run_dir: Path) -> Path:
     club_paths = sorted(run_dir.glob("club-*.html"))
 
     body = "<h2>All matches</h2>\n"
+    all_matches_links: list[tuple[str, str]] = []
     if all_matches_path.exists():
-        body += _nav([("all-matches.html", _page_title(all_matches_path))])
+        all_matches_links.append(("all-matches.html", _page_title(all_matches_path)))
+    for csv_name, csv_label in (
+        ("all-matches.csv", "CSV: one row per match"),
+        ("all-matches-by-team.csv", "CSV: two rows per match, one per team"),
+    ):
+        if (run_dir / csv_name).exists():
+            all_matches_links.append((csv_name, csv_label))
+    if all_matches_links:
+        body += _nav(all_matches_links)
     body += "<h2>Divisions</h2>\n"
     body += _nav([(p.name, _page_title(p)) for p in division_paths])
     body += "<h2>Clubs</h2>\n"

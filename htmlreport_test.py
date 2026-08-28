@@ -231,6 +231,23 @@ class TestGenerateReport(unittest.TestCase):
         self.assertIn(">Division 1<", content)
         self.assertIn(">Willesden &amp; Brent<", content)
 
+    def test_run_index_links_to_csv_exports_when_present(self):
+        for name in ("all-matches.csv", "all-matches-by-team.csv"):
+            (self.output_dir / name).write_text("date\n")
+
+        content = htmlreport.build_run_index(self.output_dir).read_text()
+
+        self.assertIn('href="all-matches.csv"', content)
+        self.assertIn('href="all-matches-by-team.csv"', content)
+        # Grouped under the "All matches" heading, ahead of the divisions list.
+        self.assertLess(
+            content.index("all-matches.csv"), content.index("<h2>Divisions</h2>")
+        )
+
+    def test_run_index_has_no_csv_links_when_exports_absent(self):
+        # setUp's generate_report() writes HTML pages only, no CSV files.
+        self.assertNotIn(".csv", self.index_path.read_text())
+
     def test_build_run_index_is_rebuildable_from_disk_alone(self):
         """Deleting index.html and rebuilding from the other report files must reproduce it."""
         self.index_path.unlink()
