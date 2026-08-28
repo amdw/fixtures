@@ -8,16 +8,10 @@ dist/
 wheels/
 *.egg-info
 
-# Every HTML page under runs/, and the top-level index.html, is fully derived
-# from the committed spec.yaml + solution.yaml of each run (the report pages via
-# report.py / build_reports.py, the index pages via build_indexes.py on top of
-# those), and is regenerated on demand and at Pages deploy time, so none of it
-# needs to be committed.
-/index.html
-runs/**/*.html
-
-# The schema reference page (and whatever support files json-schema-for-humans
-# copies alongside it) is fully derived from spec-schema.json and is rebuilt
-# on demand (build_schema_docs.py) and at Pages deploy time, so none of it
-# needs to be committed.
-/schema-docs/
+# The published site is assembled entirely under _site/ -- the run reports and
+# top-level index by build_html.py, the schema reference page by
+# build_schema_docs.py -- from the committed spec.yaml + solution.yaml of each
+# run under runs/ and from spec-schema.json. It's a build artifact, regenerated
+# on demand and at Pages deploy time (see .github/workflows/pages.yml), so none
+# of it needs to be committed.
+/_site/

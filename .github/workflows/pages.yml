@@ -31,18 +31,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev --locked
 
-      - name: Rebuild all run HTML (report and index pages)
+      - name: Build run HTML into _site (report and index pages)
         run: uv run python3 build_html.py
 
-      - name: Rebuild schema reference page
+      - name: Build schema reference page into _site
         run: uv run python3 build_schema_docs.py
-
-      - name: Assemble site
-        run: |
-          mkdir -p _site
-          cp index.html _site/index.html
-          cp -r schema-docs _site/schema-docs
-          if [ -d runs ]; then cp -r runs _site/runs; fi
 
       - name: Upload pages artifact
         uses: actions/upload-pages-artifact@v5

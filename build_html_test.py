@@ -14,6 +14,7 @@
 
 """Test cases for the HTML-rebuilding CLI used by the Pages workflow."""
 
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -105,7 +106,8 @@ class TestBuildReports(unittest.TestCase):
         self.addCleanup(self._tmpdir.cleanup)
         self.root = Path(self._tmpdir.name)
         self.runs_dir = self.root / "runs"
-        self.root_index = self.root / "index.html"
+        self.out_dir = self.root / "_site"
+        self.root_index = self.out_dir / "index.html"
 
     def _run_cli(self) -> None:
         with patch(
@@ -114,8 +116,8 @@ class TestBuildReports(unittest.TestCase):
                 "build_html.py",
                 "--runs-dir",
                 str(self.runs_dir),
-                "--root-index",
-                str(self.root_index),
+                "--out-dir",
+                str(self.out_dir),
             ],
         ):
             build_html.main()
@@ -128,16 +130,44 @@ class TestBuildReports(unittest.TestCase):
 
         self._run_cli()
 
-        for run_dir in (flat, nested):
+        for rel in (Path("example"), Path("2026-27") / "draft1"):
+            out_run = self.out_dir / "runs" / rel
             for page in ("all-matches.html", "division-1.html", "index.html"):
                 self.assertTrue(
-                    (run_dir / page).exists(), f"{run_dir / page} not written"
+                    (out_run / page).exists(), f"{out_run / page} not written"
                 )
-        self.assertIn("Example Season", (flat / "all-matches.html").read_text())
+        self.assertIn(
+            "Example Season",
+            (self.out_dir / "runs" / "example" / "all-matches.html").read_text(),
+        )
 
         root = self.root_index.read_text()
         self.assertIn("runs/example/index.html", root)
         self.assertIn("runs/2026-27/draft1/index.html", root)
+
+    def test_writes_nothing_into_the_source_runs_dir(self):
+        _make_run(self.runs_dir / "example", "Example Season")
+
+        self._run_cli()
+
+        self.assertEqual(
+            list((self.runs_dir / "example").glob("*.html")),
+            [],
+            "build_html.py should not write HTML back into the source runs dir",
+        )
+
+    def test_drops_runs_removed_from_the_source(self):
+        _make_run(self.runs_dir / "keep", "Keep")
+        _make_run(self.runs_dir / "drop", "Drop")
+        self._run_cli()
+        self.assertTrue((self.out_dir / "runs" / "drop" / "index.html").exists())
+
+        shutil.rmtree(self.runs_dir / "drop")
+        self._run_cli()
+
+        self.assertFalse((self.out_dir / "runs" / "drop").exists())
+        self.assertTrue((self.out_dir / "runs" / "keep" / "index.html").exists())
+        self.assertNotIn("runs/drop/index.html", self.root_index.read_text())
 
     def test_does_not_re_solve(self):
         run_dir = self.runs_dir / "example"

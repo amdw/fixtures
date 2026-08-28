@@ -23,24 +23,23 @@ contexts, since the venv already exists once `uv sync --dev` has been run.
 ## New run setup
 
 Describe the clubs, teams, divisions and constraints in a YAML specification
-file named `spec.yaml`, placed inside the run folder you want its output
-written to (e.g. `runs/2025-26-season/spec.yaml`), then run the solver against
-it, followed by the report generator:
+file named `spec.yaml`, placed inside the run folder you want it published
+under (e.g. `runs/2025-26-season/spec.yaml`), then solve it:
 
 ```bash
 python solve.py runs/2025-26-season/spec.yaml
-python report.py runs/2025-26-season/spec.yaml runs/2025-26-season/solution.yaml runs/2025-26-season
 ```
 
-This solves the fixtures and writes the HTML report alongside the spec in
-`runs/2025-26-season/`. Re-running both overwrites the previous solution and
-report in place, so it's safe to rerun after editing the spec.
+This writes `solution.yaml` next to the spec. Re-running overwrites it in
+place, so it's safe to rerun after editing the spec.
 
-Only `spec.yaml` and `solution.yaml` need committing: the HTML report is a
-build artifact, regenerated from that pair on every GitHub Pages deploy (and
-gitignored) -- see "Publishing via GitHub Pages" below. The fixed `spec.yaml`
-name is what lets the deploy discover each run folder; running `report.py`
-by hand is only needed to preview report-formatting changes locally.
+Only `spec.yaml` and `solution.yaml` are committed: the HTML report is a build
+artifact, assembled from that pair under `_site/` on every GitHub Pages deploy
+(and gitignored) -- see "Publishing via GitHub Pages" below. The fixed
+`spec.yaml` name is what lets the deploy discover each run folder. To preview
+the report locally without deploying, run `build_html.py` (see that section);
+`report.py` renders a single run's pages into a directory you name, which is
+mainly useful when iterating on report formatting.
 
 `solve.py` runs the constraint solver and writes its result to a
 `solution.yaml` file (canonical, solver-independent) next to the spec,
@@ -50,7 +49,7 @@ original spec alongside it for club/venue/name and excluded-fixture details
 that aren't part of the solution itself. Keeping these as two separate steps
 (rather than one combined command) means the HTML report can be regenerated
 -- e.g. after a report formatting change -- without re-running the
-(comparatively slow) solver: just rerun `report.py` against the existing
+(comparatively slow) solver: just rerun the report build against the existing
 `solution.yaml`. It also keeps solve-only flags (e.g. `--earliest-match-date`,
 which excludes newly scheduled fixtures before a given date, defaulting to
 today) on `solve.py` alone, rather than needing to be added to a combined
@@ -115,8 +114,9 @@ fixtures, and more. For the full field-by-field reference, see:
   [`runs/example/spec.yaml`](runs/example/spec.yaml) for an example.
 - **[`runs/example/spec.yaml`](runs/example/spec.yaml)**, a full worked
   example; its `solution.yaml` sits alongside it in
-  [`runs/example/`](runs/example/), and its report renders into the same
-  folder (locally via `report.py`, and on every Pages deploy).
+  [`runs/example/`](runs/example/), and its report is built into
+  `_site/runs/example/` (locally via `build_html.py`, and on every Pages
+  deploy).
 
 New constraint types can be added to `fixturespec.py` and `fmodel.Parameters`
 as they're needed; `spec-schema.json` should be kept in step with them (a
@@ -136,11 +136,11 @@ fixtures:
     date: 2025-09-01
 ```
 
-It only makes sense alongside the spec it was solved from -- `report.py`
+It only makes sense alongside the spec it was solved from -- the report build
 resolves each entry's team IDs against that spec's `teams` to recover each
 team's division and display name.
 
-`report.py` then writes, into the run's folder:
+The report build writes, for each run, into `_site/runs/<run path>/`:
 
 - `all-matches.html` — every fixture (date, division, home, away, venue
   name, start time, time limit), followed by a list of the full venue
@@ -194,44 +194,34 @@ python genfixtures.py
 
 ### Publishing via GitHub Pages
 
-The root `index.html`, `schema-docs/spec-schema.html` (plus whatever support
-files `json-schema-for-humans` copies alongside it) and everything under
-`runs/` are plain static HTML, published from the `main` branch at
-<https://amdw.github.io/fixtures/> by `.github/workflows/pages.yml`. All of
-these are build artifacts, not source -- gitignored, and regenerated before
-every deploy from whatever `runs/*/` folders (each a committed `spec.yaml` +
-`solution.yaml` pair) and `spec-schema.json` are committed:
+The whole published site is assembled under `_site/` and published from the
+`main` branch at <https://amdw.github.io/fixtures/> by
+`.github/workflows/pages.yml`. Everything under `_site/` is a build artifact,
+not source -- gitignored, and regenerated before every deploy from whatever
+`runs/*/` folders (each a committed `spec.yaml` + `solution.yaml` pair) and
+`spec-schema.json` are committed:
 
-- `build_html.py` regenerates every HTML page under `runs/` -- the report
-  pages *and* the per-run and top-level index pages -- from each run folder's
-  `spec.yaml` + `solution.yaml`. It renders the report pages via `report.py`,
-  so it needs the same dependencies (`pyyaml`, and `ortools` via `fmodel`); it
-  does *not* re-run the (slow) solver.
-- `build_schema_docs.py` renders `spec-schema.json`; it needs
-  `json-schema-for-humans`.
+- `build_html.py` builds every run's report pages into
+  `_site/runs/<run path>/` -- the per-fixture pages *and* the per-run and
+  top-level index pages -- from each run folder's `spec.yaml` +
+  `solution.yaml`. It renders the report pages via `report.py`, so it needs the
+  same dependencies (`pyyaml`, and `ortools` via `fmodel`); it does *not*
+  re-run the (slow) solver.
+- `build_schema_docs.py` renders `spec-schema.json` into
+  `_site/schema-docs/`; it needs `json-schema-for-humans`.
 
-The workflow installs the dev dependencies first, so both can run. Run them
-locally any time you want to preview without a full deploy:
+Both write straight into `_site/`, so the workflow uploads that directory
+as-is -- there's no separate copy/assemble step. It installs the dev
+dependencies first, so both scripts can run. Run them locally any time you
+want a preview that exactly matches what gets deployed:
 
 ```bash
 uv run python3 build_html.py
 uv run python3 build_schema_docs.py
-python -m http.server
-```
-
-Open <http://localhost:8000/> — it's the same files the Pages workflow
-deploys (the rest of the repo is visible too, but harmless; the workflow just
-doesn't copy it into the deployed site). For a preview that's an exact match
-of what gets deployed, replicate the workflow's "Assemble site" step first
-and serve that instead:
-
-```bash
-mkdir -p _site
-cp index.html _site/index.html
-cp -r schema-docs _site/schema-docs
-cp -r runs _site/runs
 python -m http.server --directory _site
 ```
+
+Open <http://localhost:8000/>.
 
 ## License
 
