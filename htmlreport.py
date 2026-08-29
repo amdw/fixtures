@@ -16,9 +16,8 @@
 
 The index-building helpers here (build_run_index and write_runs_index) derive
 the per-run and top-level index.html pages purely from the report files present
-on disk, without needing the original fixtures/teams data or any third-party
-dependency. build_site.py calls them after re-rendering the report pages during
-a GitHub Pages deploy.
+on disk, without needing the original fixtures/teams data. build_site.py calls
+them after re-rendering the report pages during a GitHub Pages deploy.
 """
 
 from __future__ import annotations
@@ -32,10 +31,11 @@ from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import fmodel
 import reportdata
 
 if TYPE_CHECKING:
-    import fmodel
+    import fixturespec
 
 _STYLE = """
     body { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
@@ -323,6 +323,19 @@ def _anchored_heading(level: int, text: str, anchor_id: str) -> str:
     )
 
 
+def _scheme_subheading(
+    level: int,
+    division_schemes: Mapping[int, fmodel.FixtureScheme],
+    division: int,
+) -> str:
+    """An <hN> sub-heading naming one division's fixture-generation scheme, for the
+    pages and sections that show a single unambiguous division. A division not
+    present in division_schemes uses the default (a double round)."""
+    single = division_schemes.get(division) is fmodel.FixtureScheme.SINGLE_ROUND
+    text = "Single-round all-play-all" if single else "Double-round all-play-all"
+    return f"<h{level}>{html.escape(text)}</h{level}>\n"
+
+
 def _venue_header(club: fmodel.Club) -> str:
     return (
         f'<p class="venue"><strong>{html.escape(club.home_venue_name)}</strong><br>\n'
@@ -385,24 +398,27 @@ _MATCH_HEADERS_WITH_DIVISION = [
 
 
 def generate_report(
+    spec: fixturespec.Spec,
     fixtures: Collection[fmodel.ScheduledFixture],
-    teams: Collection[fmodel.Team],
-    clubs: Mapping[str, fmodel.Club],
     output_dir: Path,
-    excluded_fixtures: Collection[fmodel.Fixture] = (),
-    name: str = "",
-    draft: bool = False,
-    description: str = "",
 ) -> Path:
     """Write all HTML report pages for a solved fixture list into output_dir.
 
-    excluded_fixtures (fixtures withheld from scheduling entirely, to be arranged
-    in a later run) are appended to the bottom of every relevant table with "TBC"
-    in place of a date.
+    `spec` supplies everything about the season except the solved dates -- teams,
+    clubs, the run name/draft/description banners, each division's fixture scheme,
+    and any excluded_fixtures (withheld from scheduling entirely, to be arranged
+    in a later run; these are appended to the bottom of every relevant table with
+    "TBC" in place of a date). `fixtures` is the solved schedule for that spec.
 
     Returns the path to the run's index.html.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    teams = spec.parameters.teams
+    clubs = spec.clubs
+    excluded_fixtures = spec.parameters.excluded_fixtures
+    schemes = spec.parameters.division_schemes
+    name, draft, description = spec.name, spec.draft, spec.description
 
     fixtures_by_division: dict[int, list[fmodel.ScheduledFixture]] = defaultdict(list)
     for sf in fixtures:
@@ -455,7 +471,8 @@ def generate_report(
         (output_dir / f"division-{division}.html").write_text(
             _page(
                 f"Division {division}",
-                _table(
+                _scheme_subheading(2, schemes, division)
+                + _table(
                     _MATCH_HEADERS,
                     _rows(fixtures_by_division[division], clubs)
                     + _excluded_rows(excluded_by_division[division], clubs),
@@ -489,6 +506,7 @@ def generate_report(
             team_name = reportdata.team_name(team, clubs)
             body += _anchored_heading(2, team_name, slugify(team_name))
             body += f"<h3>Division {team.division}</h3>\n"
+            body += _scheme_subheading(4, schemes, team.division)
             body += _table(
                 _TEAM_MATCH_HEADERS,
                 _team_rows(team, team_fixtures, clubs)

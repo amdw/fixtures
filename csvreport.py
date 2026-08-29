@@ -45,6 +45,7 @@ from typing import TYPE_CHECKING
 import reportdata
 
 if TYPE_CHECKING:
+    import fixturespec
     import fmodel
 
 ALL_MATCHES_FILENAME = "all-matches.csv"
@@ -192,18 +193,22 @@ def _write_csv(path: Path, header: list[str], rows: list[list[str]]) -> None:
 
 
 def generate_csv(
+    spec: fixturespec.Spec,
     fixtures: Collection[fmodel.ScheduledFixture],
-    teams: Collection[fmodel.Team],
-    clubs: Mapping[str, fmodel.Club],
     output_dir: Path,
-    excluded_fixtures: Collection[fmodel.Fixture] = (),
 ) -> list[Path]:
     """Write the CSV exports of a solved fixture list into output_dir.
 
-    See the module docstring for the two files and their columns. Returns the
-    paths written, in the order (all-matches, all-matches-by-team).
+    `spec` supplies the teams, clubs and any excluded_fixtures (withheld matches,
+    written with an empty date); `fixtures` is the solved schedule for it. See the
+    module docstring for the two files and their columns. Returns the paths
+    written, in the order (all-matches, all-matches-by-team).
     """
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    teams = spec.parameters.teams
+    clubs = spec.clubs
+    excluded_fixtures = spec.parameters.excluded_fixtures
 
     all_matches_path = output_dir / ALL_MATCHES_FILENAME
     _write_csv(
