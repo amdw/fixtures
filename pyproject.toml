@@ -96,12 +96,6 @@ disallow_untyped_defs = false  # Too strict for test files initially
 disallow_incomplete_defs = false
 no_implicit_optional = false
 
-# Per-module options
-# Be less strict on test files initially
-[[tool.mypy.overrides]]
-module = ["helpers_test", "model_test"]
-ignore_errors = true
-
 # No type stubs published for this package
 [[tool.mypy.overrides]]
 module = ["json_schema_for_humans.*"]

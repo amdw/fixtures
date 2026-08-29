@@ -26,6 +26,9 @@ import genfixtures
 class TestSolve(unittest.TestCase):
     """Test cases for the solve() function."""
 
+    params: fmodel.Parameters
+    fixtures: list[fmodel.ScheduledFixture]
+
     @classmethod
     def setUpClass(cls):
         """Set up class-level data by solving once with real parameters."""
@@ -42,7 +45,7 @@ class TestSolve(unittest.TestCase):
 
     def test_fixture_uniqueness(self):
         """Test that all fixtures are unique."""
-        fixture_pairs = set()
+        fixture_pairs: set[tuple[fmodel.Team, fmodel.Team]] = set()
         for sf in self.fixtures:
             pair = (sf.fixture.home_team, sf.fixture.away_team)
             self.assertNotIn(pair, fixture_pairs, f"Duplicate fixture: {pair}")
@@ -95,7 +98,9 @@ class TestSolve(unittest.TestCase):
     def test_max_concurrent_home_constraint(self):
         """Test max concurrent home matches constraint with real parameters."""
         # Count home fixtures per club per date
-        home_fixtures_by_club_date = collections.defaultdict(int)
+        home_fixtures_by_club_date: dict[tuple[str, date], int] = (
+            collections.defaultdict(int)
+        )
         for sf in self.fixtures:
             key = (sf.fixture.home_team.club, sf.date)
             home_fixtures_by_club_date[key] += 1
@@ -171,8 +176,8 @@ class TestSolve(unittest.TestCase):
     def test_fixture_count_by_division(self):
         """Test that fixture counts are correct for each division with real parameters."""
         # Count fixtures by division
-        fixtures_by_division = collections.defaultdict(int)
-        teams_by_division = collections.defaultdict(int)
+        fixtures_by_division: dict[int, int] = collections.defaultdict(int)
+        teams_by_division: dict[int, int] = collections.defaultdict(int)
 
         for team in self.params.teams:
             teams_by_division[team.division] += 1
@@ -192,8 +197,8 @@ class TestSolve(unittest.TestCase):
 
     def test_teams_play_both_home_and_away(self):
         """Test that each team plays both home and away fixtures with real parameters."""
-        home_fixtures_by_team = collections.defaultdict(int)
-        away_fixtures_by_team = collections.defaultdict(int)
+        home_fixtures_by_team: dict[fmodel.Team, int] = collections.defaultdict(int)
+        away_fixtures_by_team: dict[fmodel.Team, int] = collections.defaultdict(int)
 
         for sf in self.fixtures:
             home_fixtures_by_team[sf.fixture.home_team] += 1

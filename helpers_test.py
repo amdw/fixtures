@@ -119,7 +119,7 @@ class TestGenDates(unittest.TestCase):
         end = date(2025, 1, 7)  # Tuesday
 
         result = genfixtures.gen_dates(start, end, calendar.WEDNESDAY)
-        expected = []
+        expected: list[date] = []
 
         self.assertEqual(result, expected)
 
