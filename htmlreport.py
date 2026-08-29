@@ -323,17 +323,14 @@ def _anchored_heading(level: int, text: str, anchor_id: str) -> str:
     )
 
 
-def _scheme_subheading(
-    level: int,
-    division_schemes: Mapping[int, fmodel.FixtureScheme],
-    division: int,
+def _scheme_label(
+    division_schemes: Mapping[int, fmodel.FixtureScheme], division: int
 ) -> str:
-    """An <hN> sub-heading naming one division's fixture-generation scheme, for the
-    pages and sections that show a single unambiguous division. A division not
-    present in division_schemes uses the default (a double round)."""
+    """The name of a division's fixture-generation scheme, for the pages and
+    sections that cover a single unambiguous division. A division not present in
+    division_schemes uses the default (a double round)."""
     single = division_schemes.get(division) is fmodel.FixtureScheme.SINGLE_ROUND
-    text = "Single-round all-play-all" if single else "Double-round all-play-all"
-    return f"<h{level}>{html.escape(text)}</h{level}>\n"
+    return "Single-round all-play-all" if single else "Double-round all-play-all"
 
 
 def _venue_header(club: fmodel.Club) -> str:
@@ -471,7 +468,7 @@ def generate_report(
         (output_dir / f"division-{division}.html").write_text(
             _page(
                 f"Division {division}",
-                _scheme_subheading(2, schemes, division)
+                f"<h2>{html.escape(_scheme_label(schemes, division))}</h2>\n"
                 + _table(
                     _MATCH_HEADERS,
                     _rows(fixtures_by_division[division], clubs)
@@ -505,8 +502,8 @@ def generate_report(
             ]
             team_name = reportdata.team_name(team, clubs)
             body += _anchored_heading(2, team_name, slugify(team_name))
-            body += f"<h3>Division {team.division}</h3>\n"
-            body += _scheme_subheading(4, schemes, team.division)
+            scheme_label = _scheme_label(schemes, team.division)
+            body += f"<h3>Division {team.division} ({html.escape(scheme_label)})</h3>\n"
             body += _table(
                 _TEAM_MATCH_HEADERS,
                 _team_rows(team, team_fixtures, clubs)

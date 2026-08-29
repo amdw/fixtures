@@ -216,19 +216,20 @@ class TestGenerateReport(unittest.TestCase):
         self.assertIn("Hendon 1", div2)
         self.assertIn("Willesden Warriors", div2)
 
-    def test_division_page_has_fixture_scheme_subheading(self):
+    def test_division_page_names_the_fixture_scheme_in_a_subheading(self):
         # No division_schemes passed -> every division defaults to a double round.
         div1 = (self.output_dir / "division-1.html").read_text()
         self.assertIn("<h2>Double-round all-play-all</h2>", div1)
         self.assertNotIn("Single-round", div1)
 
-    def test_club_per_team_section_has_fixture_scheme_subheading(self):
+    def test_club_per_team_heading_names_the_fixture_scheme_in_brackets(self):
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
         harrow1_section = harrow_page.split('<h2 id="harrow-1">')[1].split("<h2")[0]
-        self.assertIn("<h3>Division 1</h3>", harrow1_section)
-        self.assertIn("<h4>Double-round all-play-all</h4>", harrow1_section)
+        self.assertIn(
+            "<h3>Division 1 (Double-round all-play-all)</h3>", harrow1_section
+        )
         # The consolidated table above the per-team sections spans divisions, so it
-        # gets no scheme sub-heading.
+        # names no scheme.
         consolidated = harrow_page.split("<h2")[0]
         self.assertNotIn("all-play-all", consolidated)
 
@@ -246,10 +247,12 @@ class TestGenerateReport(unittest.TestCase):
         # Division 1 has no entry, so it stays a double round.
         div1 = (out2 / "division-1.html").read_text()
         self.assertIn("<h2>Double-round all-play-all</h2>", div1)
-        # Hendon 1 is in division 2, so its per-team section reflects single round.
+        # Hendon 1 is in division 2, so its per-team heading reflects single round.
         hendon_page = (out2 / "club-hendon.html").read_text()
         hendon1_section = hendon_page.split('<h2 id="hendon-1">')[1]
-        self.assertIn("<h4>Single-round all-play-all</h4>", hendon1_section)
+        self.assertIn(
+            "<h3>Division 2 (Single-round all-play-all)</h3>", hendon1_section
+        )
 
     def test_club_page_consolidated_and_per_team(self):
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
