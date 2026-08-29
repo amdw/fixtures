@@ -70,8 +70,12 @@ teams:
     name_override: "Hackney Herons"
 
 divisions:
-  1: [albany-1, hackney-1]
-  3: [hackney-5]
+  1:
+    scheme: double_round
+    teams: [albany-1, hackney-1]
+  3:
+    scheme: single_round
+    teams: [hackney-5]
 
 club_constraints:
   defaults:

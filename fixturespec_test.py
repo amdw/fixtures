@@ -50,7 +50,9 @@ teams:
     index: 1
 
 divisions:
-  1: [albany-1, hackney-1]
+  1:
+    scheme: double_round
+    teams: [albany-1, hackney-1]
 """
 
 # A valid spec minus 'club_constraints.defaults' (so every club still needs its own
@@ -101,7 +103,9 @@ teams:
     index: 1
 
 divisions:
-  1: [albany-1, albany-2, hackney-1]
+  1:
+    scheme: double_round
+    teams: [albany-1, albany-2, hackney-1]
 
 club_constraints:
   defaults:
@@ -456,7 +460,9 @@ teams:
     club: hackney
     index: 1
 divisions:
-  1: [hackney-1]
+  1:
+    scheme: double_round
+    teams: [hackney-1]
 """)
         with self.assertRaisesRegex(fixturespec.SpecError, "hackney"):
             fixturespec.load_spec(path)
@@ -478,7 +484,9 @@ teams:
     club: albany
     index: 1
 divisions:
-  1: [albany-1, albany-1-again]
+  1:
+    scheme: double_round
+    teams: [albany-1, albany-1-again]
 """)
         with self.assertRaisesRegex(fixturespec.SpecError, "index 1"):
             fixturespec.load_spec(path)
@@ -517,7 +525,9 @@ teams:
     club: albany
     index: 2
 divisions:
-  1: [albany-1]
+  1:
+    scheme: double_round
+    teams: [albany-1]
 """)
         with self.assertRaisesRegex(fixturespec.SpecError, "albany-2"):
             fixturespec.load_spec(path)
@@ -536,7 +546,9 @@ teams:
     club: albany
     index: 1
 divisions:
-  "one": [albany-1]
+  "one":
+    scheme: double_round
+    teams: [albany-1]
 """)
         with self.assertRaisesRegex(fixturespec.SpecError, "integer"):
             fixturespec.load_spec(path)
@@ -555,11 +567,133 @@ teams:
     club: albany
     index: 1
 divisions:
-  1: [albany-1]
-  2: [albany-1]
+  1:
+    scheme: double_round
+    teams: [albany-1]
+  2:
+    scheme: double_round
+    teams: [albany-1]
 """)
         with self.assertRaisesRegex(fixturespec.SpecError, "more than one division"):
             fixturespec.load_spec(path)
+
+    _SCHEME_SPEC_HEAD = """
+clubs:
+  albany:
+    name: Albany
+    home_venue_name: x
+    home_venue_address: x
+    home_start_time: "19:30"
+    home_time_limit: "75+15"
+teams:
+  albany-1:
+    club: albany
+    index: 1
+  albany-2:
+    club: albany
+    index: 2
+divisions:
+"""
+
+    # Appended after a divisions block to make _SCHEME_SPEC_HEAD specs valid enough
+    # to load successfully (the failure-path tests don't get this far).
+    _SCHEME_SPEC_TAIL = (
+        "club_constraints:\n"
+        "  defaults:\n    max_concurrent_home_matches: 1\n"
+        "  albany:\n    home_dates: [2025-09-01, 2025-09-08, 2025-09-15]\n"
+    )
+
+    def test_division_scheme_single_round_is_parsed(self):
+        path = self._write(
+            self._SCHEME_SPEC_HEAD + "  1:\n    scheme: single_round\n"
+            "    teams: [albany-1, albany-2]\n" + self._SCHEME_SPEC_TAIL
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(
+            {1: fmodel.FixtureScheme.SINGLE_ROUND},
+            {d.number: d.scheme for d in spec.parameters.divisions},
+        )
+
+    def test_division_scheme_double_round_is_parsed(self):
+        path = self._write(
+            self._SCHEME_SPEC_HEAD + "  1:\n    scheme: double_round\n"
+            "    teams: [albany-1, albany-2]\n" + self._SCHEME_SPEC_TAIL
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(
+            {1: fmodel.FixtureScheme.DOUBLE_ROUND},
+            {d.number: d.scheme for d in spec.parameters.divisions},
+        )
+
+    def test_division_missing_scheme_rejected(self):
+        path = self._write(
+            self._SCHEME_SPEC_HEAD + "  1:\n    teams: [albany-1, albany-2]\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "scheme"):
+            fixturespec.load_spec(path)
+
+    def test_division_missing_teams_rejected(self):
+        path = self._write(self._SCHEME_SPEC_HEAD + "  1:\n    scheme: double_round\n")
+        with self.assertRaisesRegex(fixturespec.SpecError, "teams"):
+            fixturespec.load_spec(path)
+
+    def test_division_unknown_scheme_rejected(self):
+        path = self._write(
+            self._SCHEME_SPEC_HEAD + "  1:\n    scheme: triple_round\n"
+            "    teams: [albany-1, albany-2]\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "scheme.*triple_round"):
+            fixturespec.load_spec(path)
+
+    def test_division_bare_list_rejected(self):
+        path = self._write(self._SCHEME_SPEC_HEAD + "  1: [albany-1, albany-2]\n")
+        with self.assertRaisesRegex(fixturespec.SpecError, "mapping"):
+            fixturespec.load_spec(path)
+
+    def test_division_unsupported_field_rejected(self):
+        path = self._write(
+            self._SCHEME_SPEC_HEAD + "  1:\n    scheme: double_round\n"
+            "    teams: [albany-1, albany-2]\n    berger_seed: 3\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "berger_seed"):
+            fixturespec.load_spec(path)
+
+    def test_single_round_division_team_order_follows_the_divisions_list(self):
+        # teams: lists albany-2 before albany-1; the divisions list is the Berger
+        # draw order and must win, so parameters.teams reflects the divisions list.
+        path = self._write("""
+clubs:
+  albany:
+    name: Albany
+    home_venue_name: x
+    home_venue_address: x
+    home_start_time: "19:30"
+    home_time_limit: "75+15"
+teams:
+  albany-2:
+    club: albany
+    index: 2
+  albany-1:
+    club: albany
+    index: 1
+  albany-3:
+    club: albany
+    index: 3
+divisions:
+  1:
+    scheme: single_round
+    teams: [albany-1, albany-2, albany-3]
+club_constraints:
+  defaults:
+    max_concurrent_home_matches: 1
+  albany:
+    home_dates: [2025-09-01, 2025-09-08, 2025-09-15]
+""")
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(
+            [(t.club, t.index) for t in spec.parameters.teams],
+            [("albany", 1), ("albany", 2), ("albany", 3)],
+        )
 
     def test_invalid_date_string(self):
         path = self._write("""
@@ -575,7 +709,9 @@ teams:
     club: albany
     index: 1
 divisions:
-  1: [albany-1]
+  1:
+    scheme: double_round
+    teams: [albany-1]
 club_constraints:
   albany:
     home_dates: ["not-a-date"]
@@ -597,7 +733,9 @@ teams:
     club: albany
     index: 1
 divisions:
-  1: [albany-1]
+  1:
+    scheme: double_round
+    teams: [albany-1]
 club_constraints:
   albany:
     home_dates: [2025-09-01, 2025-09-01]
@@ -619,7 +757,9 @@ teams:
     club: albany
     index: 1
 divisions:
-  1: [albany-1]
+  1:
+    scheme: double_round
+    teams: [albany-1]
 club_constraints:
   albany:
     unavailable_away_dates: [2025-09-01, 2025-09-01]
@@ -641,7 +781,9 @@ teams:
     club: albany
     index: 1
 divisions:
-  1: [albany-1]
+  1:
+    scheme: double_round
+    teams: [albany-1]
 club_constraints:
   albany:
     home_dates: [2025-09-01]
@@ -782,8 +924,9 @@ club_constraints:
     def test_fixed_fixtures_different_divisions_rejected(self):
         path = self._write(
             _MINIMAL_SPEC.replace(
-                "divisions:\n  1: [albany-1, hackney-1]",
-                "divisions:\n  1: [albany-1]\n  2: [hackney-1]",
+                "  1:\n    scheme: double_round\n    teams: [albany-1, hackney-1]",
+                "  1:\n    scheme: double_round\n    teams: [albany-1]\n"
+                "  2:\n    scheme: double_round\n    teams: [hackney-1]",
             )
             + "fixed_fixtures:\n"
             "  - home: hackney-1\n"
@@ -1200,8 +1343,10 @@ club_constraints:
     def test_exclude_fixtures_different_divisions_rejected(self):
         path = self._write(
             _THREE_TEAM_SPEC.replace(
-                "divisions:\n  1: [albany-1, albany-2, hackney-1]",
-                "divisions:\n  1: [albany-1, albany-2]\n  2: [hackney-1]",
+                "  1:\n    scheme: double_round\n"
+                "    teams: [albany-1, albany-2, hackney-1]",
+                "  1:\n    scheme: double_round\n    teams: [albany-1, albany-2]\n"
+                "  2:\n    scheme: double_round\n    teams: [hackney-1]",
             )
             + "exclude_fixtures:\n"
             "  fixtures:\n"

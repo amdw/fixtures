@@ -86,7 +86,9 @@ teams:
     index: 1
 
 divisions:                       # each team's division: the only place it's given
-  1: [albany-1, hackney-1]
+  1:
+    scheme: double_round         # or single_round (Berger table; teams list = draw order)
+    teams: [albany-1, hackney-1]
 
 club_constraints:
   albany:

@@ -49,7 +49,9 @@ teams:
     index: 1
 
 divisions:
-  1: [albany-1, hackney-1]
+  1:
+    scheme: double_round
+    teams: [albany-1, hackney-1]
 
 club_constraints:
   defaults:
