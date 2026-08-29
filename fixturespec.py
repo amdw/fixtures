@@ -20,7 +20,6 @@ of the expected YAML structure; README.md covers how to use it.
 
 from __future__ import annotations
 
-import collections
 import dataclasses
 import itertools
 import logging
@@ -224,35 +223,89 @@ def _parse_teams(
     return teams
 
 
+@dataclasses.dataclass(frozen=True)
+class _Divisions:
+    """The parsed 'divisions' section: everything load_spec() needs to build teams
+    and hand fmodel.Parameters its per-division schemes. fmodel derives the grouped
+    fmodel.Division view itself, from teams + schemes."""
+
+    team_divisions: dict[str, int]  # team ID -> division number
+    ordered_team_ids: list[str]  # every team ID, in (division key, list position) order
+    schemes: dict[int, fmodel.FixtureScheme]  # division number -> fixture scheme
+
+
+_DIVISION_FIELD_KEYS = {"scheme", "teams"}
+
+
 def _parse_divisions(
     data: Mapping[str, Any], teams: Mapping[str, _TeamShell], path: Path
-) -> dict[str, int]:
-    """Parse the 'divisions' section (team IDs per division), returning each team's
-    division. This is the only place a team's division is given - 'teams' entries
-    don't repeat it."""
+) -> _Divisions:
+    """Parse the 'divisions' section: each division's fixture scheme and the team IDs
+    competing in it, keyed by division number. This is the only place a team's
+    division is given - 'teams' entries don't repeat it.
+
+    Every division entry is a mapping with a required 'scheme' (one of the
+    fmodel.FixtureScheme values, e.g. 'double_round' or 'single_round') and a
+    required non-empty 'teams' list. For a 'single_round' division the order of that
+    list is the Berger table draw - the first team is table position 1, the next
+    position 2, and so on - so it is significant, not merely cosmetic; ordered_team_ids
+    keeps it, and load_spec() builds fmodel.Parameters.teams in that order.
+    """
     divisions_spec = _require_mapping(data.get("divisions"), f"{path}: 'divisions'")
 
     team_divisions: dict[str, int] = {}
-    for division_key, team_ids in divisions_spec.items():
+    ordered_team_ids: list[str] = []
+    schemes: dict[int, fmodel.FixtureScheme] = {}
+    for division_key, division_spec in divisions_spec.items():
         context = f"{path}: divisions[{division_key!r}]"
         division = _require_int(division_key, f"{context} key")
+
+        if not isinstance(division_spec, dict):
+            raise SpecError(f"{context} must be a mapping with 'scheme' and 'teams'")
+        unsupported = division_spec.keys() - _DIVISION_FIELD_KEYS
+        if unsupported:
+            raise SpecError(
+                f"{context}: unsupported field(s) {sorted(unsupported)} "
+                f"(only {sorted(_DIVISION_FIELD_KEYS)} are)"
+            )
+        missing_fields = _DIVISION_FIELD_KEYS - division_spec.keys()
+        if missing_fields:
+            raise SpecError(
+                f"{context} missing required field(s) {sorted(missing_fields)}"
+            )
+
+        scheme_str = _require_str(division_spec["scheme"], f"{context}.scheme")
+        try:
+            schemes[division] = fmodel.FixtureScheme(scheme_str)
+        except ValueError:
+            allowed = ", ".join(repr(s.value) for s in fmodel.FixtureScheme)
+            raise SpecError(
+                f"{context}.scheme must be one of {allowed}, got {scheme_str!r}"
+            ) from None
+
+        team_ids = division_spec["teams"]
         if not isinstance(team_ids, list) or not team_ids:
-            raise SpecError(f"{context} must be a non-empty list of team IDs")
+            raise SpecError(f"{context}.teams must be a non-empty list of team IDs")
         for team_id in team_ids:
             if team_id not in teams:
-                raise SpecError(f"{context} references unknown team {team_id!r}")
+                raise SpecError(f"{context}.teams references unknown team {team_id!r}")
             if team_id in team_divisions:
                 raise SpecError(
                     f"{path}: team {team_id!r} listed in more than one division"
                 )
             team_divisions[team_id] = division
+            ordered_team_ids.append(team_id)
 
     missing = teams.keys() - team_divisions.keys()
     if missing:
         raise SpecError(
             f"{path}: team(s) {sorted(missing)} not listed under 'divisions'"
         )
-    return team_divisions
+    return _Divisions(
+        team_divisions=team_divisions,
+        ordered_team_ids=ordered_team_ids,
+        schemes=schemes,
+    )
 
 
 def _parse_max_concurrent_home_matches_value(
@@ -702,7 +755,9 @@ def _parse_exclude_fixtures(
     'clubs' and 'teams' exclude every fixture (in both directions) that any of the
     given clubs' or teams' teams would otherwise play within their division;
     'fixtures' excludes individual home/away pairs. Returns the fully expanded set
-    of excluded (home, away) Fixture pairs.
+    of excluded (home, away) Fixture pairs. Both directions are expanded even for a
+    single_round division (where only one is ever scheduled), so the exclusion
+    holds whichever way the Berger draw sends that pairing.
     """
     section_name = "exclude_fixtures"
     section_spec = data.get(section_name)
@@ -718,9 +773,9 @@ def _parse_exclude_fixtures(
             "(only 'clubs', 'teams' and 'fixtures' are)"
         )
 
-    teams_by_division: dict[int, list[fmodel.Team]] = collections.defaultdict(list)
+    teams_by_division: dict[int, list[fmodel.Team]] = {}
     for team in teams.values():
-        teams_by_division[team.division].append(team)
+        teams_by_division.setdefault(team.division, []).append(team)
 
     excluded: set[fmodel.Fixture] = set()
 
@@ -836,15 +891,18 @@ def load_spec(spec_path: str | Path) -> Spec:
 
     clubs = _parse_clubs(data, path)
     team_shells = _parse_teams(data, clubs, path)
-    team_divisions = _parse_divisions(data, team_shells, path)
+    divisions = _parse_divisions(data, team_shells, path)
+    # Build teams in 'divisions' order: a single_round division's team order is its
+    # Berger draw, and fmodel derives its grouped Division view (that order
+    # included) from Parameters.teams.
     teams = {
         team_id: fmodel.Team(
-            division=team_divisions[team_id],
-            club=shell.club,
-            index=shell.index,
-            name_override=shell.name_override,
+            division=divisions.team_divisions[team_id],
+            club=team_shells[team_id].club,
+            index=team_shells[team_id].index,
+            name_override=team_shells[team_id].name_override,
         )
-        for team_id, shell in team_shells.items()
+        for team_id in divisions.ordered_team_ids
     }
 
     avoid_dates = _parse_date_list(data.get("avoid_dates"), f"{path}: 'avoid_dates'")
@@ -912,6 +970,7 @@ def load_spec(spec_path: str | Path) -> Spec:
         home_dates=home_dates,
         unavailable_away_dates=unavailable_away_dates,
         max_concurrent_home_matches=max_concurrent_home_matches,
+        division_schemes=divisions.schemes,
         **kwargs,
     )
     name = _require_str(data.get("name", ""), f"{path}: 'name'")

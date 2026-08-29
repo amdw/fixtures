@@ -19,6 +19,7 @@ import random
 import unittest
 from datetime import date, timedelta
 
+import berger
 import fmodel
 import genfixtures
 
@@ -753,6 +754,109 @@ class TestExcludedFixtures(unittest.TestCase):
         params = self._params(fixed_fixtures=[fixed], excluded_fixtures=[fixture])
         with self.assertRaises(ValueError):
             fmodel.solve(params)
+
+
+class TestDivisionSchemes(unittest.TestCase):
+    """Test cases for division_schemes and the fmodel.Division view Parameters
+    derives from it: DOUBLE_ROUND (the default for any unlisted division) vs
+    SINGLE_ROUND, the latter taking each match's home/away side from the Berger
+    table for that division's teams in Parameters.teams order.
+    """
+
+    def _params(
+        self,
+        teams: list[fmodel.Team],
+        division_schemes: dict[int, fmodel.FixtureScheme] | None = None,
+    ) -> fmodel.Parameters:
+        clubs = sorted({t.club for t in teams})
+        # A generous common pool of home dates, > min_gap_days apart, so date
+        # feasibility never masks a wrong fixture count.
+        dates = [date(2025, 1, 1) + timedelta(days=7 * i) for i in range(20)]
+        return fmodel.Parameters(
+            teams=teams,
+            home_dates={c: list(dates) for c in clubs},
+            unavailable_away_dates={c: [] for c in clubs},
+            max_concurrent_home_matches={
+                c: fmodel.MaxConcurrentHomeMatches(default=1) for c in clubs
+            },
+            min_gap_days=7,
+            division_schemes=division_schemes or {},
+        )
+
+    @staticmethod
+    def _teams(clubs: str, division: int = 1) -> list[fmodel.Team]:
+        return [fmodel.Team(division=division, club=c, index=1) for c in clubs]
+
+    def test_double_round_is_the_default_scheme(self):
+        params = self._params(self._teams("ABCD"))
+        fixtures = list(fmodel.solve(params))
+        # 4 teams, home and away: 4 * 3 = 12 fixtures.
+        self.assertEqual(12, len(fixtures))
+        self.assertEqual(1, len(params.divisions))
+        self.assertEqual(fmodel.FixtureScheme.DOUBLE_ROUND, params.divisions[0].scheme)
+
+    def test_single_round_plays_each_pair_once(self):
+        params = self._params(
+            self._teams("ABCD"),
+            division_schemes={1: fmodel.FixtureScheme.SINGLE_ROUND},
+        )
+        fixtures = list(fmodel.solve(params))
+        self.assertEqual(6, len(fixtures))
+        unordered = {
+            frozenset((sf.fixture.home_team, sf.fixture.away_team)) for sf in fixtures
+        }
+        self.assertEqual(6, len(unordered))
+
+    def test_single_round_home_away_follows_the_berger_table(self):
+        teams = self._teams("ABCD")
+        params = self._params(
+            teams, division_schemes={1: fmodel.FixtureScheme.SINGLE_ROUND}
+        )
+        fixtures = list(fmodel.solve(params))
+        got = {
+            (sf.fixture.home_team.club, sf.fixture.away_team.club) for sf in fixtures
+        }
+        expected = {
+            (home.club, away.club) for home, away in berger.single_round_pairings(teams)
+        }
+        self.assertEqual(expected, got)
+
+    def test_single_round_draw_order_comes_from_parameters_teams(self):
+        # teams order D, C, B, A: the Berger draw, and every H/A, follows it.
+        teams = self._teams("DCBA")
+        params = self._params(
+            teams, division_schemes={1: fmodel.FixtureScheme.SINGLE_ROUND}
+        )
+        fixtures = list(fmodel.solve(params))
+        got = {
+            (sf.fixture.home_team.club, sf.fixture.away_team.club) for sf in fixtures
+        }
+        expected = {
+            (home.club, away.club) for home, away in berger.single_round_pairings(teams)
+        }
+        self.assertEqual(expected, got)
+        # Round 1 of the Berger table pairs position 1 at home against position n:
+        # here that's D (first in teams) hosting A (last in teams).
+        self.assertIn(("D", "A"), got)
+
+    def test_schemes_are_per_division(self):
+        teams = self._teams("ABCD", division=1) + self._teams("EFGH", division=2)
+        params = self._params(
+            teams, division_schemes={1: fmodel.FixtureScheme.SINGLE_ROUND}
+        )
+        fixtures = list(fmodel.solve(params))
+        by_division = collections.Counter(
+            sf.fixture.home_team.division for sf in fixtures
+        )
+        self.assertEqual(6, by_division[1])  # single round
+        self.assertEqual(12, by_division[2])  # double round (the default)
+
+    def test_scheme_for_division_with_no_teams_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "division.*9.*no teams"):
+            self._params(
+                self._teams("ABCD"),
+                division_schemes={9: fmodel.FixtureScheme.SINGLE_ROUND},
+            )
 
 
 class TestTeamConstraints(unittest.TestCase):

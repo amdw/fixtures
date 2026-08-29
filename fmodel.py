@@ -20,11 +20,13 @@ import enum
 import functools
 import itertools
 import logging
-from collections.abc import Collection, Mapping, MutableMapping
+from collections.abc import Collection, Iterable, Mapping, MutableMapping
 from datetime import date
 from typing import Any
 
 from ortools.sat.python import cp_model
+
+import berger
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +91,50 @@ class MaxConcurrentHomeMatches:
 
     def for_date(self, d: date) -> int | None:
         return self.overrides.get(d, self.default)
+
+
+class FixtureScheme(enum.Enum):
+    """How a division's fixtures are generated.
+
+    DOUBLE_ROUND: every pair of teams plays twice, once at each team's home venue
+    -- the Middlesex League's default "Double Round All-Play-All" basis (League
+    Rules 7c).
+
+    SINGLE_ROUND: every pair plays once, with the home/away side of each match
+    taken from the Berger table for the division's entrants (see berger.py). The
+    draw order is the order of Division.teams. League Rules 7c switches a division
+    to this basis once it has more than eight teams.
+    """
+
+    DOUBLE_ROUND = "double_round"
+    SINGLE_ROUND = "single_round"
+
+
+@dataclasses.dataclass(frozen=True)
+class Division:
+    """One division's teams and how its fixtures are generated -- a grouped,
+    scheme-carrying view of Parameters.teams, derived by Parameters.divisions.
+
+    `teams` is ordered: for FixtureScheme.SINGLE_ROUND it is the Berger table draw
+    (teams[0] is table position 1, teams[1] position 2, and so on), which fixes the
+    home/away side of every match; this order comes straight from Parameters.teams.
+    """
+
+    number: int
+    scheme: FixtureScheme
+    teams: tuple[Team, ...]
+
+    def required_fixtures(self) -> list[Fixture]:
+        """Every fixture that must appear in the schedule for this division: both
+        directions of each pairing for DOUBLE_ROUND, one directed fixture per
+        pairing (home/away from the Berger table) for SINGLE_ROUND."""
+        if self.scheme is FixtureScheme.SINGLE_ROUND:
+            pairs: Iterable[tuple[Team, Team]] = berger.single_round_pairings(
+                self.teams
+            )
+        else:
+            pairs = itertools.permutations(self.teams, 2)
+        return [Fixture(home_team=home, away_team=away) for home, away in pairs]
 
 
 class CoschedulingScope(enum.Enum):
@@ -171,11 +217,43 @@ class Parameters:
         default_factory=dict
     )
     avoid_coscheduling_teams: Collection[AvoidCoschedulingConstraint] = ()
+    # Fixture generation scheme per division number (see FixtureScheme); a division
+    # with no entry here uses FixtureScheme.DOUBLE_ROUND. This is the only
+    # per-division input -- the `divisions` view below, including each SINGLE_ROUND
+    # division's Berger draw order, is derived from `teams` (grouped by
+    # Team.division, keeping `teams` order), so `teams` order is significant for a
+    # SINGLE_ROUND division, not just a listing convenience.
+    division_schemes: Mapping[int, FixtureScheme] = dataclasses.field(
+        default_factory=dict
+    )
 
     def __post_init__(self) -> None:
         _check_no_duplicate_teams(self.teams)
         _check_no_duplicate_home_dates(self.home_dates)
         _check_no_duplicate_home_dates(self.team_home_dates)
+        unknown = self.division_schemes.keys() - {t.division for t in self.teams}
+        if unknown:
+            raise ValueError(
+                f"division_schemes has entries for division(s) {sorted(unknown)} "
+                "with no teams"
+            )
+
+    @functools.cached_property
+    def divisions(self) -> tuple[Division, ...]:
+        """`teams` grouped into divisions, in first-seen order, each division's
+        teams kept in `teams` order (a SINGLE_ROUND division's Berger draw) and its
+        scheme taken from `division_schemes` (DOUBLE_ROUND if absent)."""
+        by_number: dict[int, list[Team]] = {}
+        for team in self.teams:
+            by_number.setdefault(team.division, []).append(team)
+        return tuple(
+            Division(
+                number=number,
+                scheme=self.division_schemes.get(number, FixtureScheme.DOUBLE_ROUND),
+                teams=tuple(division_teams),
+            )
+            for number, division_teams in by_number.items()
+        )
 
     @functools.cached_property
     def _teams_per_club(self) -> Mapping[ClubT, int]:
@@ -319,9 +397,6 @@ def _add_fixed_fixtures_constraints(
 
 def solve(params: Parameters) -> Collection[ScheduledFixture]:
     model = cp_model.CpModel()
-    teams_by_division = collections.defaultdict(list)
-    for team in params.teams:
-        teams_by_division[team.division].append(team)
 
     vars_by_fixture: MutableMapping[Fixture, list[cp_model.IntVar]] = (
         collections.defaultdict(list)
@@ -337,11 +412,12 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
     excluded = set(params.excluded_fixtures)
     fixed_fixture_keys = {(sf.fixture, sf.date) for sf in params.fixed_fixtures}
 
-    for division_teams in teams_by_division.values():
-        for home_team, away_team in itertools.permutations(division_teams, 2):
-            fixture = Fixture(home_team=home_team, away_team=away_team)
+    for division in params.divisions:
+        for fixture in division.required_fixtures():
             if fixture in excluded:
                 continue
+            home_team = fixture.home_team
+            away_team = fixture.away_team
             is_internal = home_team.club == away_team.club
             for match_date in params.home_dates_for(home_team):
                 if match_date in params.unavailable_away_dates_for(away_team):

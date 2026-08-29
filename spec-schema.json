@@ -52,18 +52,30 @@
     },
     "divisions": {
       "type": "object",
-      "description": "Each team's division, keyed by division number -- the only place a team's division is given. Every team listed under 'teams' must appear in exactly one division's list, and no team ID may appear in more than one.",
+      "description": "Each division's fixture scheme and the teams competing in it, keyed by division number -- the only place a team's division is given. Every team listed under 'teams' must appear in exactly one division's 'teams' list, and no team ID may appear in more than one.",
       "minProperties": 1,
       "propertyNames": {
         "pattern": "^[0-9]+$",
         "description": "A division number."
       },
       "additionalProperties": {
-        "type": "array",
-        "description": "Team IDs (from 'teams') competing in this division.",
-        "items": { "type": "string" },
-        "minItems": 1,
-        "uniqueItems": true
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scheme", "teams"],
+        "properties": {
+          "scheme": {
+            "type": "string",
+            "enum": ["double_round", "single_round"],
+            "description": "How this division's fixtures are generated. 'double_round': every pair of teams plays twice, once at each team's home venue -- the Double Round All-Play-All basis of Middlesex League Rule 7c. 'single_round': every pair plays once, with the home/away side of each match taken from the Berger table for this division's entrants, drawn in the order they are listed under 'teams' (first listed = table position 1) -- the basis Rule 7c switches to once a division has more than eight teams."
+          },
+          "teams": {
+            "type": "array",
+            "description": "Team IDs (from 'teams') competing in this division. For a 'single_round' division the list order is the Berger table draw: the first team is position 1, the second position 2, and so on.",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "uniqueItems": true
+          }
+        }
       }
     },
     "club_constraints": {
