@@ -17,10 +17,12 @@
 import csv
 import tempfile
 import unittest
+from collections.abc import Collection, Mapping
 from datetime import date
 from pathlib import Path
 
 import csvreport
+import fixturespec
 import fmodel
 
 
@@ -28,6 +30,28 @@ def _sf(home: fmodel.Team, away: fmodel.Team, d: date) -> fmodel.ScheduledFixtur
     return fmodel.ScheduledFixture(
         fixture=fmodel.Fixture(home_team=home, away_team=away), date=d
     )
+
+
+def _generate_csv(
+    fixtures: Collection[fmodel.ScheduledFixture],
+    teams: Collection[fmodel.Team],
+    clubs: Mapping[str, fmodel.Club],
+    output_dir: Path,
+    *,
+    excluded_fixtures: Collection[fmodel.Fixture] = (),
+) -> list[Path]:
+    """Assemble a minimal fixturespec.Spec from the loose pieces these tests work
+    with and render its CSV exports, so the tests need not build a full
+    fmodel.Parameters just to exercise csvreport.generate_csv()."""
+    parameters = fmodel.Parameters(
+        teams=list(teams),
+        home_dates={},
+        unavailable_away_dates={},
+        max_concurrent_home_matches={},
+        excluded_fixtures=excluded_fixtures,
+    )
+    spec = fixturespec.Spec(parameters=parameters, clubs=clubs)
+    return csvreport.generate_csv(spec, fixtures, output_dir)
 
 
 def _club(name: str, venue: str, address: str, start: str, limit: str) -> fmodel.Club:
@@ -91,7 +115,7 @@ class CsvReportTest(unittest.TestCase):
             return list(csv.DictReader(f))
 
     def test_writes_both_files_and_returns_their_paths(self):
-        paths = csvreport.generate_csv(self.fixtures, self.teams, self.clubs, self.out)
+        paths = _generate_csv(self.fixtures, self.teams, self.clubs, self.out)
         self.assertEqual(
             paths,
             [
@@ -103,7 +127,7 @@ class CsvReportTest(unittest.TestCase):
             self.assertTrue(p.exists())
 
     def test_header_columns(self):
-        csvreport.generate_csv(self.fixtures, self.teams, self.clubs, self.out)
+        _generate_csv(self.fixtures, self.teams, self.clubs, self.out)
         with (self.out / "all-matches.csv").open(newline="") as f:
             self.assertEqual(
                 next(csv.reader(f)),
@@ -143,7 +167,7 @@ class CsvReportTest(unittest.TestCase):
             )
 
     def test_all_matches_one_row_per_match_sorted_by_date(self):
-        csvreport.generate_csv(self.fixtures, self.teams, self.clubs, self.out)
+        _generate_csv(self.fixtures, self.teams, self.clubs, self.out)
         rows = self._rows("all-matches.csv")
 
         self.assertEqual(len(rows), 3)
@@ -165,7 +189,7 @@ class CsvReportTest(unittest.TestCase):
         self.assertEqual(first["time_limit"], "75+15")
 
     def test_all_matches_gives_name_override_plus_club_and_index(self):
-        csvreport.generate_csv(self.fixtures, self.teams, self.clubs, self.out)
+        _generate_csv(self.fixtures, self.teams, self.clubs, self.out)
         hendon_row = next(
             r for r in self._rows("all-matches.csv") if r["date"] == "2025-09-03"
         )
@@ -175,7 +199,7 @@ class CsvReportTest(unittest.TestCase):
         self.assertEqual(hendon_row["away_team_index"], "2")
 
     def test_by_team_has_two_rows_per_match_from_each_side(self):
-        csvreport.generate_csv(self.fixtures, self.teams, self.clubs, self.out)
+        _generate_csv(self.fixtures, self.teams, self.clubs, self.out)
         rows = self._rows("all-matches-by-team.csv")
 
         # 3 matches -> 6 rows.
@@ -199,7 +223,7 @@ class CsvReportTest(unittest.TestCase):
             self.assertEqual(r["start_time"], "19:30")
 
     def test_by_team_grouped_by_team_then_ordered_by_date(self):
-        csvreport.generate_csv(self.fixtures, self.teams, self.clubs, self.out)
+        _generate_csv(self.fixtures, self.teams, self.clubs, self.out)
         rows = self._rows("all-matches-by-team.csv")
 
         # Each team's rows are contiguous, and teams come in (club, index) order.
@@ -217,7 +241,7 @@ class CsvReportTest(unittest.TestCase):
 
     def test_excluded_fixtures_listed_with_empty_date_at_the_end(self):
         excluded = [fmodel.Fixture(home_team=self.harrow1, away_team=self.harrow2)]
-        csvreport.generate_csv(
+        _generate_csv(
             self.fixtures,
             self.teams,
             self.clubs,
@@ -238,7 +262,7 @@ class CsvReportTest(unittest.TestCase):
         self.assertEqual(harrow1_rows[-1]["opponent"], "Harrow 2")
 
     def test_empty_fixture_list_writes_header_only(self):
-        csvreport.generate_csv([], [], self.clubs, self.out)
+        _generate_csv([], [], self.clubs, self.out)
 
         for name in ("all-matches.csv", "all-matches-by-team.csv"):
             text = (self.out / name).read_text()
@@ -246,7 +270,7 @@ class CsvReportTest(unittest.TestCase):
             self.assertTrue(text.endswith("\n"))
 
     def test_uses_unix_line_endings(self):
-        csvreport.generate_csv(self.fixtures, self.teams, self.clubs, self.out)
+        _generate_csv(self.fixtures, self.teams, self.clubs, self.out)
         raw = (self.out / "all-matches.csv").read_bytes()
         self.assertNotIn(b"\r", raw)
 

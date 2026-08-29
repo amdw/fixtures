@@ -16,9 +16,11 @@
 
 import tempfile
 import unittest
+from collections.abc import Collection, Mapping
 from datetime import date
 from pathlib import Path
 
+import fixturespec
 import fmodel
 import htmlreport
 
@@ -27,6 +29,39 @@ def _sf(home: fmodel.Team, away: fmodel.Team, d: date) -> fmodel.ScheduledFixtur
     return fmodel.ScheduledFixture(
         fixture=fmodel.Fixture(home_team=home, away_team=away), date=d
     )
+
+
+def _generate(
+    fixtures: Collection[fmodel.ScheduledFixture],
+    teams: Collection[fmodel.Team],
+    clubs: Mapping[str, fmodel.Club],
+    output_dir: Path,
+    *,
+    excluded_fixtures: Collection[fmodel.Fixture] = (),
+    name: str = "",
+    draft: bool = False,
+    description: str = "",
+    division_schemes: Mapping[int, fmodel.FixtureScheme] | None = None,
+) -> Path:
+    """Assemble a minimal fixturespec.Spec from the loose pieces these tests work
+    with and render its HTML report, so the tests need not build a full
+    fmodel.Parameters just to exercise htmlreport.generate_report()."""
+    parameters = fmodel.Parameters(
+        teams=list(teams),
+        home_dates={},
+        unavailable_away_dates={},
+        max_concurrent_home_matches={},
+        excluded_fixtures=excluded_fixtures,
+        division_schemes=division_schemes or {},
+    )
+    spec = fixturespec.Spec(
+        parameters=parameters,
+        clubs=clubs,
+        name=name,
+        draft=draft,
+        description=description,
+    )
+    return htmlreport.generate_report(spec, fixtures, output_dir)
 
 
 def _club(
@@ -116,7 +151,7 @@ class TestGenerateReport(unittest.TestCase):
             _sf(self.hendon1, self.willesden1, date(2025, 9, 3)),
         ]
 
-        self.index_path = htmlreport.generate_report(
+        self.index_path = _generate(
             self.fixtures, self.teams, self.clubs, self.output_dir
         )
 
@@ -180,6 +215,41 @@ class TestGenerateReport(unittest.TestCase):
         div2 = (self.output_dir / "division-2.html").read_text()
         self.assertIn("Hendon 1", div2)
         self.assertIn("Willesden Warriors", div2)
+
+    def test_division_page_has_fixture_scheme_subheading(self):
+        # No division_schemes passed -> every division defaults to a double round.
+        div1 = (self.output_dir / "division-1.html").read_text()
+        self.assertIn("<h2>Double-round all-play-all</h2>", div1)
+        self.assertNotIn("Single-round", div1)
+
+    def test_club_per_team_section_has_fixture_scheme_subheading(self):
+        harrow_page = (self.output_dir / "club-harrow.html").read_text()
+        harrow1_section = harrow_page.split('<h2 id="harrow-1">')[1].split("<h2")[0]
+        self.assertIn("<h3>Division 1</h3>", harrow1_section)
+        self.assertIn("<h4>Double-round all-play-all</h4>", harrow1_section)
+        # The consolidated table above the per-team sections spans divisions, so it
+        # gets no scheme sub-heading.
+        consolidated = harrow_page.split("<h2")[0]
+        self.assertNotIn("all-play-all", consolidated)
+
+    def test_single_round_division_scheme_shown_on_its_pages_only(self):
+        out2 = Path(self._tmpdir.name) / "out-scheme"
+        _generate(
+            self.fixtures,
+            self.teams,
+            self.clubs,
+            out2,
+            division_schemes={2: fmodel.FixtureScheme.SINGLE_ROUND},
+        )
+        div2 = (out2 / "division-2.html").read_text()
+        self.assertIn("<h2>Single-round all-play-all</h2>", div2)
+        # Division 1 has no entry, so it stays a double round.
+        div1 = (out2 / "division-1.html").read_text()
+        self.assertIn("<h2>Double-round all-play-all</h2>", div1)
+        # Hendon 1 is in division 2, so its per-team section reflects single round.
+        hendon_page = (out2 / "club-hendon.html").read_text()
+        hendon1_section = hendon_page.split('<h2 id="hendon-1">')[1]
+        self.assertIn("<h4>Single-round all-play-all</h4>", hendon1_section)
 
     def test_club_page_consolidated_and_per_team(self):
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
@@ -245,7 +315,7 @@ class TestGenerateReport(unittest.TestCase):
         )
 
     def test_run_index_has_no_csv_links_when_exports_absent(self):
-        # setUp's generate_report() writes HTML pages only, no CSV files.
+        # setUp's _generate() writes HTML pages only, no CSV files.
         self.assertNotIn(".csv", self.index_path.read_text())
 
     def test_build_run_index_is_rebuildable_from_disk_alone(self):
@@ -277,7 +347,7 @@ class TestGenerateReport(unittest.TestCase):
         lonely_clubs = {"lonely-fc": _club("Lonely FC")}
         lonely = fmodel.Team(division=3, club="lonely-fc", index=1)
         out2 = Path(self._tmpdir.name) / "out2"
-        htmlreport.generate_report([], [lonely], lonely_clubs, out2)
+        _generate([], [lonely], lonely_clubs, out2)
         content = (out2 / "club-lonely-fc.html").read_text()
         self.assertIn("No matches", content)
 
@@ -296,7 +366,7 @@ class TestGenerateReport(unittest.TestCase):
 
     def test_run_name_and_draft_shown_on_every_page(self):
         out2 = Path(self._tmpdir.name) / "out-named"
-        index_path = htmlreport.generate_report(
+        index_path = _generate(
             self.fixtures,
             self.teams,
             self.clubs,
@@ -319,7 +389,7 @@ class TestGenerateReport(unittest.TestCase):
         """Rebuilding index.html from scratch must recover the run name/draft status
         from the other report files, since build_run_index has no other source for them."""
         out2 = Path(self._tmpdir.name) / "out-rebuilt"
-        index_path = htmlreport.generate_report(
+        index_path = _generate(
             self.fixtures, self.teams, self.clubs, out2, name="Test Run", draft=True
         )
         index_path.unlink()
@@ -330,7 +400,7 @@ class TestGenerateReport(unittest.TestCase):
 
     def test_description_shown_on_every_page(self):
         out2 = Path(self._tmpdir.name) / "out-described"
-        index_path = htmlreport.generate_report(
+        index_path = _generate(
             self.fixtures,
             self.teams,
             self.clubs,
@@ -350,7 +420,7 @@ class TestGenerateReport(unittest.TestCase):
     def test_index_recovers_description_from_disk_alone(self):
         """Rebuilding index.html must recover the description from the other report files."""
         out2 = Path(self._tmpdir.name) / "out-desc-rebuilt"
-        index_path = htmlreport.generate_report(
+        index_path = _generate(
             self.fixtures,
             self.teams,
             self.clubs,
@@ -386,7 +456,7 @@ class TestExcludedFixturesInReport(unittest.TestCase):
         self.fixtures = [_sf(self.harrow1, self.ealing1, date(2025, 9, 1))]
         self.excluded = [fmodel.Fixture(home_team=self.harrow2, away_team=self.ealing1)]
 
-        self.index_path = htmlreport.generate_report(
+        self.index_path = _generate(
             self.fixtures,
             self.teams,
             self.clubs,
@@ -429,7 +499,7 @@ class TestExcludedFixturesInReport(unittest.TestCase):
 
     def test_no_excluded_fixtures_by_default(self):
         out2 = Path(self._tmpdir.name) / "out-no-excluded"
-        htmlreport.generate_report(self.fixtures, self.teams, self.clubs, out2)
+        _generate(self.fixtures, self.teams, self.clubs, out2)
         content = (out2 / "all-matches.html").read_text()
         self.assertNotIn("TBC", content)
 
@@ -446,9 +516,7 @@ class TestExcludedFixturesInReport(unittest.TestCase):
         ]
 
         out2 = Path(self._tmpdir.name) / "out-div2"
-        htmlreport.generate_report(
-            self.fixtures, teams, clubs, out2, excluded_fixtures=excluded
-        )
+        _generate(self.fixtures, teams, clubs, out2, excluded_fixtures=excluded)
         div2 = (out2 / "division-2.html").read_text()
         self.assertIn("TBC", div2)
         self.assertIn("Hendon 1", div2)

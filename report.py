@@ -47,23 +47,8 @@ def report(spec_path: Path, solution_path: Path, output_dir: Path) -> Path:
     fixtures = fixturesolution.load_solution(
         solution_path, spec.parameters.teams, team_ids
     )
-    csvreport.generate_csv(
-        fixtures,
-        spec.parameters.teams,
-        spec.clubs,
-        output_dir,
-        excluded_fixtures=spec.parameters.excluded_fixtures,
-    )
-    return htmlreport.generate_report(
-        fixtures,
-        spec.parameters.teams,
-        spec.clubs,
-        output_dir,
-        excluded_fixtures=spec.parameters.excluded_fixtures,
-        name=spec.name,
-        draft=spec.draft,
-        description=spec.description,
-    )
+    csvreport.generate_csv(spec, fixtures, output_dir)
+    return htmlreport.generate_report(spec, fixtures, output_dir)
 
 
 def main() -> None:
