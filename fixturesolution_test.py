@@ -42,13 +42,13 @@ def _sf(home: fmodel.Team, away: fmodel.Team, d: date) -> fmodel.ScheduledFixtur
 
 
 class TestSaveAndLoadSolution(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmpdir.cleanup)
         self.path = Path(self._tmpdir.name) / "solution.yaml"
 
-    def test_round_trip(self):
+    def test_round_trip(self) -> None:
         fixtures = [
             _sf(_ALBANY_1, _HACKNEY_1, date(2025, 9, 1)),
             _sf(_HACKNEY_2, _ALBANY_1, date(2025, 9, 15)),
@@ -60,7 +60,7 @@ class TestSaveAndLoadSolution(unittest.TestCase):
         )
         self.assertCountEqual(loaded, fixtures)
 
-    def test_load_recovers_division_and_name_override(self):
+    def test_load_recovers_division_and_name_override(self) -> None:
         """Loading resolves each entry against the given teams, so fields not stored
         in the solution file itself (division, name_override) come back correctly."""
         fixturesolution.save_solution(
@@ -73,7 +73,7 @@ class TestSaveAndLoadSolution(unittest.TestCase):
         self.assertEqual(loaded.fixture.home_team, _HACKNEY_2)
         self.assertEqual(loaded.fixture.home_team.name_override, "Hackney Herons")
 
-    def test_written_format_uses_team_ids(self):
+    def test_written_format_uses_team_ids(self) -> None:
         fixturesolution.save_solution(
             [_sf(_ALBANY_1, _HACKNEY_1, date(2025, 9, 1))], _TEAM_IDS, self.path
         )
@@ -82,7 +82,7 @@ class TestSaveAndLoadSolution(unittest.TestCase):
         self.assertIn("away: hackney-1", contents)
         self.assertIn("date: 2025-09-01", contents)
 
-    def test_no_anchors_or_aliases_for_repeated_dates(self):
+    def test_no_anchors_or_aliases_for_repeated_dates(self) -> None:
         """Regression test: PyYAML's default dumper would alias repeated identical
         date objects (&id001/*id001) rather than writing them out literally, since
         fmodel.solve() reuses the same date object for every fixture on a given
@@ -98,7 +98,7 @@ class TestSaveAndLoadSolution(unittest.TestCase):
         self.assertNotIn("*id", contents)
         self.assertEqual(contents.count("2025-09-01"), 2)
 
-    def test_save_unknown_team(self):
+    def test_save_unknown_team(self) -> None:
         with self.assertRaisesRegex(fixturesolution.SolutionError, "albany"):
             fixturesolution.save_solution(
                 [_sf(_ALBANY_1, _HACKNEY_1, date(2025, 9, 1))],
@@ -106,36 +106,36 @@ class TestSaveAndLoadSolution(unittest.TestCase):
                 self.path,
             )
 
-    def test_missing_fixtures_key(self):
+    def test_missing_fixtures_key(self) -> None:
         self.path.write_text("not_fixtures: []\n")
         with self.assertRaisesRegex(fixturesolution.SolutionError, "fixtures"):
             fixturesolution.load_solution(self.path, [_ALBANY_1, _HACKNEY_1], _TEAM_IDS)
 
-    def test_fixtures_not_a_list(self):
+    def test_fixtures_not_a_list(self) -> None:
         self.path.write_text("fixtures: not-a-list\n")
         with self.assertRaisesRegex(fixturesolution.SolutionError, "list"):
             fixturesolution.load_solution(self.path, [_ALBANY_1, _HACKNEY_1], _TEAM_IDS)
 
-    def test_entry_missing_field(self):
+    def test_entry_missing_field(self) -> None:
         self.path.write_text("fixtures:\n  - home: albany-1\n    date: 2025-09-01\n")
         with self.assertRaisesRegex(fixturesolution.SolutionError, "away"):
             fixturesolution.load_solution(self.path, [_ALBANY_1, _HACKNEY_1], _TEAM_IDS)
 
-    def test_unknown_team_reference(self):
+    def test_unknown_team_reference(self) -> None:
         self.path.write_text(
             "fixtures:\n  - home: nonexistent\n    away: hackney-1\n    date: 2025-09-01\n"
         )
         with self.assertRaisesRegex(fixturesolution.SolutionError, "nonexistent"):
             fixturesolution.load_solution(self.path, [_ALBANY_1, _HACKNEY_1], _TEAM_IDS)
 
-    def test_invalid_date(self):
+    def test_invalid_date(self) -> None:
         self.path.write_text(
             "fixtures:\n  - home: albany-1\n    away: hackney-1\n    date: not-a-date\n"
         )
         with self.assertRaisesRegex(fixturesolution.SolutionError, "not-a-date"):
             fixturesolution.load_solution(self.path, [_ALBANY_1, _HACKNEY_1], _TEAM_IDS)
 
-    def test_empty_fixtures_list(self):
+    def test_empty_fixtures_list(self) -> None:
         fixturesolution.save_solution([], _TEAM_IDS, self.path)
         loaded = fixturesolution.load_solution(
             self.path, [_ALBANY_1, _HACKNEY_1], _TEAM_IDS

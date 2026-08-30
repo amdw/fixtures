@@ -19,7 +19,7 @@ import sys
 import unittest
 
 
-def main():
+def main() -> None:
     """Run all tests using discovery with our custom pattern."""
     # Configure test discovery
     loader = unittest.TestLoader()

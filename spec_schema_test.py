@@ -133,14 +133,14 @@ def _stringify_dates(value: Any) -> Any:
 
 
 class SpecSchemaTest(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         with _SCHEMA_PATH.open() as f:
             self.schema = json.load(f)
 
-    def test_schema_itself_is_valid(self):
+    def test_schema_itself_is_valid(self) -> None:
         jsonschema.Draft202012Validator.check_schema(self.schema)
 
-    def _assert_valid(self, yaml_text: str):
+    def _assert_valid(self, yaml_text: str) -> None:
         data = _stringify_dates(yaml.safe_load(yaml_text))
         validator = jsonschema.Draft202012Validator(
             self.schema, format_checker=jsonschema.FormatChecker()
@@ -148,10 +148,10 @@ class SpecSchemaTest(unittest.TestCase):
         errors = sorted(validator.iter_errors(data), key=str)
         self.assertEqual([], errors)
 
-    def test_full_example_is_valid(self):
+    def test_full_example_is_valid(self) -> None:
         self._assert_valid(_FULL_EXAMPLE)
 
-    def test_committed_example_run_is_valid(self):
+    def test_committed_example_run_is_valid(self) -> None:
         spec_path = Path(__file__).parent / "runs" / "example" / "spec.yaml"
         self._assert_valid(spec_path.read_text())
 
@@ -168,11 +168,11 @@ class SchemaAcceptsEveryValidFixtureSpecTest(unittest.TestCase):
     covers, gets the same protection without that risk.
     """
 
-    def test_schema_accepts_every_spec_fixturespec_test_considers_valid(self):
+    def test_schema_accepts_every_spec_fixturespec_test_considers_valid(self) -> None:
         collected: list[tuple[str, Any]] = []
         real_load_spec = fixturespec.load_spec
 
-        def recording_load_spec(spec_path):
+        def recording_load_spec(spec_path: str | Path) -> fixturespec.Spec:
             spec = real_load_spec(
                 spec_path
             )  # raises if fixturespec_test.py expects failure

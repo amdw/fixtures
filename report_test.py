@@ -62,7 +62,7 @@ club_constraints:
 
 
 class TestReport(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmpdir.cleanup)
@@ -72,28 +72,28 @@ class TestReport(unittest.TestCase):
         self.output_dir = self.dir / "out"
         self.solution_path = solve.solve(self.spec_path, self.output_dir)
 
-    def test_regenerates_report_from_solution_alone(self):
+    def test_regenerates_report_from_solution_alone(self) -> None:
         index_path = report.report(self.spec_path, self.solution_path, self.output_dir)
 
         self.assertTrue(index_path.exists())
         self.assertTrue((self.output_dir / "all-matches.html").exists())
         self.assertIn("Test Season", (self.output_dir / "all-matches.html").read_text())
 
-    def test_also_writes_csv_exports(self):
+    def test_also_writes_csv_exports(self) -> None:
         report.report(self.spec_path, self.solution_path, self.output_dir)
 
         for name in ("all-matches.csv", "all-matches-by-team.csv"):
             self.assertTrue((self.output_dir / name).exists(), f"{name} not written")
         self.assertIn("Albany 1", (self.output_dir / "all-matches.csv").read_text())
 
-    def test_run_index_links_to_the_csv_exports(self):
+    def test_run_index_links_to_the_csv_exports(self) -> None:
         report.report(self.spec_path, self.solution_path, self.output_dir)
 
         index = (self.output_dir / "index.html").read_text()
         self.assertIn('href="all-matches.csv"', index)
         self.assertIn('href="all-matches-by-team.csv"', index)
 
-    def test_does_not_require_resolving(self):
+    def test_does_not_require_resolving(self) -> None:
         """Deleting nothing but the intermediate solving step should still work:
         report.py only reads solution.yaml, never calls fmodel.solve()."""
         original_contents = self.solution_path.read_text()

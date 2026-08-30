@@ -18,6 +18,7 @@ import collections
 import random
 import unittest
 from datetime import date, timedelta
+from typing import Any
 
 import berger
 import fmodel
@@ -31,20 +32,20 @@ class TestSolve(unittest.TestCase):
     fixtures: list[fmodel.ScheduledFixture]
 
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls) -> None:
         """Set up class-level data by solving once with real parameters."""
         # Seed random number generator for reproducible test results
         random.seed(42)
         cls.params = genfixtures.build_params()
         cls.fixtures = list(fmodel.solve(cls.params))
 
-    def test_basic_solve(self):
+    def test_basic_solve(self) -> None:
         """Test that solve produces fixtures with real parameters."""
         self.assertGreater(len(self.fixtures), 0, "Should generate some fixtures")
         for sf in self.fixtures:
             self.assertIsInstance(sf, fmodel.ScheduledFixture)
 
-    def test_fixture_uniqueness(self):
+    def test_fixture_uniqueness(self) -> None:
         """Test that all fixtures are unique."""
         fixture_pairs: set[tuple[fmodel.Team, fmodel.Team]] = set()
         for sf in self.fixtures:
@@ -52,7 +53,7 @@ class TestSolve(unittest.TestCase):
             self.assertNotIn(pair, fixture_pairs, f"Duplicate fixture: {pair}")
             fixture_pairs.add(pair)
 
-    def test_valid_home_dates(self):
+    def test_valid_home_dates(self) -> None:
         """Test that all fixtures are on valid home dates."""
         for sf in self.fixtures:
             home_club = sf.fixture.home_team.club
@@ -62,7 +63,7 @@ class TestSolve(unittest.TestCase):
                 f"Fixture on {sf.date} not on valid home date for {home_club}",
             )
 
-    def test_team_constraints(self):
+    def test_team_constraints(self) -> None:
         """Test that team constraints are satisfied with real parameters."""
         # Verify no team plays more than one fixture on the same date
         team_schedule = collections.defaultdict(list)
@@ -78,7 +79,7 @@ class TestSolve(unittest.TestCase):
                 f"Team {team.name} has multiple fixtures on same date",
             )
 
-    def test_min_gap_constraint(self):
+    def test_min_gap_constraint(self) -> None:
         """Test minimum gap days constraint with real parameters."""
         # Verify minimum gap constraint for each team
         team_dates = collections.defaultdict(list)
@@ -96,7 +97,7 @@ class TestSolve(unittest.TestCase):
                     f"Team {team.name} has fixtures too close: {sorted_dates[i - 1]} and {sorted_dates[i]} (gap: {gap} days)",
                 )
 
-    def test_max_concurrent_home_constraint(self):
+    def test_max_concurrent_home_constraint(self) -> None:
         """Test max concurrent home matches constraint with real parameters."""
         # Count home fixtures per club per date
         home_fixtures_by_club_date: dict[tuple[str, date], int] = (
@@ -119,7 +120,7 @@ class TestSolve(unittest.TestCase):
                 f"Club {club} has {count} home matches on {fixture_date}, exceeding limit of {limit}",
             )
 
-    def test_unavailable_away_dates(self):
+    def test_unavailable_away_dates(self) -> None:
         """Test that unavailable away dates are respected with real parameters."""
         # Verify clubs don't play away on their unavailable dates
         for sf in self.fixtures:
@@ -131,7 +132,7 @@ class TestSolve(unittest.TestCase):
                     f"Club {away_club} scheduled away on unavailable date {sf.date}",
                 )
 
-    def test_division_separation(self):
+    def test_division_separation(self) -> None:
         """Test that teams only play within their division with real parameters."""
         # Verify no cross-division fixtures
         for sf in self.fixtures:
@@ -144,7 +145,7 @@ class TestSolve(unittest.TestCase):
                 f"{sf.fixture.away_team.name} (div {away_division})",
             )
 
-    def test_completeness(self):
+    def test_completeness(self) -> None:
         """Test that all required fixtures within divisions are scheduled with real parameters."""
         # Calculate expected fixtures by division
         teams_by_division = collections.defaultdict(list)
@@ -174,7 +175,7 @@ class TestSolve(unittest.TestCase):
             "Not all required fixtures were scheduled",
         )
 
-    def test_fixture_count_by_division(self):
+    def test_fixture_count_by_division(self) -> None:
         """Test that fixture counts are correct for each division with real parameters."""
         # Count fixtures by division
         fixtures_by_division: dict[int, int] = collections.defaultdict(int)
@@ -196,7 +197,7 @@ class TestSolve(unittest.TestCase):
                 f"Division {division}: expected {expected_fixture_count} fixtures, got {actual_fixture_count}",
             )
 
-    def test_teams_play_both_home_and_away(self):
+    def test_teams_play_both_home_and_away(self) -> None:
         """Test that each team plays both home and away fixtures with real parameters."""
         home_fixtures_by_team: dict[fmodel.Team, int] = collections.defaultdict(int)
         away_fixtures_by_team: dict[fmodel.Team, int] = collections.defaultdict(int)
@@ -213,7 +214,7 @@ class TestSolve(unittest.TestCase):
                 away_fixtures_by_team[team], 0, f"Team {team.name} has no away fixtures"
             )
 
-    def test_simple_impossible_constraint(self):
+    def test_simple_impossible_constraint(self) -> None:
         """Test that impossible constraints result in no fixtures being scheduled."""
         # Create a scenario that's impossible to solve
         team1 = fmodel.Team(division=1, club="Test Club A", index=1)
@@ -258,7 +259,7 @@ class TestMaxConcurrentHomeMatchesFor(unittest.TestCase):
     should report it as unlimited (None) too. See issue #22.
     """
 
-    def _params(self, num_teams, limit):
+    def _params(self, num_teams: int, limit: int | None) -> fmodel.Parameters:
         teams = [
             fmodel.Team(division=1, club="A", index=i) for i in range(1, num_teams + 1)
         ]
@@ -271,21 +272,21 @@ class TestMaxConcurrentHomeMatchesFor(unittest.TestCase):
             },
         )
 
-    def test_limit_below_team_count_is_kept(self):
+    def test_limit_below_team_count_is_kept(self) -> None:
         params = self._params(num_teams=3, limit=2)
         self.assertEqual(
             params.max_concurrent_home_matches_for("A", date(2025, 1, 1)), 2
         )
 
-    def test_limit_equal_to_team_count_is_reported_as_unlimited(self):
+    def test_limit_equal_to_team_count_is_reported_as_unlimited(self) -> None:
         params = self._params(num_teams=2, limit=2)
         self.assertIsNone(params.max_concurrent_home_matches_for("A", date(2025, 1, 1)))
 
-    def test_limit_above_team_count_is_reported_as_unlimited(self):
+    def test_limit_above_team_count_is_reported_as_unlimited(self) -> None:
         params = self._params(num_teams=2, limit=5)
         self.assertIsNone(params.max_concurrent_home_matches_for("A", date(2025, 1, 1)))
 
-    def test_explicit_unlimited_stays_unlimited(self):
+    def test_explicit_unlimited_stays_unlimited(self) -> None:
         params = self._params(num_teams=2, limit=None)
         self.assertIsNone(params.max_concurrent_home_matches_for("A", date(2025, 1, 1)))
 
@@ -293,15 +294,15 @@ class TestMaxConcurrentHomeMatchesFor(unittest.TestCase):
 class TestHomeDatesUsedBounds(unittest.TestCase):
     """Validation of the HomeDatesUsedBounds value object itself."""
 
-    def test_requires_at_least_one_bound(self):
+    def test_requires_at_least_one_bound(self) -> None:
         with self.assertRaises(ValueError):
             fmodel.HomeDatesUsedBounds()
 
-    def test_rejects_min_above_max(self):
+    def test_rejects_min_above_max(self) -> None:
         with self.assertRaises(ValueError):
             fmodel.HomeDatesUsedBounds(minimum=5, maximum=3)
 
-    def test_equal_min_and_max_allowed(self):
+    def test_equal_min_and_max_allowed(self) -> None:
         bounds = fmodel.HomeDatesUsedBounds(minimum=3, maximum=3)
         self.assertEqual((bounds.minimum, bounds.maximum), (3, 3))
 
@@ -309,7 +310,7 @@ class TestHomeDatesUsedBounds(unittest.TestCase):
 class TestHomeDatesUsed(unittest.TestCase):
     """Test cases for the home_dates_used (min/max) constraint."""
 
-    def test_constraint_limits_dates_used(self):
+    def test_constraint_limits_dates_used(self) -> None:
         """Solver uses at most home_dates_used.maximum home dates for a club.
 
         Club "A" has two teams in a division with six other teams (one each from
@@ -357,7 +358,7 @@ class TestHomeDatesUsed(unittest.TestCase):
         unused_a_dates = set(a_home_dates) - a_dates_used
         self.assertGreaterEqual(len(unused_a_dates), 4)
 
-    def test_min_constraint_spreads_dates_used(self):
+    def test_min_constraint_spreads_dates_used(self) -> None:
         """Solver uses at least home_dates_used.minimum home dates for a club.
 
         Same shape as test_constraint_limits_dates_used: club "A" has two teams
@@ -397,7 +398,7 @@ class TestHomeDatesUsed(unittest.TestCase):
         a_dates_used = {sf.date for sf in fixtures if sf.fixture.home_team.club == "A"}
         self.assertGreaterEqual(len(a_dates_used), 10)
 
-    def test_min_constraint_enforced_strictly(self):
+    def test_min_constraint_enforced_strictly(self) -> None:
         """A club whose schedule can't reach home_dates_used.minimum is infeasible."""
         # A's single team plays one home match, so at most one home date can ever be
         # used; requiring a minimum of 2 is impossible.
@@ -423,7 +424,7 @@ class TestHomeDatesUsed(unittest.TestCase):
         with self.assertRaises(ValueError):
             fmodel.solve(params)
 
-    def test_constraint_enforced_strictly(self):
+    def test_constraint_enforced_strictly(self) -> None:
         """A club with two teams needs two home dates; a limit of 1 makes it infeasible."""
         # A has two teams in the same division, requiring 2 home matches on different dates
         # (min_gap_days=7 forces different dates). But home_dates_used.maximum=1 for A
@@ -458,7 +459,7 @@ class TestHomeDatesUsed(unittest.TestCase):
 class TestFixedFixtures(unittest.TestCase):
     """Test cases for the fixed_fixtures constraint."""
 
-    def _params(self, **kwargs):
+    def _params(self, **kwargs: Any) -> fmodel.Parameters:
         teams = [
             fmodel.Team(division=1, club="A", index=1),
             fmodel.Team(division=1, club="A", index=2),
@@ -488,7 +489,7 @@ class TestFixedFixtures(unittest.TestCase):
             **kwargs,
         )
 
-    def test_fixed_fixture_is_scheduled_on_given_date(self):
+    def test_fixed_fixture_is_scheduled_on_given_date(self) -> None:
         a1 = fmodel.Team(division=1, club="A", index=1)
         a2 = fmodel.Team(division=1, club="A", index=2)
         fixed = fmodel.ScheduledFixture(
@@ -498,7 +499,7 @@ class TestFixedFixtures(unittest.TestCase):
         fixtures = list(fmodel.solve(params))
         self.assertIn(fixed, fixtures)
 
-    def test_fixed_fixture_on_non_home_date_rejected(self):
+    def test_fixed_fixture_on_non_home_date_rejected(self) -> None:
         a1 = fmodel.Team(division=1, club="A", index=1)
         a2 = fmodel.Team(division=1, club="A", index=2)
         fixed = fmodel.ScheduledFixture(
@@ -509,7 +510,7 @@ class TestFixedFixtures(unittest.TestCase):
         with self.assertRaises(ValueError):
             fmodel.solve(params)
 
-    def test_fixed_fixture_forces_other_fixtures_off_that_date(self):
+    def test_fixed_fixture_forces_other_fixtures_off_that_date(self) -> None:
         """Pinning A1 v A2 to a date means A1 and A2 are both unavailable that date,
         so the reverse fixture (which involves both of the same teams) must land
         elsewhere."""
@@ -528,7 +529,7 @@ class TestFixedFixtures(unittest.TestCase):
         )
         self.assertNotEqual(reverse.date, date(2025, 1, 1))
 
-    def test_reverse_fixture_exactly_min_gap_days_apart_is_allowed(self):
+    def test_reverse_fixture_exactly_min_gap_days_apart_is_allowed(self) -> None:
         """Regression test: a gap of exactly min_gap_days satisfies a *minimum*
         gap of min_gap_days, so two fixed fixtures for the same pair of teams
         that many days apart must be schedulable, not rejected as too close."""
@@ -557,7 +558,7 @@ class TestFixedFixtures(unittest.TestCase):
         fixtures = list(fmodel.solve(params))
         self.assertCountEqual(fixtures, fixed)
 
-    def test_reverse_fixture_one_day_inside_min_gap_days_is_rejected(self):
+    def test_reverse_fixture_one_day_inside_min_gap_days_is_rejected(self) -> None:
         """A gap one day short of min_gap_days must still be rejected."""
         a1 = fmodel.Team(division=1, club="A", index=1)
         a2 = fmodel.Team(division=1, club="A", index=2)
@@ -588,7 +589,7 @@ class TestFixedFixtures(unittest.TestCase):
 class TestLatestInternalMatchDate(unittest.TestCase):
     """Test cases for the latest_internal_match_date constraint."""
 
-    def _params(self, **kwargs):
+    def _params(self, **kwargs: Any) -> fmodel.Parameters:
         teams = [
             fmodel.Team(division=1, club="A", index=1),
             fmodel.Team(division=1, club="A", index=2),
@@ -615,7 +616,7 @@ class TestLatestInternalMatchDate(unittest.TestCase):
             **kwargs,
         )
 
-    def test_internal_matches_respect_the_cutoff(self):
+    def test_internal_matches_respect_the_cutoff(self) -> None:
         a1 = fmodel.Team(division=1, club="A", index=1)
         a2 = fmodel.Team(division=1, club="A", index=2)
         params = self._params(latest_internal_match_date=date(2025, 2, 15))
@@ -629,7 +630,7 @@ class TestLatestInternalMatchDate(unittest.TestCase):
         for sf in internal:
             self.assertLessEqual(sf.date, date(2025, 2, 15))
 
-    def test_non_internal_matches_unaffected(self):
+    def test_non_internal_matches_unaffected(self) -> None:
         """A cross-club fixture (different clubs) may still use a late home date."""
         a1 = fmodel.Team(division=1, club="A", index=1)
         b1 = fmodel.Team(division=1, club="B", index=1)
@@ -642,7 +643,7 @@ class TestLatestInternalMatchDate(unittest.TestCase):
         )
         self.assertGreater(cross_club.date, date(2025, 2, 15))
 
-    def test_cutoff_before_any_home_date_drops_the_internal_fixture(self):
+    def test_cutoff_before_any_home_date_drops_the_internal_fixture(self) -> None:
         """No A home date qualifies, so the internal fixture has zero candidate
         variables: consistent with how a fixture that unavailable_away_dates makes
         wholly unschedulable is silently omitted (see
@@ -661,7 +662,7 @@ class TestLatestInternalMatchDate(unittest.TestCase):
         self.assertEqual(internal, [])
         self.assertTrue(fixtures)  # the other (non-internal) fixtures still solve
 
-    def test_fixed_internal_fixture_after_cutoff_rejected(self):
+    def test_fixed_internal_fixture_after_cutoff_rejected(self) -> None:
         a1 = fmodel.Team(division=1, club="A", index=1)
         a2 = fmodel.Team(division=1, club="A", index=2)
         fixed = fmodel.ScheduledFixture(
@@ -673,7 +674,7 @@ class TestLatestInternalMatchDate(unittest.TestCase):
         with self.assertRaises(ValueError):
             fmodel.solve(params)
 
-    def test_no_cutoff_by_default(self):
+    def test_no_cutoff_by_default(self) -> None:
         """Without latest_internal_match_date, internal matches can use any date."""
         a1 = fmodel.Team(division=1, club="A", index=1)
         a2 = fmodel.Team(division=1, club="A", index=2)
@@ -699,7 +700,7 @@ class TestEarliestMatchDate(unittest.TestCase):
     leave room for a cutoff to remove some of them and still solve.
     """
 
-    def _params(self, **kwargs):
+    def _params(self, **kwargs: Any) -> fmodel.Parameters:
         teams = [
             fmodel.Team(division=1, club="A", index=1),
             fmodel.Team(division=1, club="A", index=2),
@@ -728,7 +729,7 @@ class TestEarliestMatchDate(unittest.TestCase):
             **kwargs,
         )
 
-    def test_new_fixtures_respect_the_cutoff(self):
+    def test_new_fixtures_respect_the_cutoff(self) -> None:
         """A cutoff that excludes some (but not all) of club A's dates still
         leaves enough of them (4, the minimum -- see class docstring) to solve."""
         params = self._params(earliest_match_date=date(2025, 2, 1))
@@ -737,7 +738,7 @@ class TestEarliestMatchDate(unittest.TestCase):
         for sf in fixtures:
             self.assertGreaterEqual(sf.date, date(2025, 2, 1))
 
-    def test_cutoff_after_all_of_a_clubs_home_dates_drops_its_fixtures(self):
+    def test_cutoff_after_all_of_a_clubs_home_dates_drops_its_fixtures(self) -> None:
         """A cutoff after all of club A's home dates (but before club B's) makes
         every A-hosted fixture unschedulable -- each has zero candidate
         variables, so (consistent with
@@ -750,7 +751,7 @@ class TestEarliestMatchDate(unittest.TestCase):
         self.assertFalse([sf for sf in fixtures if sf.fixture.home_team.club == "A"])
         self.assertTrue([sf for sf in fixtures if sf.fixture.home_team.club == "B"])
 
-    def test_fixed_fixture_before_cutoff_still_solves(self):
+    def test_fixed_fixture_before_cutoff_still_solves(self) -> None:
         """Unlike latest_internal_match_date, a fixed fixture dated before the cutoff
         is not rejected: fixed_fixtures represents matches that are already
         committed (possibly already played), so an old date there is expected --
@@ -768,7 +769,7 @@ class TestEarliestMatchDate(unittest.TestCase):
         fixtures = list(fmodel.solve(params))
         self.assertIn(fixed, fixtures)
 
-    def test_no_cutoff_by_default(self):
+    def test_no_cutoff_by_default(self) -> None:
         """Without earliest_match_date, all 6 fixtures solve as normal (the tight
         4-distinct-A-dates requirement from the class docstring, with no cutoff
         trimming club A's 6 candidate dates, is comfortably satisfiable)."""
@@ -780,7 +781,7 @@ class TestEarliestMatchDate(unittest.TestCase):
 class TestExcludedFixtures(unittest.TestCase):
     """Test cases for the excluded_fixtures parameter."""
 
-    def _params(self, **kwargs):
+    def _params(self, **kwargs: Any) -> fmodel.Parameters:
         teams = [
             fmodel.Team(division=1, club="A", index=1),
             fmodel.Team(division=1, club="A", index=2),
@@ -807,7 +808,7 @@ class TestExcludedFixtures(unittest.TestCase):
             **kwargs,
         )
 
-    def test_excluded_fixture_is_not_scheduled(self):
+    def test_excluded_fixture_is_not_scheduled(self) -> None:
         a1 = fmodel.Team(division=1, club="A", index=1)
         a2 = fmodel.Team(division=1, club="A", index=2)
         excluded_fixture = fmodel.Fixture(home_team=a1, away_team=a2)
@@ -817,7 +818,7 @@ class TestExcludedFixtures(unittest.TestCase):
         # The other 5 fixtures in this 3-team division must still be scheduled
         self.assertEqual(len(fixtures), 5)
 
-    def test_exclusion_is_directional(self):
+    def test_exclusion_is_directional(self) -> None:
         """Excluding A1 v A2 must not also exclude the reverse fixture A2 v A1."""
         a1 = fmodel.Team(division=1, club="A", index=1)
         a2 = fmodel.Team(division=1, club="A", index=2)
@@ -831,7 +832,7 @@ class TestExcludedFixtures(unittest.TestCase):
             )
         )
 
-    def test_fixed_and_excluded_conflict_rejected(self):
+    def test_fixed_and_excluded_conflict_rejected(self) -> None:
         a1 = fmodel.Team(division=1, club="A", index=1)
         a2 = fmodel.Team(division=1, club="A", index=2)
         fixture = fmodel.Fixture(home_team=a1, away_team=a2)
@@ -872,7 +873,7 @@ class TestDivisionSchemes(unittest.TestCase):
     def _teams(clubs: str, division: int = 1) -> list[fmodel.Team]:
         return [fmodel.Team(division=division, club=c, index=1) for c in clubs]
 
-    def test_double_round_is_the_default_scheme(self):
+    def test_double_round_is_the_default_scheme(self) -> None:
         params = self._params(self._teams("ABCD"))
         fixtures = list(fmodel.solve(params))
         # 4 teams, home and away: 4 * 3 = 12 fixtures.
@@ -880,7 +881,7 @@ class TestDivisionSchemes(unittest.TestCase):
         self.assertEqual(1, len(params.divisions))
         self.assertEqual(fmodel.FixtureScheme.DOUBLE_ROUND, params.divisions[0].scheme)
 
-    def test_single_round_plays_each_pair_once(self):
+    def test_single_round_plays_each_pair_once(self) -> None:
         params = self._params(
             self._teams("ABCD"),
             division_schemes={1: fmodel.FixtureScheme.SINGLE_ROUND},
@@ -892,7 +893,7 @@ class TestDivisionSchemes(unittest.TestCase):
         }
         self.assertEqual(6, len(unordered))
 
-    def test_single_round_home_away_follows_the_berger_table(self):
+    def test_single_round_home_away_follows_the_berger_table(self) -> None:
         teams = self._teams("ABCD")
         params = self._params(
             teams, division_schemes={1: fmodel.FixtureScheme.SINGLE_ROUND}
@@ -906,7 +907,7 @@ class TestDivisionSchemes(unittest.TestCase):
         }
         self.assertEqual(expected, got)
 
-    def test_single_round_draw_order_comes_from_parameters_teams(self):
+    def test_single_round_draw_order_comes_from_parameters_teams(self) -> None:
         # teams order D, C, B, A: the Berger draw, and every H/A, follows it.
         teams = self._teams("DCBA")
         params = self._params(
@@ -924,7 +925,7 @@ class TestDivisionSchemes(unittest.TestCase):
         # here that's D (first in teams) hosting A (last in teams).
         self.assertIn(("D", "A"), got)
 
-    def test_schemes_are_per_division(self):
+    def test_schemes_are_per_division(self) -> None:
         teams = self._teams("ABCD", division=1) + self._teams("EFGH", division=2)
         params = self._params(
             teams, division_schemes={1: fmodel.FixtureScheme.SINGLE_ROUND}
@@ -936,7 +937,7 @@ class TestDivisionSchemes(unittest.TestCase):
         self.assertEqual(6, by_division[1])  # single round
         self.assertEqual(12, by_division[2])  # double round (the default)
 
-    def test_scheme_for_division_with_no_teams_is_rejected(self):
+    def test_scheme_for_division_with_no_teams_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "division.*9.*no teams"):
             self._params(
                 self._teams("ABCD"),
@@ -950,7 +951,7 @@ class TestTeamConstraints(unittest.TestCase):
     whose teams don't all share the same availability.
     """
 
-    def test_team_home_dates_override_restricts_that_team_only(self):
+    def test_team_home_dates_override_restricts_that_team_only(self) -> None:
         """A1 has a narrower home_dates override than club A; A2 (no override) can
         still use A's full home_dates list."""
         a1 = fmodel.Team(division=1, club="A", index=1)
@@ -974,7 +975,7 @@ class TestTeamConstraints(unittest.TestCase):
         self.assertTrue(a2_home_dates_used.issubset(set(a_home_dates)))
         self.assertTrue(a2_home_dates_used - {date(2025, 1, 1)})
 
-    def test_team_unavailable_away_dates_is_additive(self):
+    def test_team_unavailable_away_dates_is_additive(self) -> None:
         """A1's team-specific unavailable_away_dates blocks it from playing away on
         B's home date, even though club A has no such club-wide restriction."""
         a1 = fmodel.Team(division=1, club="A", index=1)
@@ -1007,7 +1008,7 @@ class TestTeamConstraints(unittest.TestCase):
             )
         )
 
-    def test_team_without_override_falls_back_to_club(self):
+    def test_team_without_override_falls_back_to_club(self) -> None:
         a1 = fmodel.Team(division=1, club="A", index=1)
         params = fmodel.Parameters(
             teams=[a1],
@@ -1028,14 +1029,14 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
     a given set of teams may be scheduled within any window of within_days days.
     """
 
-    def test_within_days_defaults_to_zero(self):
+    def test_within_days_defaults_to_zero(self) -> None:
         a1 = fmodel.Team(division=1, club="A", index=1)
         a2 = fmodel.Team(division=2, club="A", index=2)
         self.assertEqual(
             fmodel.AvoidCoschedulingConstraint(teams=[a1, a2]).within_days, 0
         )
 
-    def test_applies_to_defaults_to_both(self):
+    def test_applies_to_defaults_to_both(self) -> None:
         a1 = fmodel.Team(division=1, club="A", index=1)
         a2 = fmodel.Team(division=2, club="A", index=2)
         self.assertEqual(
@@ -1043,7 +1044,7 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
             fmodel.CoschedulingScope.BOTH,
         )
 
-    def test_forces_different_dates_for_constrained_teams(self):
+    def test_forces_different_dates_for_constrained_teams(self) -> None:
         """A1 and A2 are in different divisions (so have no fixture between them
         directly forcing a gap) and could otherwise both be scheduled at home on the
         same one of A's two shared home dates; the coscheduling constraint forces
@@ -1076,7 +1077,7 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
         a2_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a2)
         self.assertNotEqual(a1_home_date, a2_home_date)
 
-    def test_also_applies_to_away_matches(self):
+    def test_also_applies_to_away_matches(self) -> None:
         """The constraint covers every match involving a constrained team, not just
         its home ones -- so if X only has one home date, A1 and A2 can't both play
         their away leg there, even though neither is hosting."""
@@ -1103,7 +1104,7 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
         with self.assertRaises(ValueError):
             fmodel.solve(params)
 
-    def test_infeasible_when_only_one_shared_date_available(self):
+    def test_infeasible_when_only_one_shared_date_available(self) -> None:
         """Same setup as test_forces_different_dates_for_constrained_teams, but A
         only has one home date -- both A1 and A2 need it for their home leg, and the
         coscheduling constraint forbids them sharing it. (X still gets two dates, to
@@ -1132,7 +1133,7 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
         with self.assertRaises(ValueError):
             fmodel.solve(params)
 
-    def test_within_days_window_enforced(self):
+    def test_within_days_window_enforced(self) -> None:
         """With within_days=3, A1 and A2's home matches must land on dates more than
         3 days apart -- of A's three candidate dates (Jan 1, 3, 10), only pairings
         involving Jan 10 satisfy that, so the solver must pick one of those. (X's two
@@ -1163,7 +1164,7 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
         a2_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a2)
         self.assertGreater(abs((a1_home_date - a2_home_date).days), 3)
 
-    def test_direct_fixture_between_constrained_teams_not_double_counted(self):
+    def test_direct_fixture_between_constrained_teams_not_double_counted(self) -> None:
         """A single match between two constrained teams should count once towards
         the <=1 limit, not twice -- if the two teams' variables were combined
         naively (e.g. by concatenating each team's own match list) rather than by
@@ -1195,7 +1196,7 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
             ],
         )
 
-    def test_applies_to_away_allows_shared_home_date(self):
+    def test_applies_to_away_allows_shared_home_date(self) -> None:
         """With applies_to=AWAY the constraint ignores home matches: A1 and A2 may
         both host on A's single home date (which BOTH would forbid -- cf
         test_infeasible_when_only_one_shared_date_available), while X's two dates keep
@@ -1227,7 +1228,7 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
         a2_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a2)
         self.assertEqual(a1_home_date, a2_home_date)
 
-    def test_applies_to_away_still_separates_away_legs(self):
+    def test_applies_to_away_still_separates_away_legs(self) -> None:
         """applies_to=AWAY still constrains away matches: with only one X home date,
         A1 and A2 can't both play their away leg there."""
         a1 = fmodel.Team(division=1, club="A", index=1)
@@ -1255,7 +1256,7 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
         with self.assertRaises(ValueError):
             fmodel.solve(params)
 
-    def test_applies_to_home_ignores_away_collision(self):
+    def test_applies_to_home_ignores_away_collision(self) -> None:
         """With applies_to=HOME the constraint ignores away matches: A1 and A2 may
         both play their away leg on X's single home date, while A's two dates keep
         their home legs apart."""
@@ -1286,7 +1287,7 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
         a2_away_date = next(sf.date for sf in fixtures if sf.fixture.away_team == a2)
         self.assertEqual(a1_away_date, a2_away_date)
 
-    def test_applies_to_home_still_separates_home_legs(self):
+    def test_applies_to_home_still_separates_home_legs(self) -> None:
         """applies_to=HOME still constrains home matches: with only one A home date,
         A1 and A2 can't both host there."""
         a1 = fmodel.Team(division=1, club="A", index=1)
@@ -1320,7 +1321,7 @@ class TestMaxConcurrentHomeMatchesUnlimited(unittest.TestCase):
     limit imposed by this mechanism, as opposed to a finite one.
     """
 
-    def test_finite_default_makes_it_infeasible(self):
+    def test_finite_default_makes_it_infeasible(self) -> None:
         """A has two teams (different divisions, so no direct fixture forces them
         apart) but only one home date; with a limit of 1, both teams needing to host
         on that one date is infeasible."""
@@ -1344,7 +1345,7 @@ class TestMaxConcurrentHomeMatchesUnlimited(unittest.TestCase):
         with self.assertRaises(ValueError):
             fmodel.solve(params)
 
-    def test_none_default_lifts_the_limit(self):
+    def test_none_default_lifts_the_limit(self) -> None:
         """Same setup, but A's default is None -- both A1 and A2 can now host on
         their one shared date."""
         a1 = fmodel.Team(division=1, club="A", index=1)
@@ -1370,7 +1371,7 @@ class TestMaxConcurrentHomeMatchesUnlimited(unittest.TestCase):
         self.assertEqual(a1_home_date, date(2025, 1, 1))
         self.assertEqual(a2_home_date, date(2025, 1, 1))
 
-    def test_none_override_lifts_the_limit_for_one_date_only(self):
+    def test_none_override_lifts_the_limit_for_one_date_only(self) -> None:
         """A's default limit of 1 applies generally, but is overridden to None (no
         limit) specifically on 2025-01-01 -- so both A1 and A2 can host there, even
         though a finite default of 1 would otherwise forbid it."""
@@ -1404,7 +1405,7 @@ class TestDuplicateRejection(unittest.TestCase):
     """Parameters construction relies on each (Fixture, date) pair mapping to at most
     one solver variable; these are the two ways it could otherwise be violated."""
 
-    def test_duplicate_team_rejected(self):
+    def test_duplicate_team_rejected(self) -> None:
         teams = [
             fmodel.Team(division=1, club="A", index=1),
             fmodel.Team(division=1, club="A", index=1),  # duplicate
@@ -1421,7 +1422,7 @@ class TestDuplicateRejection(unittest.TestCase):
                 },
             )
 
-    def test_duplicate_home_date_rejected(self):
+    def test_duplicate_home_date_rejected(self) -> None:
         teams = [
             fmodel.Team(division=1, club="A", index=1),
             fmodel.Team(division=1, club="B", index=1),
@@ -1440,7 +1441,7 @@ class TestDuplicateRejection(unittest.TestCase):
                 },
             )
 
-    def test_duplicate_team_home_date_rejected(self):
+    def test_duplicate_team_home_date_rejected(self) -> None:
         a1 = fmodel.Team(division=1, club="A", index=1)
         b1 = fmodel.Team(division=1, club="B", index=1)
         with self.assertRaisesRegex(ValueError, "Duplicate home date"):

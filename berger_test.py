@@ -62,16 +62,16 @@ _FIDE_12 = [
 
 
 class BergerPairingsTest(unittest.TestCase):
-    def test_matches_canonical_fide_tables(self):
+    def test_matches_canonical_fide_tables(self) -> None:
         for n, table in ((8, _FIDE_8), (10, _FIDE_10), (12, _FIDE_12)):
             with self.subTest(n=n):
                 expected = [pair for rnd in table for pair in rnd]
                 self.assertEqual(expected, berger.berger_pairings(n))
 
-    def test_two_entrants(self):
+    def test_two_entrants(self) -> None:
         self.assertEqual([(1, 2)], berger.berger_pairings(2))
 
-    def test_degenerate_sizes(self):
+    def test_degenerate_sizes(self) -> None:
         self.assertEqual([], berger.berger_pairings(0))
         self.assertEqual([], berger.berger_pairings(1))
 
@@ -89,12 +89,12 @@ class BergerPairingsTest(unittest.TestCase):
         self.assertEqual({x: n - 1 for x in range(1, n + 1)}, dict(appearances))
         return pairings
 
-    def test_valid_single_round_for_even_and_odd_sizes(self):
+    def test_valid_single_round_for_even_and_odd_sizes(self) -> None:
         for n in range(2, 15):
             with self.subTest(n=n):
                 self._assert_valid_single_round(n)
 
-    def test_home_away_counts_are_balanced(self):
+    def test_home_away_counts_are_balanced(self) -> None:
         # Each entrant hosts either floor((n-1)/2) or ceil((n-1)/2) of its games.
         for n in range(2, 15):
             with self.subTest(n=n):
@@ -106,7 +106,7 @@ class BergerPairingsTest(unittest.TestCase):
 
 
 class SingleRoundPairingsTest(unittest.TestCase):
-    def test_maps_numbers_onto_entrants_in_draw_order(self):
+    def test_maps_numbers_onto_entrants_in_draw_order(self) -> None:
         entrants = ["a", "b", "c", "d"]
         pairings = berger.single_round_pairings(entrants)
         number_pairings = berger.berger_pairings(4)
@@ -115,13 +115,13 @@ class SingleRoundPairingsTest(unittest.TestCase):
             pairings,
         )
 
-    def test_first_entrant_is_berger_position_one(self):
+    def test_first_entrant_is_berger_position_one(self) -> None:
         # Round 1 of the Berger table pairs position 1 (home) with position n.
         entrants = ["p1", "p2", "p3", "p4", "p5", "p6"]
         first = berger.single_round_pairings(entrants)[0]
         self.assertEqual(("p1", "p6"), first)
 
-    def test_each_pair_once_over_arbitrary_entrants(self):
+    def test_each_pair_once_over_arbitrary_entrants(self) -> None:
         entrants = list("abcdefghij")  # 10
         pairings = berger.single_round_pairings(entrants)
         self.assertEqual(45, len(pairings))
@@ -130,7 +130,7 @@ class SingleRoundPairingsTest(unittest.TestCase):
             {frozenset(p) for p in pairings},
         )
 
-    def test_empty(self):
+    def test_empty(self) -> None:
         self.assertEqual([], berger.single_round_pairings([]))
 
 

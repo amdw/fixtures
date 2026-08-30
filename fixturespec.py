@@ -48,7 +48,9 @@ class _NoDuplicateKeysSafeLoader(yaml.SafeLoader):
     elsewhere in the file). Failing loudly instead catches that class of mistake.
     """
 
-    def construct_mapping(self, node, deep=False):
+    def construct_mapping(
+        self, node: yaml.MappingNode, deep: bool = False
+    ) -> dict[Any, Any]:
         seen: set[Any] = set()
         for key_node, _value_node in node.value:
             key = self.construct_object(key_node, deep=deep)

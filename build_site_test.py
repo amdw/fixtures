@@ -73,13 +73,13 @@ def _make_run(run_dir: Path, name: str) -> None:
 
 
 class TestFindRunSpecs(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmpdir.cleanup)
         self.runs_dir = Path(self._tmpdir.name) / "runs"
 
-    def test_finds_runs_at_any_depth(self):
+    def test_finds_runs_at_any_depth(self) -> None:
         flat = self.runs_dir / "example"
         nested = self.runs_dir / "2026-27" / "draft1"
         for d in (flat, nested):
@@ -89,7 +89,7 @@ class TestFindRunSpecs(unittest.TestCase):
 
         self.assertEqual(build_site.find_run_specs(self.runs_dir), [nested, flat])
 
-    def test_ignores_dirs_missing_spec_or_solution(self):
+    def test_ignores_dirs_missing_spec_or_solution(self) -> None:
         (self.runs_dir / "spec-only").mkdir(parents=True)
         (self.runs_dir / "spec-only" / "spec.yaml").write_text("clubs: {}\n")
         (self.runs_dir / "solution-only").mkdir(parents=True)
@@ -97,12 +97,12 @@ class TestFindRunSpecs(unittest.TestCase):
 
         self.assertEqual(build_site.find_run_specs(self.runs_dir), [])
 
-    def test_missing_runs_dir(self):
+    def test_missing_runs_dir(self) -> None:
         self.assertEqual(build_site.find_run_specs(self.runs_dir), [])
 
 
 class TestBuildReports(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmpdir.cleanup)
@@ -124,7 +124,7 @@ class TestBuildReports(unittest.TestCase):
         ):
             build_site.main()
 
-    def test_regenerates_report_and_index_pages_from_source(self):
+    def test_regenerates_report_and_index_pages_from_source(self) -> None:
         flat = self.runs_dir / "example"
         nested = self.runs_dir / "2026-27" / "draft1"
         _make_run(flat, "Example Season")
@@ -153,7 +153,7 @@ class TestBuildReports(unittest.TestCase):
         self.assertIn("runs/example/index.html", root)
         self.assertIn("runs/2026-27/draft1/index.html", root)
 
-    def test_writes_nothing_into_the_source_runs_dir(self):
+    def test_writes_nothing_into_the_source_runs_dir(self) -> None:
         _make_run(self.runs_dir / "example", "Example Season")
 
         self._run_cli()
@@ -167,7 +167,7 @@ class TestBuildReports(unittest.TestCase):
             strays, [], f"build_site.py wrote {strays} back into the source runs dir"
         )
 
-    def test_drops_runs_removed_from_the_source(self):
+    def test_drops_runs_removed_from_the_source(self) -> None:
         _make_run(self.runs_dir / "keep", "Keep")
         _make_run(self.runs_dir / "drop", "Drop")
         self._run_cli()
@@ -180,7 +180,7 @@ class TestBuildReports(unittest.TestCase):
         self.assertTrue((self.out_dir / "runs" / "keep" / "index.html").exists())
         self.assertNotIn("runs/drop/index.html", self.root_index.read_text())
 
-    def test_does_not_re_solve(self):
+    def test_does_not_re_solve(self) -> None:
         run_dir = self.runs_dir / "example"
         _make_run(run_dir, "Example Season")
         before = (run_dir / "solution.yaml").read_text()
@@ -189,7 +189,7 @@ class TestBuildReports(unittest.TestCase):
 
         self.assertEqual((run_dir / "solution.yaml").read_text(), before)
 
-    def test_no_runs_writes_empty_index(self):
+    def test_no_runs_writes_empty_index(self) -> None:
         self.runs_dir.mkdir()
         self._run_cli()
         self.assertIn("No runs yet", self.root_index.read_text())

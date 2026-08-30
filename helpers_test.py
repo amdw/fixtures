@@ -29,7 +29,7 @@ import genfixtures
 class TestGenDates(unittest.TestCase):
     """Test cases for gen_dates function."""
 
-    def test_basic_weekday_generation(self):
+    def test_basic_weekday_generation(self) -> None:
         """Test generating all Mondays in a range."""
         start = date(2025, 1, 6)  # Monday
         end = date(2025, 1, 20)  # Monday
@@ -39,7 +39,7 @@ class TestGenDates(unittest.TestCase):
 
         self.assertEqual(result, expected)
 
-    def test_different_weekday(self):
+    def test_different_weekday(self) -> None:
         """Test generating Thursdays."""
         start = date(2025, 1, 1)  # Wednesday
         end = date(2025, 1, 31)  # Friday
@@ -55,7 +55,7 @@ class TestGenDates(unittest.TestCase):
 
         self.assertEqual(result, expected)
 
-    def test_exclude_first_occurrence(self):
+    def test_exclude_first_occurrence(self) -> None:
         """Test excluding first occurrence of each month."""
         start = date(2025, 1, 1)
         end = date(2025, 3, 31)
@@ -83,7 +83,7 @@ class TestGenDates(unittest.TestCase):
 
         self.assertEqual(result, expected)
 
-    def test_exclude_multiple_occurrences(self):
+    def test_exclude_multiple_occurrences(self) -> None:
         """Test excluding first and third occurrence of each month."""
         start = date(2025, 1, 1)
         end = date(2025, 2, 28)
@@ -103,7 +103,7 @@ class TestGenDates(unittest.TestCase):
 
         self.assertEqual(result, expected)
 
-    def test_single_day_range(self):
+    def test_single_day_range(self) -> None:
         """Test with start and end on same weekday."""
         start = date(2025, 1, 6)  # Monday
         end = date(2025, 1, 6)  # Same Monday
@@ -113,7 +113,7 @@ class TestGenDates(unittest.TestCase):
 
         self.assertEqual(result, expected)
 
-    def test_no_matching_weekdays(self):
+    def test_no_matching_weekdays(self) -> None:
         """Test range with no matching weekdays."""
         start = date(2025, 1, 6)  # Monday
         end = date(2025, 1, 7)  # Tuesday
@@ -130,8 +130,12 @@ class TestGenDates(unittest.TestCase):
         exclude_occurrences=st.lists(st.integers(min_value=1, max_value=5), max_size=3),
     )
     def test_gen_dates_properties(
-        self, start_date, days_span, day_of_week, exclude_occurrences
-    ):
+        self,
+        start_date: date,
+        days_span: int,
+        day_of_week: int,
+        exclude_occurrences: list[int],
+    ) -> None:
         """Test key properties of gen_dates output."""
         end_date = start_date + timedelta(days=days_span)
 
@@ -158,7 +162,7 @@ class TestGenDates(unittest.TestCase):
 class TestRemoveRandom(unittest.TestCase):
     """Test cases for remove_random function."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
 
         # Set up the patch
@@ -169,7 +173,7 @@ class TestRemoveRandom(unittest.TestCase):
         # Default to identity shuffle (no actual shuffling) for most tests
         self.mock_shuffle.side_effect = lambda x: None
 
-    def test_remove_half(self):
+    def test_remove_half(self) -> None:
         """Test removing 50% of dates."""
         dates = [
             date(2025, 1, 1),
@@ -186,7 +190,7 @@ class TestRemoveRandom(unittest.TestCase):
         expected = [date(2025, 1, 1), date(2025, 1, 8)]
         self.assertEqual(result, expected)
 
-    def test_remove_none(self):
+    def test_remove_none(self) -> None:
         """Test removing 0% of dates (keep all)."""
         dates = [
             date(2025, 1, 1),
@@ -202,7 +206,7 @@ class TestRemoveRandom(unittest.TestCase):
         expected = dates  # Same order since no shuffling
         self.assertEqual(result, expected)
 
-    def test_remove_all(self):
+    def test_remove_all(self) -> None:
         """Test removing 100% of dates (keep none)."""
         dates = [
             date(2025, 1, 1),
@@ -217,7 +221,7 @@ class TestRemoveRandom(unittest.TestCase):
         self.assertEqual(len(result), 0)
         self.assertEqual(result, [])
 
-    def test_shuffle_called(self):
+    def test_shuffle_called(self) -> None:
         """Test that shuffle is actually called."""
         dates = [
             date(2025, 1, 1),
@@ -230,7 +234,7 @@ class TestRemoveRandom(unittest.TestCase):
         genfixtures.remove_random(dates, 0.2)
         self.mock_shuffle.assert_called_once()
 
-    def test_empty_input(self):
+    def test_empty_input(self) -> None:
         """Test with empty date list."""
         result = genfixtures.remove_random([], 0.5)
         self.assertEqual(result, [])
@@ -244,7 +248,9 @@ class TestRemoveRandom(unittest.TestCase):
         ),
         fraction=st.floats(min_value=0.0, max_value=1.0),
     )
-    def test_remove_random_properties(self, dates_list, fraction):
+    def test_remove_random_properties(
+        self, dates_list: list[date], fraction: float
+    ) -> None:
         """Test key properties of remove_random output."""
         # Sort input to make test deterministic
         dates_list = sorted(dates_list)
@@ -277,7 +283,7 @@ class TestRemoveRandom(unittest.TestCase):
 class TestDateWindows(unittest.TestCase):
     """Test cases for date_windows function."""
 
-    def test_basic_windows(self):
+    def test_basic_windows(self) -> None:
         """Test basic window generation."""
         dates = [date(2025, 1, 1), date(2025, 1, 3), date(2025, 1, 8)]
 
@@ -294,7 +300,7 @@ class TestDateWindows(unittest.TestCase):
 
         self.assertCountEqual(result, expected)
 
-    def test_single_date(self):
+    def test_single_date(self) -> None:
         """Test with single date."""
         dates = [date(2025, 1, 1)]
 
@@ -303,7 +309,7 @@ class TestDateWindows(unittest.TestCase):
 
         self.assertEqual(result, expected)
 
-    def test_all_dates_in_window(self):
+    def test_all_dates_in_window(self) -> None:
         """Test when all dates fit in one window."""
         dates = [date(2025, 1, 1), date(2025, 1, 2), date(2025, 1, 3)]
 
@@ -312,7 +318,7 @@ class TestDateWindows(unittest.TestCase):
 
         self.assertEqual(result, expected)
 
-    def test_no_overlapping_windows(self):
+    def test_no_overlapping_windows(self) -> None:
         """Test dates that don't create overlapping windows."""
         dates = [date(2025, 1, 1), date(2025, 1, 10), date(2025, 1, 20)]
 
@@ -327,7 +333,7 @@ class TestDateWindows(unittest.TestCase):
 
         self.assertCountEqual(result, expected)
 
-    def test_subset_removal(self):
+    def test_subset_removal(self) -> None:
         """Test that subset windows are properly removed."""
         dates = [date(2025, 1, 1), date(2025, 1, 2), date(2025, 1, 3), date(2025, 1, 4)]
 
@@ -337,12 +343,12 @@ class TestDateWindows(unittest.TestCase):
         expected = [frozenset(dates)]
         self.assertEqual(result, expected)
 
-    def test_empty_input(self):
+    def test_empty_input(self) -> None:
         """Test with empty date list."""
         result = fmodel.date_windows([], window_days=7)
         self.assertEqual(result, [])
 
-    def test_window_size_zero(self):
+    def test_window_size_zero(self) -> None:
         """Test with zero window size."""
         dates = [date(2025, 1, 1), date(2025, 1, 2)]
 
@@ -353,7 +359,7 @@ class TestDateWindows(unittest.TestCase):
 
         self.assertCountEqual(result, expected)
 
-    def test_unsorted_input(self):
+    def test_unsorted_input(self) -> None:
         """Test that function handles unsorted input correctly."""
         dates = [date(2025, 1, 8), date(2025, 1, 1), date(2025, 1, 3)]
 
@@ -376,7 +382,9 @@ class TestDateWindows(unittest.TestCase):
         ),
         window_days=st.integers(min_value=0, max_value=30),
     )
-    def test_date_windows_properties(self, dates_list, window_days):
+    def test_date_windows_properties(
+        self, dates_list: list[date], window_days: int
+    ) -> None:
         """Test key properties of date_windows output."""
         assume(len(dates_list) > 0 or window_days >= 0)  # Avoid trivial cases
 

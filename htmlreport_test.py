@@ -81,21 +81,21 @@ def _club(
 
 
 class TestSlugify(unittest.TestCase):
-    def test_simple(self):
+    def test_simple(self) -> None:
         self.assertEqual(htmlreport.slugify("Albany"), "albany")
 
-    def test_spaces_and_punctuation(self):
+    def test_spaces_and_punctuation(self) -> None:
         self.assertEqual(htmlreport.slugify("Willesden & Brent"), "willesden-brent")
 
-    def test_leading_trailing_punctuation(self):
+    def test_leading_trailing_punctuation(self) -> None:
         self.assertEqual(htmlreport.slugify("  Kings Head!!"), "kings-head")
 
-    def test_empty(self):
+    def test_empty(self) -> None:
         self.assertEqual(htmlreport.slugify("---"), "unnamed")
 
 
 class TestGenerateReport(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmpdir.cleanup)
@@ -155,11 +155,11 @@ class TestGenerateReport(unittest.TestCase):
             self.fixtures, self.teams, self.clubs, self.output_dir
         )
 
-    def test_returns_index_path(self):
+    def test_returns_index_path(self) -> None:
         self.assertEqual(self.index_path, self.output_dir / "index.html")
         self.assertTrue(self.index_path.exists())
 
-    def test_all_matches_page(self):
+    def test_all_matches_page(self) -> None:
         content = (self.output_dir / "all-matches.html").read_text()
         self.assertIn("Harrow 1", content)
         self.assertIn("Ealing 1", content)
@@ -167,7 +167,7 @@ class TestGenerateReport(unittest.TestCase):
         # 4 fixtures -> 4 data rows (plus header row)
         self.assertEqual(content.count("<tr>"), 5)
 
-    def test_match_annotated_with_venue_start_and_time_limit(self):
+    def test_match_annotated_with_venue_start_and_time_limit(self) -> None:
         content = (self.output_dir / "all-matches.html").read_text()
         self.assertIn("<th>Venue</th>", content)
         self.assertIn("<th>Start</th>", content)
@@ -176,13 +176,13 @@ class TestGenerateReport(unittest.TestCase):
         self.assertIn("19:30", content)
         self.assertIn("75+15", content)
 
-    def test_match_table_shows_venue_name_but_not_address(self):
+    def test_match_table_shows_venue_name_but_not_address(self) -> None:
         content = (self.output_dir / "all-matches.html").read_text()
         table_part = content.split("<h2>Venues</h2>")[0]
         self.assertIn("Harrow Leisure Centre", table_part)
         self.assertNotIn("1 Harrow Road, London", table_part)
 
-    def test_all_matches_venues_section_lists_name_and_address(self):
+    def test_all_matches_venues_section_lists_name_and_address(self) -> None:
         content = (self.output_dir / "all-matches.html").read_text()
         self.assertIn("<h2>Venues</h2>", content)
         venues_part = content.split("<h2>Venues</h2>")[1]
@@ -192,19 +192,19 @@ class TestGenerateReport(unittest.TestCase):
         self.assertIn("2 Ealing Road, London", venues_part)
         self.assertIn("Hendon Club", venues_part)
 
-    def test_division_venues_section_only_lists_that_divisions_clubs(self):
+    def test_division_venues_section_only_lists_that_divisions_clubs(self) -> None:
         div1 = (self.output_dir / "division-1.html").read_text()
         venues_part = div1.split("<h2>Venues</h2>")[1]
         self.assertIn("Harrow Leisure Centre", venues_part)
         self.assertIn("Ealing Sports Hall", venues_part)
         self.assertNotIn("Hendon Club", venues_part)
 
-    def test_name_override_used_throughout(self):
+    def test_name_override_used_throughout(self) -> None:
         content = (self.output_dir / "all-matches.html").read_text()
         self.assertIn("Willesden Warriors", content)
         self.assertNotIn("Willesden &amp; Brent 1", content)
 
-    def test_division_pages(self):
+    def test_division_pages(self) -> None:
         div1 = (self.output_dir / "division-1.html").read_text()
         self.assertIn("Harrow 1", div1)
         self.assertNotIn("Hendon 1", div1)
@@ -216,13 +216,13 @@ class TestGenerateReport(unittest.TestCase):
         self.assertIn("Hendon 1", div2)
         self.assertIn("Willesden Warriors", div2)
 
-    def test_division_page_names_the_fixture_scheme_in_a_subheading(self):
+    def test_division_page_names_the_fixture_scheme_in_a_subheading(self) -> None:
         # No division_schemes passed -> every division defaults to a double round.
         div1 = (self.output_dir / "division-1.html").read_text()
         self.assertIn("<h2>Double-round all-play-all</h2>", div1)
         self.assertNotIn("Single-round", div1)
 
-    def test_club_per_team_heading_names_the_fixture_scheme_in_brackets(self):
+    def test_club_per_team_heading_names_the_fixture_scheme_in_brackets(self) -> None:
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
         harrow1_section = harrow_page.split('<h2 id="harrow-1">')[1].split("<h2")[0]
         self.assertIn(
@@ -233,7 +233,7 @@ class TestGenerateReport(unittest.TestCase):
         consolidated = harrow_page.split("<h2")[0]
         self.assertNotIn("all-play-all", consolidated)
 
-    def test_single_round_division_scheme_shown_on_its_pages_only(self):
+    def test_single_round_division_scheme_shown_on_its_pages_only(self) -> None:
         out2 = Path(self._tmpdir.name) / "out-scheme"
         _generate(
             self.fixtures,
@@ -254,7 +254,7 @@ class TestGenerateReport(unittest.TestCase):
             "<h3>Division 2 (Single-round all-play-all)</h3>", hendon1_section
         )
 
-    def test_club_page_consolidated_and_per_team(self):
+    def test_club_page_consolidated_and_per_team(self) -> None:
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
         # 3 distinct fixtures touch Harrow (incl. the Harrow 1 v Harrow 2 derby); the
         # consolidated table must list each exactly once, not twice for the derby.
@@ -266,7 +266,7 @@ class TestGenerateReport(unittest.TestCase):
         harrow1_section = harrow_page.split('<h2 id="harrow-1">')[1].split("<h2")[0]
         self.assertEqual(harrow1_section.count("<tr>"), 4)  # header + 3 fixtures
 
-    def test_team_heading_has_stable_anchor_id(self):
+    def test_team_heading_has_stable_anchor_id(self) -> None:
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
         self.assertIn('<h2 id="harrow-1">', harrow_page)
         self.assertIn('<h2 id="harrow-2">', harrow_page)
@@ -274,26 +274,26 @@ class TestGenerateReport(unittest.TestCase):
         # A name_override should be slugified for the anchor, same as everywhere else.
         self.assertIn('<h2 id="willesden-warriors">', willesden_page)
 
-    def test_team_heading_has_self_link_icon_pointing_at_its_own_anchor(self):
+    def test_team_heading_has_self_link_icon_pointing_at_its_own_anchor(self) -> None:
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
         self.assertIn(
             '<a class="anchor-link" href="#harrow-1" aria-label="Link to Harrow 1">',
             harrow_page,
         )
 
-    def test_club_page_header_shows_venue_name_and_address(self):
+    def test_club_page_header_shows_venue_name_and_address(self) -> None:
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
         header_part = harrow_page.split("<table>")[0]
         self.assertIn("Harrow Leisure Centre", header_part)
         self.assertIn("1 Harrow Road, London", header_part)
 
-    def test_ampersand_club_name_slugified_and_escaped(self):
+    def test_ampersand_club_name_slugified_and_escaped(self) -> None:
         path = self.output_dir / "club-willesden-brent.html"
         self.assertTrue(path.exists())
         content = path.read_text()
         self.assertIn("Willesden &amp; Brent", content)
 
-    def test_run_index_links_to_all_pages(self):
+    def test_run_index_links_to_all_pages(self) -> None:
         content = self.index_path.read_text()
         self.assertIn("all-matches.html", content)
         self.assertIn("division-1.html", content)
@@ -304,7 +304,7 @@ class TestGenerateReport(unittest.TestCase):
         self.assertIn(">Division 1<", content)
         self.assertIn(">Willesden &amp; Brent<", content)
 
-    def test_run_index_links_to_csv_exports_when_present(self):
+    def test_run_index_links_to_csv_exports_when_present(self) -> None:
         for name in ("all-matches.csv", "all-matches-by-team.csv"):
             (self.output_dir / name).write_text("date\n")
 
@@ -317,11 +317,11 @@ class TestGenerateReport(unittest.TestCase):
             content.index("all-matches.csv"), content.index("<h2>Divisions</h2>")
         )
 
-    def test_run_index_has_no_csv_links_when_exports_absent(self):
+    def test_run_index_has_no_csv_links_when_exports_absent(self) -> None:
         # setUp's _generate() writes HTML pages only, no CSV files.
         self.assertNotIn(".csv", self.index_path.read_text())
 
-    def test_build_run_index_is_rebuildable_from_disk_alone(self):
+    def test_build_run_index_is_rebuildable_from_disk_alone(self) -> None:
         """Deleting index.html and rebuilding from the other report files must reproduce it."""
         self.index_path.unlink()
         rebuilt_path = htmlreport.build_run_index(self.output_dir)
@@ -330,7 +330,7 @@ class TestGenerateReport(unittest.TestCase):
         self.assertIn("division-1.html", content)
         self.assertIn("club-harrow.html", content)
 
-    def test_division_numbers_sort_numerically_not_lexically(self):
+    def test_division_numbers_sort_numerically_not_lexically(self) -> None:
         out2 = Path(self._tmpdir.name) / "out3"
         out2.mkdir()
         for n in [1, 2, 10]:
@@ -346,7 +346,7 @@ class TestGenerateReport(unittest.TestCase):
             content.index("division-2.html"), content.index("division-10.html")
         )
 
-    def test_team_with_no_fixtures_gets_empty_table(self):
+    def test_team_with_no_fixtures_gets_empty_table(self) -> None:
         lonely_clubs = {"lonely-fc": _club("Lonely FC")}
         lonely = fmodel.Team(division=3, club="lonely-fc", index=1)
         out2 = Path(self._tmpdir.name) / "out2"
@@ -354,20 +354,20 @@ class TestGenerateReport(unittest.TestCase):
         content = (out2 / "club-lonely-fc.html").read_text()
         self.assertIn("No matches", content)
 
-    def test_no_name_or_draft_by_default(self):
+    def test_no_name_or_draft_by_default(self) -> None:
         for filename in ["all-matches.html", "division-1.html", "club-harrow.html"]:
             content = (self.output_dir / filename).read_text()
             self.assertNotIn('class="banner"', content)
             self.assertNotIn('class="draft-label"', content)
         self.assertNotIn('class="banner"', self.index_path.read_text())
 
-    def test_no_description_by_default(self):
+    def test_no_description_by_default(self) -> None:
         for filename in ["all-matches.html", "division-1.html", "club-harrow.html"]:
             content = (self.output_dir / filename).read_text()
             self.assertNotIn('class="description"', content)
         self.assertNotIn('class="description"', self.index_path.read_text())
 
-    def test_run_name_and_draft_shown_on_every_page(self):
+    def test_run_name_and_draft_shown_on_every_page(self) -> None:
         out2 = Path(self._tmpdir.name) / "out-named"
         index_path = _generate(
             self.fixtures,
@@ -388,7 +388,7 @@ class TestGenerateReport(unittest.TestCase):
             self.assertIn('<span class="draft-label">DRAFT</span>', content)
             self.assertIn('<span class="run-name">2025-26 Season</span>', content)
 
-    def test_index_recovers_name_and_draft_from_disk_alone(self):
+    def test_index_recovers_name_and_draft_from_disk_alone(self) -> None:
         """Rebuilding index.html from scratch must recover the run name/draft status
         from the other report files, since build_run_index has no other source for them."""
         out2 = Path(self._tmpdir.name) / "out-rebuilt"
@@ -401,7 +401,7 @@ class TestGenerateReport(unittest.TestCase):
         self.assertIn('<span class="draft-label">DRAFT</span>', content)
         self.assertIn('<span class="run-name">Test Run</span>', content)
 
-    def test_description_shown_on_every_page(self):
+    def test_description_shown_on_every_page(self) -> None:
         out2 = Path(self._tmpdir.name) / "out-described"
         index_path = _generate(
             self.fixtures,
@@ -420,7 +420,7 @@ class TestGenerateReport(unittest.TestCase):
             self.assertIn('<p class="description">', content)
             self.assertIn("Final schedule", content)
 
-    def test_index_recovers_description_from_disk_alone(self):
+    def test_index_recovers_description_from_disk_alone(self) -> None:
         """Rebuilding index.html must recover the description from the other report files."""
         out2 = Path(self._tmpdir.name) / "out-desc-rebuilt"
         index_path = _generate(
@@ -437,7 +437,7 @@ class TestGenerateReport(unittest.TestCase):
 
 
 class TestExcludedFixturesInReport(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmpdir.cleanup)
@@ -467,18 +467,18 @@ class TestExcludedFixturesInReport(unittest.TestCase):
             excluded_fixtures=self.excluded,
         )
 
-    def test_all_matches_page_shows_tbc_row_after_dated_rows(self):
+    def test_all_matches_page_shows_tbc_row_after_dated_rows(self) -> None:
         content = (self.output_dir / "all-matches.html").read_text()
         self.assertIn("<td><strong>TBC</strong></td>", content)
         self.assertIn("Harrow 2", content)
         self.assertLess(content.index("2025"), content.index("TBC"))
 
-    def test_division_page_shows_excluded_fixture(self):
+    def test_division_page_shows_excluded_fixture(self) -> None:
         div1 = (self.output_dir / "division-1.html").read_text()
         self.assertIn("<td><strong>TBC</strong></td>", div1)
         self.assertIn("Harrow 2", div1)
 
-    def test_club_page_consolidated_shows_excluded_fixture(self):
+    def test_club_page_consolidated_shows_excluded_fixture(self) -> None:
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
         consolidated_table = harrow_page.split("<h2")[0]
         self.assertIn("TBC", consolidated_table)
@@ -486,7 +486,7 @@ class TestExcludedFixturesInReport(unittest.TestCase):
         consolidated_table = ealing_page.split("<h2")[0]
         self.assertIn("TBC", consolidated_table)
 
-    def test_team_page_shows_excluded_fixture_with_blank_days_since(self):
+    def test_team_page_shows_excluded_fixture_with_blank_days_since(self) -> None:
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
         harrow2_section = harrow_page.split('<h2 id="harrow-2">')[1].split("<h2")[0]
         expected_row = (
@@ -495,18 +495,18 @@ class TestExcludedFixturesInReport(unittest.TestCase):
         )
         self.assertIn(expected_row, harrow2_section)
 
-    def test_team_not_involved_in_excluded_fixture_unaffected(self):
+    def test_team_not_involved_in_excluded_fixture_unaffected(self) -> None:
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
         harrow1_section = harrow_page.split('<h2 id="harrow-1">')[1].split("<h2")[0]
         self.assertNotIn("TBC", harrow1_section)
 
-    def test_no_excluded_fixtures_by_default(self):
+    def test_no_excluded_fixtures_by_default(self) -> None:
         out2 = Path(self._tmpdir.name) / "out-no-excluded"
         _generate(self.fixtures, self.teams, self.clubs, out2)
         content = (out2 / "all-matches.html").read_text()
         self.assertNotIn("TBC", content)
 
-    def test_division_with_only_excluded_fixtures_still_gets_a_page(self):
+    def test_division_with_only_excluded_fixtures_still_gets_a_page(self) -> None:
         clubs = dict(self.clubs)
         clubs["hendon"] = _club("Hendon")
         clubs["wembley"] = _club("Wembley")
@@ -527,7 +527,7 @@ class TestExcludedFixturesInReport(unittest.TestCase):
 
 
 class TestWriteRunsIndex(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmpdir.cleanup)
@@ -535,12 +535,12 @@ class TestWriteRunsIndex(unittest.TestCase):
         self.runs_dir = self.root / "runs"
         self.index_path = self.root / "index.html"
 
-    def test_no_runs(self):
+    def test_no_runs(self) -> None:
         htmlreport.write_runs_index(self.runs_dir, self.index_path)
         content = self.index_path.read_text()
         self.assertIn("No runs yet", content)
 
-    def test_lists_runs_with_report_only(self):
+    def test_lists_runs_with_report_only(self) -> None:
         for name in ["2024-25-season", "2025-26-season"]:
             run_dir = self.runs_dir / name
             run_dir.mkdir(parents=True)
@@ -560,7 +560,7 @@ class TestWriteRunsIndex(unittest.TestCase):
             content.index("2025-26-season"), content.index("2024-25-season")
         )
 
-    def test_nested_run(self):
+    def test_nested_run(self) -> None:
         """A run need not sit directly under runs_dir -- e.g. several drafts of the
         same season grouped under a season folder -- and should still be found and
         linked correctly, nested under a heading for the grouping folder(s)."""
@@ -576,7 +576,7 @@ class TestWriteRunsIndex(unittest.TestCase):
         self.assertNotIn('<a href="runs/2026-27/index.html"', content)
         self.assertIn("2026-27", content)
 
-    def test_nested_and_flat_runs_combined(self):
+    def test_nested_and_flat_runs_combined(self) -> None:
         (self.runs_dir / "example").mkdir(parents=True)
         (self.runs_dir / "example" / "all-matches.html").write_text("<html></html>")
         nested_run_dir = self.runs_dir / "2026-27" / "draft1"
@@ -591,16 +591,16 @@ class TestWriteRunsIndex(unittest.TestCase):
 
 
 class TestFindRunDirs(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmpdir.cleanup)
         self.runs_dir = Path(self._tmpdir.name) / "runs"
 
-    def test_missing_runs_dir(self):
+    def test_missing_runs_dir(self) -> None:
         self.assertEqual(htmlreport.find_run_dirs(self.runs_dir), [])
 
-    def test_finds_runs_at_any_depth(self):
+    def test_finds_runs_at_any_depth(self) -> None:
         flat_run = self.runs_dir / "example"
         flat_run.mkdir(parents=True)
         (flat_run / "all-matches.html").write_text("<html></html>")

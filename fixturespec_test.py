@@ -120,7 +120,7 @@ club_constraints:
 class TestLoadSpec(unittest.TestCase):
     """Test cases for load_spec()."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmpdir.cleanup)
@@ -131,7 +131,7 @@ class TestLoadSpec(unittest.TestCase):
         path.write_text(contents)
         return path
 
-    def test_minimal_spec(self):
+    def test_minimal_spec(self) -> None:
         path = self._write(_MINIMAL_SPEC)
         spec = fixturespec.load_spec(path)
 
@@ -176,13 +176,13 @@ class TestLoadSpec(unittest.TestCase):
         self.assertEqual(spec.name, "")
         self.assertFalse(spec.draft)
 
-    def test_run_name_and_draft(self):
+    def test_run_name_and_draft(self) -> None:
         path = self._write(_MINIMAL_SPEC + '\nname: "2025-26 Season"\ndraft: true\n')
         spec = fixturespec.load_spec(path)
         self.assertEqual(spec.name, "2025-26 Season")
         self.assertTrue(spec.draft)
 
-    def test_description(self):
+    def test_description(self) -> None:
         path = self._write(
             _MINIMAL_SPEC
             + '\ndescription: "Final schedule; refer to ECF LMS for authoritative dates."\n'
@@ -193,22 +193,22 @@ class TestLoadSpec(unittest.TestCase):
             "Final schedule; refer to ECF LMS for authoritative dates.",
         )
 
-    def test_description_defaults_to_empty(self):
+    def test_description_defaults_to_empty(self) -> None:
         path = self._write(_MINIMAL_SPEC)
         spec = fixturespec.load_spec(path)
         self.assertEqual(spec.description, "")
 
-    def test_draft_must_be_a_boolean(self):
+    def test_draft_must_be_a_boolean(self) -> None:
         path = self._write(_MINIMAL_SPEC + "\ndraft: notabool\n")
         with self.assertRaisesRegex(fixturespec.SpecError, "draft"):
             fixturespec.load_spec(path)
 
-    def test_name_must_be_a_string(self):
+    def test_name_must_be_a_string(self) -> None:
         path = self._write(_MINIMAL_SPEC + "\nname: [1, 2]\n")
         with self.assertRaisesRegex(fixturespec.SpecError, "name"):
             fixturespec.load_spec(path)
 
-    def test_name_override(self):
+    def test_name_override(self) -> None:
         path = self._write(
             _MINIMAL_SPEC.replace(
                 "  hackney-1:\n    club: hackney\n    index: 1",
@@ -220,27 +220,27 @@ class TestLoadSpec(unittest.TestCase):
         team = next(t for t in spec.parameters.teams if t.club == "hackney")
         self.assertEqual(team.name_override, "Hackney Herons")
 
-    def test_overridden_constraints(self):
+    def test_overridden_constraints(self) -> None:
         path = self._write(_MINIMAL_SPEC + "\nmin_gap_days: 10\n")
         spec = fixturespec.load_spec(path)
         self.assertEqual(spec.parameters.min_gap_days, 10)
 
-    def test_latest_internal_match_date_absent(self):
+    def test_latest_internal_match_date_absent(self) -> None:
         path = self._write(_MINIMAL_SPEC)
         spec = fixturespec.load_spec(path)
         self.assertIsNone(spec.parameters.latest_internal_match_date)
 
-    def test_latest_internal_match_date_parsed(self):
+    def test_latest_internal_match_date_parsed(self) -> None:
         path = self._write(_MINIMAL_SPEC + "latest_internal_match_date: 2025-12-31\n")
         spec = fixturespec.load_spec(path)
         self.assertEqual(spec.parameters.latest_internal_match_date, date(2025, 12, 31))
 
-    def test_latest_internal_match_date_invalid(self):
+    def test_latest_internal_match_date_invalid(self) -> None:
         path = self._write(_MINIMAL_SPEC + "latest_internal_match_date: not-a-date\n")
         with self.assertRaisesRegex(fixturespec.SpecError, "not-a-date"):
             fixturespec.load_spec(path)
 
-    def test_avoid_dates_absent(self):
+    def test_avoid_dates_absent(self) -> None:
         path = self._write(_MINIMAL_SPEC)
         spec = fixturespec.load_spec(path)
         self.assertEqual(
@@ -248,7 +248,7 @@ class TestLoadSpec(unittest.TestCase):
         )
         self.assertEqual(spec.parameters.unavailable_away_dates["hackney"], [])
 
-    def test_avoid_dates_merged_into_every_clubs_unavailable_away_dates(self):
+    def test_avoid_dates_merged_into_every_clubs_unavailable_away_dates(self) -> None:
         path = self._write(_MINIMAL_SPEC + "avoid_dates: [2025-12-25, 2026-01-01]\n")
         spec = fixturespec.load_spec(path)
         # albany already had 2025-12-25 of its own; avoid_dates adds 2026-01-01
@@ -263,22 +263,22 @@ class TestLoadSpec(unittest.TestCase):
             [date(2025, 12, 25), date(2026, 1, 1)],
         )
 
-    def test_avoid_dates_invalid_date(self):
+    def test_avoid_dates_invalid_date(self) -> None:
         path = self._write(_MINIMAL_SPEC + "avoid_dates: [not-a-date]\n")
         with self.assertRaisesRegex(fixturespec.SpecError, "not-a-date"):
             fixturespec.load_spec(path)
 
-    def test_avoid_dates_duplicate_rejected(self):
+    def test_avoid_dates_duplicate_rejected(self) -> None:
         path = self._write(_MINIMAL_SPEC + "avoid_dates: [2025-12-25, 2025-12-25]\n")
         with self.assertRaisesRegex(fixturespec.SpecError, "duplicate date"):
             fixturespec.load_spec(path)
 
-    def test_duplicate_top_level_key_rejected(self):
+    def test_duplicate_top_level_key_rejected(self) -> None:
         path = self._write(_MINIMAL_SPEC + "\nmin_gap_days: 7\nmin_gap_days: 10\n")
         with self.assertRaisesRegex(fixturespec.SpecError, "duplicate key"):
             fixturespec.load_spec(path)
 
-    def test_duplicate_nested_key_rejected(self):
+    def test_duplicate_nested_key_rejected(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
@@ -296,7 +296,7 @@ class TestLoadSpec(unittest.TestCase):
     # club already present) would create a duplicate YAML key, which PyYAML resolves
     # by silently letting the later one clobber the earlier one.
 
-    def test_max_concurrent_home_matches_shorthand_int(self):
+    def test_max_concurrent_home_matches_shorthand_int(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
@@ -315,7 +315,7 @@ class TestLoadSpec(unittest.TestCase):
             fmodel.MaxConcurrentHomeMatches(default=1),
         )
 
-    def test_max_concurrent_home_matches_default_and_overrides(self):
+    def test_max_concurrent_home_matches_default_and_overrides(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
@@ -332,7 +332,7 @@ class TestLoadSpec(unittest.TestCase):
             fmodel.MaxConcurrentHomeMatches(default=2, overrides={date(2025, 9, 1): 3}),
         )
 
-    def test_max_concurrent_home_matches_null_shorthand(self):
+    def test_max_concurrent_home_matches_null_shorthand(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
@@ -346,7 +346,7 @@ class TestLoadSpec(unittest.TestCase):
             fmodel.MaxConcurrentHomeMatches(default=None),
         )
 
-    def test_max_concurrent_home_matches_null_default_with_override(self):
+    def test_max_concurrent_home_matches_null_default_with_override(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
@@ -365,7 +365,7 @@ class TestLoadSpec(unittest.TestCase):
             ),
         )
 
-    def test_max_concurrent_home_matches_missing_default(self):
+    def test_max_concurrent_home_matches_missing_default(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
@@ -378,7 +378,7 @@ class TestLoadSpec(unittest.TestCase):
         with self.assertRaisesRegex(fixturespec.SpecError, "default"):
             fixturespec.load_spec(path)
 
-    def test_club_constraints_unknown_club(self):
+    def test_club_constraints_unknown_club(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
@@ -391,7 +391,9 @@ class TestLoadSpec(unittest.TestCase):
         with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
             fixturespec.load_spec(path)
 
-    def test_max_concurrent_home_matches_missing_club_without_section_default(self):
+    def test_max_concurrent_home_matches_missing_club_without_section_default(
+        self,
+    ) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
@@ -400,12 +402,12 @@ class TestLoadSpec(unittest.TestCase):
         with self.assertRaisesRegex(fixturespec.SpecError, "hackney"):
             fixturespec.load_spec(path)
 
-    def test_max_concurrent_home_matches_section_omitted_entirely(self):
+    def test_max_concurrent_home_matches_section_omitted_entirely(self) -> None:
         path = self._write(_BOILERPLATE)
         with self.assertRaisesRegex(fixturespec.SpecError, "albany.*hackney"):
             fixturespec.load_spec(path)
 
-    def test_club_constraints_defaults_unsupported_field(self):
+    def test_club_constraints_defaults_unsupported_field(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
@@ -414,12 +416,12 @@ class TestLoadSpec(unittest.TestCase):
         with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
             fixturespec.load_spec(path)
 
-    def test_missing_clubs(self):
+    def test_missing_clubs(self) -> None:
         path = self._write("teams: {}\ndivisions: {}\n")
         with self.assertRaisesRegex(fixturespec.SpecError, "clubs"):
             fixturespec.load_spec(path)
 
-    def test_club_missing_field(self):
+    def test_club_missing_field(self) -> None:
         path = self._write("""
 clubs:
   albany:
@@ -433,7 +435,7 @@ divisions: {}
         with self.assertRaisesRegex(fixturespec.SpecError, "home_time_limit"):
             fixturespec.load_spec(path)
 
-    def test_missing_teams(self):
+    def test_missing_teams(self) -> None:
         path = self._write("""
 clubs:
   albany:
@@ -446,7 +448,7 @@ clubs:
         with self.assertRaisesRegex(fixturespec.SpecError, "teams"):
             fixturespec.load_spec(path)
 
-    def test_team_references_unknown_club(self):
+    def test_team_references_unknown_club(self) -> None:
         path = self._write("""
 clubs:
   albany:
@@ -467,7 +469,7 @@ divisions:
         with self.assertRaisesRegex(fixturespec.SpecError, "hackney"):
             fixturespec.load_spec(path)
 
-    def test_duplicate_club_index(self):
+    def test_duplicate_club_index(self) -> None:
         path = self._write("""
 clubs:
   albany:
@@ -491,7 +493,7 @@ divisions:
         with self.assertRaisesRegex(fixturespec.SpecError, "index 1"):
             fixturespec.load_spec(path)
 
-    def test_missing_divisions_section(self):
+    def test_missing_divisions_section(self) -> None:
         path = self._write("""
 clubs:
   albany:
@@ -508,7 +510,7 @@ teams:
         with self.assertRaisesRegex(fixturespec.SpecError, "divisions"):
             fixturespec.load_spec(path)
 
-    def test_team_missing_from_divisions(self):
+    def test_team_missing_from_divisions(self) -> None:
         path = self._write("""
 clubs:
   albany:
@@ -532,7 +534,7 @@ divisions:
         with self.assertRaisesRegex(fixturespec.SpecError, "albany-2"):
             fixturespec.load_spec(path)
 
-    def test_division_key_not_an_integer(self):
+    def test_division_key_not_an_integer(self) -> None:
         path = self._write("""
 clubs:
   albany:
@@ -553,7 +555,7 @@ divisions:
         with self.assertRaisesRegex(fixturespec.SpecError, "integer"):
             fixturespec.load_spec(path)
 
-    def test_team_listed_in_two_divisions(self):
+    def test_team_listed_in_two_divisions(self) -> None:
         path = self._write("""
 clubs:
   albany:
@@ -603,7 +605,7 @@ divisions:
         "  albany:\n    home_dates: [2025-09-01, 2025-09-08, 2025-09-15]\n"
     )
 
-    def test_division_scheme_single_round_is_parsed(self):
+    def test_division_scheme_single_round_is_parsed(self) -> None:
         path = self._write(
             self._SCHEME_SPEC_HEAD + "  1:\n    scheme: single_round\n"
             "    teams: [albany-1, albany-2]\n" + self._SCHEME_SPEC_TAIL
@@ -614,7 +616,7 @@ divisions:
             {d.number: d.scheme for d in spec.parameters.divisions},
         )
 
-    def test_division_scheme_double_round_is_parsed(self):
+    def test_division_scheme_double_round_is_parsed(self) -> None:
         path = self._write(
             self._SCHEME_SPEC_HEAD + "  1:\n    scheme: double_round\n"
             "    teams: [albany-1, albany-2]\n" + self._SCHEME_SPEC_TAIL
@@ -625,19 +627,19 @@ divisions:
             {d.number: d.scheme for d in spec.parameters.divisions},
         )
 
-    def test_division_missing_scheme_rejected(self):
+    def test_division_missing_scheme_rejected(self) -> None:
         path = self._write(
             self._SCHEME_SPEC_HEAD + "  1:\n    teams: [albany-1, albany-2]\n"
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "scheme"):
             fixturespec.load_spec(path)
 
-    def test_division_missing_teams_rejected(self):
+    def test_division_missing_teams_rejected(self) -> None:
         path = self._write(self._SCHEME_SPEC_HEAD + "  1:\n    scheme: double_round\n")
         with self.assertRaisesRegex(fixturespec.SpecError, "teams"):
             fixturespec.load_spec(path)
 
-    def test_division_unknown_scheme_rejected(self):
+    def test_division_unknown_scheme_rejected(self) -> None:
         path = self._write(
             self._SCHEME_SPEC_HEAD + "  1:\n    scheme: triple_round\n"
             "    teams: [albany-1, albany-2]\n"
@@ -645,12 +647,12 @@ divisions:
         with self.assertRaisesRegex(fixturespec.SpecError, "scheme.*triple_round"):
             fixturespec.load_spec(path)
 
-    def test_division_bare_list_rejected(self):
+    def test_division_bare_list_rejected(self) -> None:
         path = self._write(self._SCHEME_SPEC_HEAD + "  1: [albany-1, albany-2]\n")
         with self.assertRaisesRegex(fixturespec.SpecError, "mapping"):
             fixturespec.load_spec(path)
 
-    def test_division_unsupported_field_rejected(self):
+    def test_division_unsupported_field_rejected(self) -> None:
         path = self._write(
             self._SCHEME_SPEC_HEAD + "  1:\n    scheme: double_round\n"
             "    teams: [albany-1, albany-2]\n    berger_seed: 3\n"
@@ -658,7 +660,7 @@ divisions:
         with self.assertRaisesRegex(fixturespec.SpecError, "berger_seed"):
             fixturespec.load_spec(path)
 
-    def test_single_round_division_team_order_follows_the_divisions_list(self):
+    def test_single_round_division_team_order_follows_the_divisions_list(self) -> None:
         # teams: lists albany-2 before albany-1; the divisions list is the Berger
         # draw order and must win, so parameters.teams reflects the divisions list.
         path = self._write("""
@@ -695,7 +697,7 @@ club_constraints:
             [("albany", 1), ("albany", 2), ("albany", 3)],
         )
 
-    def test_invalid_date_string(self):
+    def test_invalid_date_string(self) -> None:
         path = self._write("""
 clubs:
   albany:
@@ -719,7 +721,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "not-a-date"):
             fixturespec.load_spec(path)
 
-    def test_duplicate_date_in_home_dates_rejected(self):
+    def test_duplicate_date_in_home_dates_rejected(self) -> None:
         path = self._write("""
 clubs:
   albany:
@@ -743,7 +745,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "duplicate date"):
             fixturespec.load_spec(path)
 
-    def test_duplicate_date_in_unavailable_away_dates_rejected(self):
+    def test_duplicate_date_in_unavailable_away_dates_rejected(self) -> None:
         path = self._write("""
 clubs:
   albany:
@@ -767,7 +769,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "duplicate date"):
             fixturespec.load_spec(path)
 
-    def test_unsupported_club_constraint_field(self):
+    def test_unsupported_club_constraint_field(self) -> None:
         path = self._write("""
 clubs:
   albany:
@@ -792,12 +794,12 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
             fixturespec.load_spec(path)
 
-    def test_top_level_not_a_mapping(self):
+    def test_top_level_not_a_mapping(self) -> None:
         path = self._write("- just\n- a\n- list\n")
         with self.assertRaisesRegex(fixturespec.SpecError, "mapping"):
             fixturespec.load_spec(path)
 
-    def test_home_dates_used_per_club(self):
+    def test_home_dates_used_per_club(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
@@ -819,7 +821,7 @@ club_constraints:
             },
         )
 
-    def test_home_dates_used_partial_clubs(self):
+    def test_home_dates_used_partial_clubs(self) -> None:
         """Only the clubs given their own entry are constrained."""
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
@@ -835,12 +837,12 @@ club_constraints:
             {"albany": fmodel.HomeDatesUsedBounds(minimum=3)},
         )
 
-    def test_home_dates_used_absent(self):
+    def test_home_dates_used_absent(self) -> None:
         path = self._write(_MINIMAL_SPEC)
         spec = fixturespec.load_spec(path)
         self.assertEqual(spec.parameters.home_dates_used, {})
 
-    def test_home_dates_used_unknown_club(self):
+    def test_home_dates_used_unknown_club(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
@@ -852,7 +854,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "unknown-club"):
             fixturespec.load_spec(path)
 
-    def test_home_dates_used_not_int(self):
+    def test_home_dates_used_not_int(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
@@ -864,7 +866,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "integer"):
             fixturespec.load_spec(path)
 
-    def test_home_dates_used_not_a_mapping(self):
+    def test_home_dates_used_not_a_mapping(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
@@ -875,7 +877,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "mapping"):
             fixturespec.load_spec(path)
 
-    def test_home_dates_used_empty_mapping(self):
+    def test_home_dates_used_empty_mapping(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
@@ -886,7 +888,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "min.*max"):
             fixturespec.load_spec(path)
 
-    def test_home_dates_used_unsupported_key(self):
+    def test_home_dates_used_unsupported_key(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
@@ -898,7 +900,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "minimum"):
             fixturespec.load_spec(path)
 
-    def test_home_dates_used_below_one(self):
+    def test_home_dates_used_below_one(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
@@ -910,7 +912,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "at least 1"):
             fixturespec.load_spec(path)
 
-    def test_home_dates_used_min_exceeds_max(self):
+    def test_home_dates_used_min_exceeds_max(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
@@ -923,7 +925,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "exceeds"):
             fixturespec.load_spec(path)
 
-    def test_fixed_fixture(self):
+    def test_fixed_fixture(self) -> None:
         path = self._write(
             _MINIMAL_SPEC + "fixed_fixtures:\n"
             "  - home: hackney-1\n"
@@ -943,24 +945,24 @@ club_constraints:
             ],
         )
 
-    def test_fixed_fixtures_absent(self):
+    def test_fixed_fixtures_absent(self) -> None:
         path = self._write(_MINIMAL_SPEC)
         spec = fixturespec.load_spec(path)
         self.assertEqual(spec.parameters.fixed_fixtures, ())
 
-    def test_fixed_fixtures_not_a_list(self):
+    def test_fixed_fixtures_not_a_list(self) -> None:
         path = self._write(_MINIMAL_SPEC + "fixed_fixtures:\n  home: hackney-1\n")
         with self.assertRaisesRegex(fixturespec.SpecError, "list"):
             fixturespec.load_spec(path)
 
-    def test_fixed_fixtures_missing_field(self):
+    def test_fixed_fixtures_missing_field(self) -> None:
         path = self._write(
             _MINIMAL_SPEC + "fixed_fixtures:\n  - home: hackney-1\n    away: albany-1\n"
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "date"):
             fixturespec.load_spec(path)
 
-    def test_fixed_fixtures_unsupported_field(self):
+    def test_fixed_fixtures_unsupported_field(self) -> None:
         path = self._write(
             _MINIMAL_SPEC + "fixed_fixtures:\n"
             "  - home: hackney-1\n"
@@ -971,7 +973,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "venue"):
             fixturespec.load_spec(path)
 
-    def test_fixed_fixtures_unknown_team(self):
+    def test_fixed_fixtures_unknown_team(self) -> None:
         path = self._write(
             _MINIMAL_SPEC + "fixed_fixtures:\n"
             "  - home: nonexistent\n"
@@ -981,7 +983,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
             fixturespec.load_spec(path)
 
-    def test_fixed_fixtures_home_equals_away(self):
+    def test_fixed_fixtures_home_equals_away(self) -> None:
         path = self._write(
             _MINIMAL_SPEC + "fixed_fixtures:\n"
             "  - home: hackney-1\n"
@@ -991,7 +993,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "hackney-1"):
             fixturespec.load_spec(path)
 
-    def test_fixed_fixtures_different_divisions_rejected(self):
+    def test_fixed_fixtures_different_divisions_rejected(self) -> None:
         path = self._write(
             _MINIMAL_SPEC.replace(
                 "  1:\n    scheme: double_round\n    teams: [albany-1, hackney-1]",
@@ -1006,7 +1008,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "not in the same division"):
             fixturespec.load_spec(path)
 
-    def test_fixed_fixtures_date_not_a_home_date_rejected(self):
+    def test_fixed_fixtures_date_not_a_home_date_rejected(self) -> None:
         path = self._write(
             _MINIMAL_SPEC + "fixed_fixtures:\n"
             "  - home: hackney-1\n"
@@ -1026,13 +1028,13 @@ club_constraints:
             "    unavailable_away_dates: [2025-12-25]\n" + teams_block,
         )
 
-    def test_team_constraints_absent(self):
+    def test_team_constraints_absent(self) -> None:
         path = self._write(_MINIMAL_SPEC)
         spec = fixturespec.load_spec(path)
         self.assertEqual(spec.parameters.team_home_dates, {})
         self.assertEqual(spec.parameters.team_unavailable_away_dates, {})
 
-    def test_team_constraints_unavailable_home_dates_excludes_from_clubs(self):
+    def test_team_constraints_unavailable_home_dates_excludes_from_clubs(self) -> None:
         path = self._write(
             self._with_albany_teams(
                 "    teams:\n      albany-1:\n"
@@ -1049,7 +1051,7 @@ club_constraints:
 
     def test_team_constraints_unavailable_home_dates_not_yet_in_clubs_logs_warning(
         self,
-    ):
+    ) -> None:
         """An unavailable_home_dates entry not currently in the club's home_dates
         (e.g. a date held in reserve, commented out) is accepted rather than
         rejected -- it just has no effect yet -- but logs a warning so the mismatch
@@ -1074,7 +1076,7 @@ club_constraints:
             {albany_1: [date(2025, 9, 1), date(2025, 9, 29)]},
         )
 
-    def test_team_constraints_unavailable_away_dates_additive(self):
+    def test_team_constraints_unavailable_away_dates_additive(self) -> None:
         path = self._write(
             self._with_albany_teams(
                 "    teams:\n      albany-1:\n"
@@ -1092,7 +1094,7 @@ club_constraints:
             spec.parameters.unavailable_away_dates["albany"], [date(2025, 12, 25)]
         )
 
-    def test_team_constraints_unknown_team(self):
+    def test_team_constraints_unknown_team(self) -> None:
         path = self._write(
             self._with_albany_teams(
                 "    teams:\n      nonexistent:\n"
@@ -1102,7 +1104,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
             fixturespec.load_spec(path)
 
-    def test_team_constraints_team_belongs_to_different_club(self):
+    def test_team_constraints_team_belongs_to_different_club(self) -> None:
         """A team can only be listed under its own club's club_constraints entry."""
         path = self._write(
             self._with_albany_teams(
@@ -1113,7 +1115,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "hackney-1"):
             fixturespec.load_spec(path)
 
-    def test_team_constraints_unsupported_field(self):
+    def test_team_constraints_unsupported_field(self) -> None:
         path = self._write(
             self._with_albany_teams(
                 "    teams:\n      albany-1:\n        max_concurrent_home_matches: 2\n"
@@ -1122,7 +1124,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
             fixturespec.load_spec(path)
 
-    def test_team_constraints_home_dates_not_supported(self):
+    def test_team_constraints_home_dates_not_supported(self) -> None:
         """Per-team home_dates are not supported; only exclusions via
         unavailable_home_dates are. home_dates at the team level should be
         rejected as an unsupported field."""
@@ -1134,7 +1136,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
             fixturespec.load_spec(path)
 
-    def test_fixed_fixtures_date_must_be_one_of_teams_own_home_dates(self):
+    def test_fixed_fixtures_date_must_be_one_of_teams_own_home_dates(self) -> None:
         """When a team has a club_constraints[club].teams[team].unavailable_home_dates
         entry, fixed_fixtures validates against the club's home_dates minus that
         exclusion, not the club's full home_dates list."""
@@ -1163,12 +1165,12 @@ club_constraints:
             + block,
         )
 
-    def test_avoid_coscheduling_teams_absent(self):
+    def test_avoid_coscheduling_teams_absent(self) -> None:
         path = self._write(_THREE_TEAM_SPEC)
         spec = fixturespec.load_spec(path)
         self.assertEqual(spec.parameters.avoid_coscheduling_teams, ())
 
-    def test_avoid_coscheduling_teams_parsed(self):
+    def test_avoid_coscheduling_teams_parsed(self) -> None:
         path = self._write(
             self._with_albany_avoid_coscheduling(
                 "    avoid_coscheduling_teams:\n      - teams: [albany-1, albany-2]\n"
@@ -1190,7 +1192,7 @@ club_constraints:
             ],
         )
 
-    def test_avoid_coscheduling_teams_within_days_parsed(self):
+    def test_avoid_coscheduling_teams_within_days_parsed(self) -> None:
         path = self._write(
             self._with_albany_avoid_coscheduling(
                 "    avoid_coscheduling_teams:\n"
@@ -1202,7 +1204,7 @@ club_constraints:
         constraints = list(spec.parameters.avoid_coscheduling_teams)
         self.assertEqual(constraints[0].within_days, 3)
 
-    def test_avoid_coscheduling_teams_applies_to_defaults_to_both(self):
+    def test_avoid_coscheduling_teams_applies_to_defaults_to_both(self) -> None:
         path = self._write(
             self._with_albany_avoid_coscheduling(
                 "    avoid_coscheduling_teams:\n      - teams: [albany-1, albany-2]\n"
@@ -1212,7 +1214,7 @@ club_constraints:
         constraints = list(spec.parameters.avoid_coscheduling_teams)
         self.assertEqual(constraints[0].applies_to, fmodel.CoschedulingScope.BOTH)
 
-    def test_avoid_coscheduling_teams_applies_to_parsed(self):
+    def test_avoid_coscheduling_teams_applies_to_parsed(self) -> None:
         path = self._write(
             self._with_albany_avoid_coscheduling(
                 "    avoid_coscheduling_teams:\n"
@@ -1224,7 +1226,7 @@ club_constraints:
         constraints = list(spec.parameters.avoid_coscheduling_teams)
         self.assertEqual(constraints[0].applies_to, fmodel.CoschedulingScope.AWAY)
 
-    def test_avoid_coscheduling_teams_invalid_applies_to_rejected(self):
+    def test_avoid_coscheduling_teams_invalid_applies_to_rejected(self) -> None:
         path = self._write(
             self._with_albany_avoid_coscheduling(
                 "    avoid_coscheduling_teams:\n"
@@ -1235,14 +1237,14 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "applies_to"):
             fixturespec.load_spec(path)
 
-    def test_avoid_coscheduling_teams_not_a_list(self):
+    def test_avoid_coscheduling_teams_not_a_list(self) -> None:
         path = self._write(
             self._with_albany_avoid_coscheduling("    avoid_coscheduling_teams: {}\n")
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "list"):
             fixturespec.load_spec(path)
 
-    def test_avoid_coscheduling_teams_entry_not_a_mapping(self):
+    def test_avoid_coscheduling_teams_entry_not_a_mapping(self) -> None:
         path = self._write(
             self._with_albany_avoid_coscheduling(
                 "    avoid_coscheduling_teams:\n      - just-a-string\n"
@@ -1251,7 +1253,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "mapping"):
             fixturespec.load_spec(path)
 
-    def test_avoid_coscheduling_teams_missing_teams_field(self):
+    def test_avoid_coscheduling_teams_missing_teams_field(self) -> None:
         path = self._write(
             self._with_albany_avoid_coscheduling(
                 "    avoid_coscheduling_teams:\n      - within_days: 1\n"
@@ -1260,7 +1262,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "teams"):
             fixturespec.load_spec(path)
 
-    def test_avoid_coscheduling_teams_empty_teams_list(self):
+    def test_avoid_coscheduling_teams_empty_teams_list(self) -> None:
         path = self._write(
             self._with_albany_avoid_coscheduling(
                 "    avoid_coscheduling_teams:\n      - teams: []\n"
@@ -1269,7 +1271,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "non-empty"):
             fixturespec.load_spec(path)
 
-    def test_avoid_coscheduling_teams_duplicate_team(self):
+    def test_avoid_coscheduling_teams_duplicate_team(self) -> None:
         path = self._write(
             self._with_albany_avoid_coscheduling(
                 "    avoid_coscheduling_teams:\n      - teams: [albany-1, albany-1]\n"
@@ -1278,7 +1280,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "duplicate"):
             fixturespec.load_spec(path)
 
-    def test_avoid_coscheduling_teams_unknown_team(self):
+    def test_avoid_coscheduling_teams_unknown_team(self) -> None:
         path = self._write(
             self._with_albany_avoid_coscheduling(
                 "    avoid_coscheduling_teams:\n"
@@ -1288,7 +1290,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
             fixturespec.load_spec(path)
 
-    def test_avoid_coscheduling_teams_team_belongs_to_different_club(self):
+    def test_avoid_coscheduling_teams_team_belongs_to_different_club(self) -> None:
         path = self._write(
             self._with_albany_avoid_coscheduling(
                 "    avoid_coscheduling_teams:\n      - teams: [albany-1, hackney-1]\n"
@@ -1297,7 +1299,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "hackney-1"):
             fixturespec.load_spec(path)
 
-    def test_avoid_coscheduling_teams_unsupported_field(self):
+    def test_avoid_coscheduling_teams_unsupported_field(self) -> None:
         path = self._write(
             self._with_albany_avoid_coscheduling(
                 "    avoid_coscheduling_teams:\n"
@@ -1308,7 +1310,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
             fixturespec.load_spec(path)
 
-    def test_avoid_coscheduling_teams_negative_within_days_rejected(self):
+    def test_avoid_coscheduling_teams_negative_within_days_rejected(self) -> None:
         path = self._write(
             self._with_albany_avoid_coscheduling(
                 "    avoid_coscheduling_teams:\n"
@@ -1319,12 +1321,12 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "within_days"):
             fixturespec.load_spec(path)
 
-    def test_exclude_fixtures_absent(self):
+    def test_exclude_fixtures_absent(self) -> None:
         path = self._write(_MINIMAL_SPEC)
         spec = fixturespec.load_spec(path)
         self.assertEqual(spec.parameters.excluded_fixtures, ())
 
-    def test_exclude_specific_fixture(self):
+    def test_exclude_specific_fixture(self) -> None:
         path = self._write(
             _THREE_TEAM_SPEC + "exclude_fixtures:\n"
             "  fixtures:\n"
@@ -1343,7 +1345,7 @@ club_constraints:
             [fmodel.Fixture(home_team=albany1, away_team=albany2)],
         )
 
-    def test_exclude_team(self):
+    def test_exclude_team(self) -> None:
         """Excluding a team excludes all its fixtures, in both directions."""
         path = self._write(
             _THREE_TEAM_SPEC + "exclude_fixtures:\n  teams: [hackney-1]\n"
@@ -1357,7 +1359,7 @@ club_constraints:
             expected.add(fmodel.Fixture(home_team=other, away_team=hackney1))
         self.assertEqual(set(spec.parameters.excluded_fixtures), expected)
 
-    def test_exclude_club(self):
+    def test_exclude_club(self) -> None:
         """Excluding a club excludes all of that club's teams' fixtures."""
         path = self._write(_THREE_TEAM_SPEC + "exclude_fixtures:\n  clubs: [hackney]\n")
         spec = fixturespec.load_spec(path)
@@ -1369,28 +1371,28 @@ club_constraints:
             expected.add(fmodel.Fixture(home_team=other, away_team=hackney1))
         self.assertEqual(set(spec.parameters.excluded_fixtures), expected)
 
-    def test_exclude_fixtures_unknown_club(self):
+    def test_exclude_fixtures_unknown_club(self) -> None:
         path = self._write(
             _THREE_TEAM_SPEC + "exclude_fixtures:\n  clubs: [nonexistent]\n"
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
             fixturespec.load_spec(path)
 
-    def test_exclude_fixtures_unknown_team(self):
+    def test_exclude_fixtures_unknown_team(self) -> None:
         path = self._write(
             _THREE_TEAM_SPEC + "exclude_fixtures:\n  teams: [nonexistent]\n"
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
             fixturespec.load_spec(path)
 
-    def test_exclude_fixtures_unsupported_key(self):
+    def test_exclude_fixtures_unsupported_key(self) -> None:
         path = self._write(
             _THREE_TEAM_SPEC + "exclude_fixtures:\n  players: [nonexistent]\n"
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
             fixturespec.load_spec(path)
 
-    def test_exclude_fixtures_unknown_team_in_fixtures_list(self):
+    def test_exclude_fixtures_unknown_team_in_fixtures_list(self) -> None:
         path = self._write(
             _THREE_TEAM_SPEC + "exclude_fixtures:\n"
             "  fixtures:\n"
@@ -1400,7 +1402,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
             fixturespec.load_spec(path)
 
-    def test_exclude_fixtures_home_equals_away(self):
+    def test_exclude_fixtures_home_equals_away(self) -> None:
         path = self._write(
             _THREE_TEAM_SPEC + "exclude_fixtures:\n"
             "  fixtures:\n"
@@ -1410,7 +1412,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "albany-1"):
             fixturespec.load_spec(path)
 
-    def test_exclude_fixtures_different_divisions_rejected(self):
+    def test_exclude_fixtures_different_divisions_rejected(self) -> None:
         path = self._write(
             _THREE_TEAM_SPEC.replace(
                 "  1:\n    scheme: double_round\n"
@@ -1426,14 +1428,14 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "not in the same division"):
             fixturespec.load_spec(path)
 
-    def test_exclude_fixtures_missing_field(self):
+    def test_exclude_fixtures_missing_field(self) -> None:
         path = self._write(
             _THREE_TEAM_SPEC + "exclude_fixtures:\n  fixtures:\n    - home: albany-1\n"
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "away"):
             fixturespec.load_spec(path)
 
-    def test_exclude_fixtures_conflicts_with_fixed_fixtures(self):
+    def test_exclude_fixtures_conflicts_with_fixed_fixtures(self) -> None:
         path = self._write(
             _THREE_TEAM_SPEC + "fixed_fixtures:\n"
             "  - home: albany-1\n"
@@ -1447,7 +1449,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "also excluded"):
             fixturespec.load_spec(path)
 
-    def test_exclude_fixtures_solves_end_to_end(self):
+    def test_exclude_fixtures_solves_end_to_end(self) -> None:
         path = self._write(
             _THREE_TEAM_SPEC + "exclude_fixtures:\n"
             "  fixtures:\n"
@@ -1470,7 +1472,7 @@ club_constraints:
             )
         )
 
-    def test_latest_internal_match_date_conflicts_with_fixed_fixtures(self):
+    def test_latest_internal_match_date_conflicts_with_fixed_fixtures(self) -> None:
         path = self._write(
             _THREE_TEAM_SPEC + "fixed_fixtures:\n"
             "  - home: albany-1\n"
@@ -1483,7 +1485,7 @@ club_constraints:
         ):
             fixturespec.load_spec(path)
 
-    def test_latest_internal_match_date_ignores_cross_club_fixed_fixtures(self):
+    def test_latest_internal_match_date_ignores_cross_club_fixed_fixtures(self) -> None:
         """The cutoff only applies to fixtures between two teams of the same club."""
         path = self._write(
             _THREE_TEAM_SPEC + "fixed_fixtures:\n"
@@ -1495,7 +1497,7 @@ club_constraints:
         spec = fixturespec.load_spec(path)  # must not raise
         self.assertEqual(spec.parameters.latest_internal_match_date, date(2025, 10, 15))
 
-    def test_latest_internal_match_date_solves_end_to_end(self):
+    def test_latest_internal_match_date_solves_end_to_end(self) -> None:
         path = self._write(
             _THREE_TEAM_SPEC + "latest_internal_match_date: 2025-10-15\n"
         )
@@ -1516,7 +1518,7 @@ club_constraints:
         for sf in internal:
             self.assertLessEqual(sf.date, date(2025, 10, 15))
 
-    def test_solves_end_to_end(self):
+    def test_solves_end_to_end(self) -> None:
         """A loaded spec's Parameters should be usable directly with fmodel.solve()."""
         path = self._write(_MINIMAL_SPEC)
         spec = fixturespec.load_spec(path)
@@ -1527,7 +1529,7 @@ club_constraints:
 class TestLoadTeamIds(unittest.TestCase):
     """Test cases for load_team_ids()."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmpdir.cleanup)
@@ -1538,14 +1540,14 @@ class TestLoadTeamIds(unittest.TestCase):
         path.write_text(contents)
         return path
 
-    def test_maps_team_ids_to_club_and_index(self):
+    def test_maps_team_ids_to_club_and_index(self) -> None:
         path = self._write(_MINIMAL_SPEC)
         self.assertEqual(
             fixturespec.load_team_ids(path),
             {"albany-1": ("albany", 1), "hackney-1": ("hackney", 1)},
         )
 
-    def test_does_not_require_divisions_or_club_constraints(self):
+    def test_does_not_require_divisions_or_club_constraints(self) -> None:
         """Unlike load_spec(), only 'clubs' and 'teams' need to be valid."""
         path = self._write(_BOILERPLATE)  # no club_constraints, no divisions issues
         self.assertEqual(
@@ -1553,7 +1555,7 @@ class TestLoadTeamIds(unittest.TestCase):
             {"albany-1": ("albany", 1), "hackney-1": ("hackney", 1)},
         )
 
-    def test_unknown_club_still_rejected(self):
+    def test_unknown_club_still_rejected(self) -> None:
         path = self._write(
             "clubs:\n"
             "  hackney:\n"

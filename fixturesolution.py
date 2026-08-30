@@ -56,7 +56,7 @@ class _NoAliasDumper(yaml.SafeDumper):
     needlessly hard to read and diff.
     """
 
-    def ignore_aliases(self, data):
+    def ignore_aliases(self, data: Any) -> bool:
         return True
 
 

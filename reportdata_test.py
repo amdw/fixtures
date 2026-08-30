@@ -38,7 +38,7 @@ def _club(name: str) -> fmodel.Club:
 
 
 class ReportDataTest(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         # Club id "z-club" deliberately sorts after "a-club" by id but its
         # display name "Aardvark" sorts first, so tests can tell which key wins.
@@ -53,13 +53,13 @@ class ReportDataTest(unittest.TestCase):
             division=1, club="z-club", index=2, name_override="Aardvark Nomads"
         )
 
-    def test_team_name_falls_back_to_club_name_and_index(self):
+    def test_team_name_falls_back_to_club_name_and_index(self) -> None:
         self.assertEqual(reportdata.team_name(self.barnet1, self.clubs), "Barnet 1")
 
-    def test_team_name_prefers_override(self):
+    def test_team_name_prefers_override(self) -> None:
         self.assertEqual(reportdata.team_name(self.nick, self.clubs), "Aardvark Nomads")
 
-    def test_team_sort_key_is_club_display_name_then_index(self):
+    def test_team_sort_key_is_club_display_name_then_index(self) -> None:
         self.assertEqual(
             reportdata.team_sort_key(self.aardvark1, self.clubs), ("Aardvark", 1)
         )
@@ -68,7 +68,7 @@ class ReportDataTest(unittest.TestCase):
             reportdata.team_sort_key(self.barnet1, self.clubs),
         )
 
-    def test_by_date_home_away_orders_by_date_then_home_then_away(self):
+    def test_by_date_home_away_orders_by_date_then_home_then_away(self) -> None:
         later = _sf(self.barnet1, self.aardvark1, date(2025, 10, 1))
         early_b = _sf(self.barnet1, self.aardvark1, date(2025, 9, 1))
         early_a = _sf(self.aardvark1, self.barnet1, date(2025, 9, 1))
@@ -79,7 +79,7 @@ class ReportDataTest(unittest.TestCase):
         # Same date: home team "Aardvark 1" sorts before "Barnet 1"; later date last.
         self.assertEqual(ordered, [early_a, early_b, later])
 
-    def test_by_date_opponent_orders_by_date_then_opponent(self):
+    def test_by_date_opponent_orders_by_date_then_opponent(self) -> None:
         vs_nick = _sf(self.aardvark1, self.nick, date(2025, 9, 1))
         vs_barnet2 = _sf(self.barnet2, self.aardvark1, date(2025, 9, 1))
         later = _sf(self.aardvark1, self.barnet1, date(2025, 9, 20))
@@ -90,7 +90,7 @@ class ReportDataTest(unittest.TestCase):
         # Same date: opponent "Aardvark Nomads" before "Barnet 2"; later date last.
         self.assertEqual(ordered, [vs_nick, vs_barnet2, later])
 
-    def test_by_home_away_orders_without_dates(self):
+    def test_by_home_away_orders_without_dates(self) -> None:
         f1 = fmodel.Fixture(home_team=self.barnet1, away_team=self.aardvark1)
         f2 = fmodel.Fixture(home_team=self.aardvark1, away_team=self.barnet1)
 
