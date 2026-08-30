@@ -797,60 +797,130 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "mapping"):
             fixturespec.load_spec(path)
 
-    def test_max_home_dates_used_per_club(self):
+    def test_home_dates_used_per_club(self):
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
             "    max_concurrent_home_matches: 1\n"
             "  albany:\n"
-            "    max_home_dates_used: 1\n"
+            "    home_dates_used:\n"
+            "      max: 1\n"
             "  hackney:\n"
-            "    max_home_dates_used: 1\n"
+            "    home_dates_used:\n"
+            "      min: 2\n"
+            "      max: 4\n"
         )
         spec = fixturespec.load_spec(path)
         self.assertEqual(
-            spec.parameters.max_home_dates_used, {"albany": 1, "hackney": 1}
+            spec.parameters.home_dates_used,
+            {
+                "albany": fmodel.HomeDatesUsedBounds(maximum=1),
+                "hackney": fmodel.HomeDatesUsedBounds(minimum=2, maximum=4),
+            },
         )
 
-    def test_max_home_dates_used_partial_clubs(self):
+    def test_home_dates_used_partial_clubs(self):
         """Only the clubs given their own entry are constrained."""
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
             "    max_concurrent_home_matches: 1\n"
             "  albany:\n"
-            "    max_home_dates_used: 1\n"
+            "    home_dates_used:\n"
+            "      min: 3\n"
         )
         spec = fixturespec.load_spec(path)
-        self.assertEqual(spec.parameters.max_home_dates_used, {"albany": 1})
+        self.assertEqual(
+            spec.parameters.home_dates_used,
+            {"albany": fmodel.HomeDatesUsedBounds(minimum=3)},
+        )
 
-    def test_max_home_dates_used_absent(self):
+    def test_home_dates_used_absent(self):
         path = self._write(_MINIMAL_SPEC)
         spec = fixturespec.load_spec(path)
-        self.assertEqual(spec.parameters.max_home_dates_used, {})
+        self.assertEqual(spec.parameters.home_dates_used, {})
 
-    def test_max_home_dates_used_unknown_club(self):
+    def test_home_dates_used_unknown_club(self):
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
             "    max_concurrent_home_matches: 1\n"
             "  unknown-club:\n"
-            "    max_home_dates_used: 1\n"
+            "    home_dates_used:\n"
+            "      max: 1\n"
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "unknown-club"):
             fixturespec.load_spec(path)
 
-    def test_max_home_dates_used_not_int(self):
+    def test_home_dates_used_not_int(self):
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
             "    max_concurrent_home_matches: 1\n"
             "  albany:\n"
-            "    max_home_dates_used: not-an-int\n"
-            "  hackney:\n"
-            "    max_home_dates_used: 1\n"
+            "    home_dates_used:\n"
+            "      max: not-an-int\n"
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "integer"):
+            fixturespec.load_spec(path)
+
+    def test_home_dates_used_not_a_mapping(self):
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    max_concurrent_home_matches: 1\n"
+            "  albany:\n"
+            "    home_dates_used: 1\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "mapping"):
+            fixturespec.load_spec(path)
+
+    def test_home_dates_used_empty_mapping(self):
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    max_concurrent_home_matches: 1\n"
+            "  albany:\n"
+            "    home_dates_used: {}\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "min.*max"):
+            fixturespec.load_spec(path)
+
+    def test_home_dates_used_unsupported_key(self):
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    max_concurrent_home_matches: 1\n"
+            "  albany:\n"
+            "    home_dates_used:\n"
+            "      minimum: 2\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "minimum"):
+            fixturespec.load_spec(path)
+
+    def test_home_dates_used_below_one(self):
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    max_concurrent_home_matches: 1\n"
+            "  albany:\n"
+            "    home_dates_used:\n"
+            "      min: 0\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "at least 1"):
+            fixturespec.load_spec(path)
+
+    def test_home_dates_used_min_exceeds_max(self):
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    max_concurrent_home_matches: 1\n"
+            "  albany:\n"
+            "    home_dates_used:\n"
+            "      min: 5\n"
+            "      max: 3\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "exceeds"):
             fixturespec.load_spec(path)
 
     def test_fixed_fixture(self):

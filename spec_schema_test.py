@@ -92,7 +92,9 @@ club_constraints:
       default: 2
       overrides:
         2025-09-08: 3
-    max_home_dates_used: 1
+    home_dates_used:
+      min: 1
+      max: 2
     teams:
       hackney-5:
         unavailable_home_dates: [2025-09-08]

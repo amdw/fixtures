@@ -290,16 +290,32 @@ class TestMaxConcurrentHomeMatchesFor(unittest.TestCase):
         self.assertIsNone(params.max_concurrent_home_matches_for("A", date(2025, 1, 1)))
 
 
-class TestMaxHomeDatesUsed(unittest.TestCase):
-    """Test cases for the max_home_dates_used constraint."""
+class TestHomeDatesUsedBounds(unittest.TestCase):
+    """Validation of the HomeDatesUsedBounds value object itself."""
+
+    def test_requires_at_least_one_bound(self):
+        with self.assertRaises(ValueError):
+            fmodel.HomeDatesUsedBounds()
+
+    def test_rejects_min_above_max(self):
+        with self.assertRaises(ValueError):
+            fmodel.HomeDatesUsedBounds(minimum=5, maximum=3)
+
+    def test_equal_min_and_max_allowed(self):
+        bounds = fmodel.HomeDatesUsedBounds(minimum=3, maximum=3)
+        self.assertEqual((bounds.minimum, bounds.maximum), (3, 3))
+
+
+class TestHomeDatesUsed(unittest.TestCase):
+    """Test cases for the home_dates_used (min/max) constraint."""
 
     def test_constraint_limits_dates_used(self):
-        """Solver uses at most max_home_dates_used home dates for a club.
+        """Solver uses at most home_dates_used.maximum home dates for a club.
 
         Club "A" has two teams in a division with six other teams (one each from
         clubs B-G).  Each A team plays seven home matches (one vs each of the
         other seven teams, including the intra-club match).  A has twelve weekly
-        home dates available but max_home_dates_used is set to 8.  With
+        home dates available but home_dates_used.maximum is set to 8.  With
         max_concurrent_home_matches=2, the solver can pack two home matches per
         date, so 14 total A home matches fit in 8 dates (capacity 16).  This
         leaves at least four of A's twelve available home dates completely unused.
@@ -332,7 +348,7 @@ class TestMaxHomeDatesUsed(unittest.TestCase):
                 **{c: fmodel.MaxConcurrentHomeMatches(default=1) for c in other_clubs},
             },
             min_gap_days=0,
-            max_home_dates_used={"A": 8},
+            home_dates_used={"A": fmodel.HomeDatesUsedBounds(maximum=8)},
         )
         fixtures = list(fmodel.solve(params))
 
@@ -341,11 +357,77 @@ class TestMaxHomeDatesUsed(unittest.TestCase):
         unused_a_dates = set(a_home_dates) - a_dates_used
         self.assertGreaterEqual(len(unused_a_dates), 4)
 
+    def test_min_constraint_spreads_dates_used(self):
+        """Solver uses at least home_dates_used.minimum home dates for a club.
+
+        Same shape as test_constraint_limits_dates_used: club "A" has two teams
+        playing 14 home matches between them, 12 weekly home dates available, and
+        max_concurrent_home_matches=2 -- so absent any spread constraint the solver
+        could pack them onto as few as 7 dates.  home_dates_used.minimum=10 forces
+        it to use at least 10 distinct dates instead.
+        """
+        other_clubs = ["B", "C", "D", "E", "F", "G"]
+        teams = [
+            fmodel.Team(division=1, club="A", index=1),
+            fmodel.Team(division=1, club="A", index=2),
+        ] + [fmodel.Team(division=1, club=c, index=1) for c in other_clubs]
+
+        a_start = date(2025, 1, 6)
+        a_home_dates = [a_start + timedelta(weeks=i) for i in range(12)]
+        other_home_dates = {
+            c: [date(2025, 9, 1) + timedelta(days=i, weeks=j) for j in range(8)]
+            for i, c in enumerate(other_clubs)
+        }
+        home_dates = {"A": a_home_dates} | other_home_dates
+
+        all_clubs = ["A"] + other_clubs
+        params = fmodel.Parameters(
+            teams=teams,
+            home_dates=home_dates,
+            unavailable_away_dates={c: [] for c in all_clubs},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=2),
+                **{c: fmodel.MaxConcurrentHomeMatches(default=1) for c in other_clubs},
+            },
+            min_gap_days=0,
+            home_dates_used={"A": fmodel.HomeDatesUsedBounds(minimum=10)},
+        )
+        fixtures = list(fmodel.solve(params))
+
+        a_dates_used = {sf.date for sf in fixtures if sf.fixture.home_team.club == "A"}
+        self.assertGreaterEqual(len(a_dates_used), 10)
+
+    def test_min_constraint_enforced_strictly(self):
+        """A club whose schedule can't reach home_dates_used.minimum is infeasible."""
+        # A's single team plays one home match, so at most one home date can ever be
+        # used; requiring a minimum of 2 is impossible.
+        teams = [
+            fmodel.Team(division=1, club="A", index=1),
+            fmodel.Team(division=1, club="B", index=1),
+        ]
+        home_dates = {
+            "A": [date(2025, 1, 1), date(2025, 2, 1), date(2025, 3, 1)],
+            "B": [date(2025, 4, 1), date(2025, 5, 1), date(2025, 6, 1)],
+        }
+        params = fmodel.Parameters(
+            teams=teams,
+            home_dates=home_dates,
+            unavailable_away_dates={"A": [], "B": []},
+            max_concurrent_home_matches={
+                "A": fmodel.MaxConcurrentHomeMatches(default=1),
+                "B": fmodel.MaxConcurrentHomeMatches(default=1),
+            },
+            min_gap_days=7,
+            home_dates_used={"A": fmodel.HomeDatesUsedBounds(minimum=2)},
+        )
+        with self.assertRaises(ValueError):
+            fmodel.solve(params)
+
     def test_constraint_enforced_strictly(self):
         """A club with two teams needs two home dates; a limit of 1 makes it infeasible."""
         # A has two teams in the same division, requiring 2 home matches on different dates
-        # (min_gap_days=7 forces different dates). But max_home_dates_used=1 for A means
-        # only 1 date can be used — impossible.
+        # (min_gap_days=7 forces different dates). But home_dates_used.maximum=1 for A
+        # means only 1 date can be used — impossible.
         teams = [
             fmodel.Team(division=1, club="A", index=1),
             fmodel.Team(division=1, club="A", index=2),
@@ -364,7 +446,10 @@ class TestMaxHomeDatesUsed(unittest.TestCase):
                 "B": fmodel.MaxConcurrentHomeMatches(default=2),
             },
             min_gap_days=7,
-            max_home_dates_used={"A": 1, "B": 3},
+            home_dates_used={
+                "A": fmodel.HomeDatesUsedBounds(maximum=1),
+                "B": fmodel.HomeDatesUsedBounds(maximum=3),
+            },
         )
         with self.assertRaises(ValueError):
             fmodel.solve(params)
