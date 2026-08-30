@@ -25,6 +25,14 @@ import fmodel
 import genfixtures
 
 
+def _home_limit(n: int | None) -> fmodel.MaxConcurrentMatches:
+    """A club's MaxConcurrentMatches carrying just a HOME-scope limit with default
+    n (no per-date overrides) -- the shape most of these tests need."""
+    return fmodel.MaxConcurrentMatches(
+        by_scope={fmodel.ConcurrencyScope.HOME: fmodel.ConcurrencyLimit(default=n)}
+    )
+
+
 class TestSolve(unittest.TestCase):
     """Test cases for the solve() function."""
 
@@ -108,10 +116,12 @@ class TestSolve(unittest.TestCase):
             home_fixtures_by_club_date[key] += 1
 
         for (club, fixture_date), count in home_fixtures_by_club_date.items():
-            limit = self.params.max_concurrent_home_matches_for(club, fixture_date)
+            limit = self.params.max_concurrent_matches_for(
+                club, fmodel.ConcurrencyScope.HOME, fixture_date
+            )
             # None means unlimited -- including a configured limit that's >= the
             # club's number of teams, which can never actually bind (see
-            # TestMaxConcurrentHomeMatchesFor) -- so there's nothing to check.
+            # TestMaxConcurrentMatchesFor) -- so there's nothing to check.
             if limit is None:
                 continue
             self.assertLessEqual(
@@ -235,9 +245,9 @@ class TestSolve(unittest.TestCase):
                 ],  # B can't play away on Jan 1 (when A is home)
             },
             min_gap_days=7,
-            max_concurrent_home_matches={
-                "Test Club A": fmodel.MaxConcurrentHomeMatches(default=1),
-                "Test Club B": fmodel.MaxConcurrentHomeMatches(default=1),
+            max_concurrent_matches={
+                "Test Club A": _home_limit(1),
+                "Test Club B": _home_limit(1),
             },
         )
 
@@ -252,10 +262,10 @@ class TestSolve(unittest.TestCase):
         )
 
 
-class TestMaxConcurrentHomeMatchesFor(unittest.TestCase):
-    """A configured max_concurrent_home_matches limit that is >= a club's number of
-    teams can never actually restrict anything (the club can never field more
-    simultaneous home matches than it has teams), so max_concurrent_home_matches_for()
+class TestMaxConcurrentMatchesFor(unittest.TestCase):
+    """A configured max_concurrent_matches limit that is >= a club's number of
+    teams can never actually restrict anything (the club can never play more
+    simultaneous matches than it has teams), so max_concurrent_matches_for()
     should report it as unlimited (None) too. See issue #22.
     """
 
@@ -267,28 +277,61 @@ class TestMaxConcurrentHomeMatchesFor(unittest.TestCase):
             teams=teams,
             home_dates={"A": [date(2025, 1, 1)]},
             unavailable_away_dates={"A": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=limit),
+            max_concurrent_matches={
+                "A": _home_limit(limit),
             },
         )
 
     def test_limit_below_team_count_is_kept(self) -> None:
         params = self._params(num_teams=3, limit=2)
         self.assertEqual(
-            params.max_concurrent_home_matches_for("A", date(2025, 1, 1)), 2
+            params.max_concurrent_matches_for(
+                "A", fmodel.ConcurrencyScope.HOME, date(2025, 1, 1)
+            ),
+            2,
         )
 
     def test_limit_equal_to_team_count_is_reported_as_unlimited(self) -> None:
         params = self._params(num_teams=2, limit=2)
-        self.assertIsNone(params.max_concurrent_home_matches_for("A", date(2025, 1, 1)))
+        self.assertIsNone(
+            params.max_concurrent_matches_for(
+                "A", fmodel.ConcurrencyScope.HOME, date(2025, 1, 1)
+            )
+        )
 
     def test_limit_above_team_count_is_reported_as_unlimited(self) -> None:
         params = self._params(num_teams=2, limit=5)
-        self.assertIsNone(params.max_concurrent_home_matches_for("A", date(2025, 1, 1)))
+        self.assertIsNone(
+            params.max_concurrent_matches_for(
+                "A", fmodel.ConcurrencyScope.HOME, date(2025, 1, 1)
+            )
+        )
 
     def test_explicit_unlimited_stays_unlimited(self) -> None:
         params = self._params(num_teams=2, limit=None)
-        self.assertIsNone(params.max_concurrent_home_matches_for("A", date(2025, 1, 1)))
+        self.assertIsNone(
+            params.max_concurrent_matches_for(
+                "A", fmodel.ConcurrencyScope.HOME, date(2025, 1, 1)
+            )
+        )
+
+    def test_club_with_no_entry_is_unlimited(self) -> None:
+        params = self._params(num_teams=3, limit=2)
+        # "B" isn't in max_concurrent_matches at all.
+        self.assertIsNone(
+            params.max_concurrent_matches_for(
+                "B", fmodel.ConcurrencyScope.HOME, date(2025, 1, 1)
+            )
+        )
+
+    def test_scope_with_no_entry_is_unlimited(self) -> None:
+        params = self._params(num_teams=3, limit=2)
+        # Only the HOME scope is configured; AWAY/ANY have no limit.
+        self.assertIsNone(
+            params.max_concurrent_matches_for(
+                "A", fmodel.ConcurrencyScope.AWAY, date(2025, 1, 1)
+            )
+        )
 
 
 class TestHomeDatesUsedBounds(unittest.TestCase):
@@ -317,7 +360,7 @@ class TestHomeDatesUsed(unittest.TestCase):
         clubs B-G).  Each A team plays seven home matches (one vs each of the
         other seven teams, including the intra-club match).  A has twelve weekly
         home dates available but home_dates_used.maximum is set to 8.  With
-        max_concurrent_home_matches=2, the solver can pack two home matches per
+        max_concurrent_matches home: 2, the solver can pack two home matches per
         date, so 14 total A home matches fit in 8 dates (capacity 16).  This
         leaves at least four of A's twelve available home dates completely unused.
         """
@@ -344,9 +387,9 @@ class TestHomeDatesUsed(unittest.TestCase):
             teams=teams,
             home_dates=home_dates,
             unavailable_away_dates={c: [] for c in all_clubs},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=2),
-                **{c: fmodel.MaxConcurrentHomeMatches(default=1) for c in other_clubs},
+            max_concurrent_matches={
+                "A": _home_limit(2),
+                **{c: _home_limit(1) for c in other_clubs},
             },
             min_gap_days=0,
             home_dates_used={"A": fmodel.HomeDatesUsedBounds(maximum=8)},
@@ -363,7 +406,7 @@ class TestHomeDatesUsed(unittest.TestCase):
 
         Same shape as test_constraint_limits_dates_used: club "A" has two teams
         playing 14 home matches between them, 12 weekly home dates available, and
-        max_concurrent_home_matches=2 -- so absent any spread constraint the solver
+        max_concurrent_matches home: 2 -- so absent any spread constraint the solver
         could pack them onto as few as 7 dates.  home_dates_used.minimum=10 forces
         it to use at least 10 distinct dates instead.
         """
@@ -386,9 +429,9 @@ class TestHomeDatesUsed(unittest.TestCase):
             teams=teams,
             home_dates=home_dates,
             unavailable_away_dates={c: [] for c in all_clubs},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=2),
-                **{c: fmodel.MaxConcurrentHomeMatches(default=1) for c in other_clubs},
+            max_concurrent_matches={
+                "A": _home_limit(2),
+                **{c: _home_limit(1) for c in other_clubs},
             },
             min_gap_days=0,
             home_dates_used={"A": fmodel.HomeDatesUsedBounds(minimum=10)},
@@ -414,9 +457,9 @@ class TestHomeDatesUsed(unittest.TestCase):
             teams=teams,
             home_dates=home_dates,
             unavailable_away_dates={"A": [], "B": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=1),
-                "B": fmodel.MaxConcurrentHomeMatches(default=1),
+            max_concurrent_matches={
+                "A": _home_limit(1),
+                "B": _home_limit(1),
             },
             min_gap_days=7,
             home_dates_used={"A": fmodel.HomeDatesUsedBounds(minimum=2)},
@@ -442,9 +485,9 @@ class TestHomeDatesUsed(unittest.TestCase):
             teams=teams,
             home_dates=home_dates,
             unavailable_away_dates={"A": [], "B": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=1),
-                "B": fmodel.MaxConcurrentHomeMatches(default=2),
+            max_concurrent_matches={
+                "A": _home_limit(1),
+                "B": _home_limit(2),
             },
             min_gap_days=7,
             home_dates_used={
@@ -481,9 +524,9 @@ class TestFixedFixtures(unittest.TestCase):
             teams=teams,
             home_dates=home_dates,
             unavailable_away_dates={"A": [], "B": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=2),
-                "B": fmodel.MaxConcurrentHomeMatches(default=1),
+            max_concurrent_matches={
+                "A": _home_limit(2),
+                "B": _home_limit(1),
             },
             min_gap_days=7,
             **kwargs,
@@ -549,9 +592,7 @@ class TestFixedFixtures(unittest.TestCase):
             teams=[a1, a2],
             home_dates={"A": [date(2025, 1, 1), date(2025, 1, 8)]},
             unavailable_away_dates={"A": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=None)
-            },
+            max_concurrent_matches={"A": _home_limit(None)},
             min_gap_days=7,
             fixed_fixtures=fixed,
         )
@@ -576,9 +617,7 @@ class TestFixedFixtures(unittest.TestCase):
             teams=[a1, a2],
             home_dates={"A": [date(2025, 1, 1), date(2025, 1, 7)]},
             unavailable_away_dates={"A": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=None)
-            },
+            max_concurrent_matches={"A": _home_limit(None)},
             min_gap_days=7,
             fixed_fixtures=fixed,
         )
@@ -608,9 +647,9 @@ class TestLatestInternalMatchDate(unittest.TestCase):
             teams=teams,
             home_dates=home_dates,
             unavailable_away_dates={"A": [], "B": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=2),
-                "B": fmodel.MaxConcurrentHomeMatches(default=1),
+            max_concurrent_matches={
+                "A": _home_limit(2),
+                "B": _home_limit(1),
             },
             min_gap_days=7,
             **kwargs,
@@ -695,7 +734,7 @@ class TestEarliestMatchDate(unittest.TestCase):
     fixtures that club A hosts (A1 v A2, A2 v A1, A1 v B1, A2 v B1) shares a
     team -- with only 3 teams to draw from, any two of those 4 fixtures must
     involve at least one of the same two teams. That means all 4 need distinct
-    dates regardless of max_concurrent_home_matches, so club A's home_dates
+    dates regardless of max_concurrent_matches, so club A's home_dates
     below deliberately has some slack (6 dates) beyond that minimum of 4, to
     leave room for a cutoff to remove some of them and still solve.
     """
@@ -721,9 +760,9 @@ class TestEarliestMatchDate(unittest.TestCase):
             teams=teams,
             home_dates=home_dates,
             unavailable_away_dates={"A": [], "B": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=2),
-                "B": fmodel.MaxConcurrentHomeMatches(default=1),
+            max_concurrent_matches={
+                "A": _home_limit(2),
+                "B": _home_limit(1),
             },
             min_gap_days=7,
             **kwargs,
@@ -800,9 +839,9 @@ class TestExcludedFixtures(unittest.TestCase):
             teams=teams,
             home_dates=home_dates,
             unavailable_away_dates={"A": [], "B": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=2),
-                "B": fmodel.MaxConcurrentHomeMatches(default=1),
+            max_concurrent_matches={
+                "A": _home_limit(2),
+                "B": _home_limit(1),
             },
             min_gap_days=7,
             **kwargs,
@@ -862,9 +901,7 @@ class TestDivisionSchemes(unittest.TestCase):
             teams=teams,
             home_dates={c: list(dates) for c in clubs},
             unavailable_away_dates={c: [] for c in clubs},
-            max_concurrent_home_matches={
-                c: fmodel.MaxConcurrentHomeMatches(default=1) for c in clubs
-            },
+            max_concurrent_matches={c: _home_limit(1) for c in clubs},
             min_gap_days=7,
             division_schemes=division_schemes or {},
         )
@@ -961,8 +998,8 @@ class TestTeamConstraints(unittest.TestCase):
             teams=[a1, a2],
             home_dates={"A": a_home_dates},
             unavailable_away_dates={"A": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=1),
+            max_concurrent_matches={
+                "A": _home_limit(1),
             },
             min_gap_days=7,
             # A1 can only host on Jan 1; A2 keeps A's full home_dates.
@@ -984,9 +1021,9 @@ class TestTeamConstraints(unittest.TestCase):
             teams=[a1, b1],
             home_dates={"A": [date(2025, 1, 1)], "B": [date(2025, 2, 1)]},
             unavailable_away_dates={"A": [], "B": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=1),
-                "B": fmodel.MaxConcurrentHomeMatches(default=1),
+            max_concurrent_matches={
+                "A": _home_limit(1),
+                "B": _home_limit(1),
             },
             min_gap_days=7,
             team_unavailable_away_dates={a1: [date(2025, 2, 1)]},
@@ -1014,9 +1051,7 @@ class TestTeamConstraints(unittest.TestCase):
             teams=[a1],
             home_dates={"A": [date(2025, 1, 1), date(2025, 2, 1)]},
             unavailable_away_dates={"A": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=1)
-            },
+            max_concurrent_matches={"A": _home_limit(1)},
         )
         self.assertEqual(
             params.home_dates_for(a1), [date(2025, 1, 1), date(2025, 2, 1)]
@@ -1063,9 +1098,9 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
                 "X": [date(2025, 3, 1), date(2025, 3, 8)],
             },
             unavailable_away_dates={"A": [], "X": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=2),
-                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            max_concurrent_matches={
+                "A": _home_limit(2),
+                "X": _home_limit(2),
             },
             min_gap_days=7,
             avoid_coscheduling_teams=[
@@ -1092,9 +1127,9 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
                 "X": [date(2025, 3, 1)],
             },
             unavailable_away_dates={"A": [], "X": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=2),
-                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            max_concurrent_matches={
+                "A": _home_limit(2),
+                "X": _home_limit(2),
             },
             min_gap_days=7,
             avoid_coscheduling_teams=[
@@ -1121,9 +1156,9 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
                 "X": [date(2025, 3, 1), date(2025, 3, 8)],
             },
             unavailable_away_dates={"A": [], "X": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=2),
-                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            max_concurrent_matches={
+                "A": _home_limit(2),
+                "X": _home_limit(2),
             },
             min_gap_days=7,
             avoid_coscheduling_teams=[
@@ -1150,9 +1185,9 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
                 "X": [date(2025, 3, 1), date(2025, 3, 8)],
             },
             unavailable_away_dates={"A": [], "X": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=2),
-                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            max_concurrent_matches={
+                "A": _home_limit(2),
+                "X": _home_limit(2),
             },
             min_gap_days=7,
             avoid_coscheduling_teams=[
@@ -1176,9 +1211,7 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
             teams=[a1, a2],
             home_dates={"A": [date(2025, 1, 1)]},
             unavailable_away_dates={"A": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=1)
-            },
+            max_concurrent_matches={"A": _home_limit(1)},
             min_gap_days=7,
             excluded_fixtures=[fmodel.Fixture(home_team=a2, away_team=a1)],
             avoid_coscheduling_teams=[
@@ -1212,9 +1245,9 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
                 "X": [date(2025, 3, 1), date(2025, 3, 8)],
             },
             unavailable_away_dates={"A": [], "X": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=2),
-                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            max_concurrent_matches={
+                "A": _home_limit(2),
+                "X": _home_limit(2),
             },
             min_gap_days=7,
             avoid_coscheduling_teams=[
@@ -1242,9 +1275,9 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
                 "X": [date(2025, 3, 1)],
             },
             unavailable_away_dates={"A": [], "X": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=2),
-                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            max_concurrent_matches={
+                "A": _home_limit(2),
+                "X": _home_limit(2),
             },
             min_gap_days=7,
             avoid_coscheduling_teams=[
@@ -1271,9 +1304,9 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
                 "X": [date(2025, 3, 1)],
             },
             unavailable_away_dates={"A": [], "X": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=2),
-                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            max_concurrent_matches={
+                "A": _home_limit(2),
+                "X": _home_limit(2),
             },
             min_gap_days=7,
             avoid_coscheduling_teams=[
@@ -1301,9 +1334,9 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
                 "X": [date(2025, 3, 1), date(2025, 3, 8)],
             },
             unavailable_away_dates={"A": [], "X": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=2),
-                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            max_concurrent_matches={
+                "A": _home_limit(2),
+                "X": _home_limit(2),
             },
             min_gap_days=7,
             avoid_coscheduling_teams=[
@@ -1316,8 +1349,8 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
             fmodel.solve(params)
 
 
-class TestMaxConcurrentHomeMatchesUnlimited(unittest.TestCase):
-    """Test cases for MaxConcurrentHomeMatches(default=None) / overrides=None: no
+class TestMaxConcurrentMatchesUnlimited(unittest.TestCase):
+    """Test cases for ConcurrencyLimit(default=None) / overrides=None: no
     limit imposed by this mechanism, as opposed to a finite one.
     """
 
@@ -1336,9 +1369,9 @@ class TestMaxConcurrentHomeMatchesUnlimited(unittest.TestCase):
                 "X": [date(2025, 3, 1), date(2025, 3, 8)],
             },
             unavailable_away_dates={"A": [], "X": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=1),
-                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            max_concurrent_matches={
+                "A": _home_limit(1),
+                "X": _home_limit(2),
             },
             min_gap_days=7,
         )
@@ -1359,9 +1392,9 @@ class TestMaxConcurrentHomeMatchesUnlimited(unittest.TestCase):
                 "X": [date(2025, 3, 1), date(2025, 3, 8)],
             },
             unavailable_away_dates={"A": [], "X": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(default=None),
-                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+            max_concurrent_matches={
+                "A": _home_limit(None),
+                "X": _home_limit(2),
             },
             min_gap_days=7,
         )
@@ -1386,11 +1419,15 @@ class TestMaxConcurrentHomeMatchesUnlimited(unittest.TestCase):
                 "X": [date(2025, 3, 1), date(2025, 3, 8)],
             },
             unavailable_away_dates={"A": [], "X": []},
-            max_concurrent_home_matches={
-                "A": fmodel.MaxConcurrentHomeMatches(
-                    default=1, overrides={date(2025, 1, 1): None}
+            max_concurrent_matches={
+                "A": fmodel.MaxConcurrentMatches(
+                    by_scope={
+                        fmodel.ConcurrencyScope.HOME: fmodel.ConcurrencyLimit(
+                            default=1, overrides={date(2025, 1, 1): None}
+                        )
+                    }
                 ),
-                "X": fmodel.MaxConcurrentHomeMatches(default=2),
+                "X": _home_limit(2),
             },
             min_gap_days=7,
         )
@@ -1399,6 +1436,74 @@ class TestMaxConcurrentHomeMatchesUnlimited(unittest.TestCase):
         a2_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a2)
         self.assertEqual(a1_home_date, date(2025, 1, 1))
         self.assertEqual(a2_home_date, date(2025, 1, 1))
+
+
+class TestMaxConcurrentMatchesScopes(unittest.TestCase):
+    """The AWAY and ANY ConcurrencyScopes at the solve() level (HOME is covered by
+    the classes above). Scenario: club A's two teams (different divisions, so no
+    direct fixture) play their away legs at club X, whose single home date forces
+    both onto the same night unless something says otherwise.
+    """
+
+    def _params(
+        self,
+        a_limits: fmodel.MaxConcurrentMatches,
+        *,
+        x_home_dates: list[date],
+    ) -> fmodel.Parameters:
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=2, club="A", index=2)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        x2 = fmodel.Team(division=2, club="X", index=2)
+        return fmodel.Parameters(
+            teams=[a1, a2, x1, x2],
+            home_dates={"A": [date(2025, 3, 1)], "X": x_home_dates},
+            unavailable_away_dates={"A": [], "X": []},
+            # X can host both its teams' matches whenever it has the dates for them.
+            max_concurrent_matches={"A": a_limits},
+            min_gap_days=7,
+        )
+
+    def _any(self, limit: int | None) -> fmodel.MaxConcurrentMatches:
+        return fmodel.MaxConcurrentMatches(
+            by_scope={fmodel.ConcurrencyScope.ANY: fmodel.ConcurrencyLimit(limit)}
+        )
+
+    def _away(self, limit: int | None) -> fmodel.MaxConcurrentMatches:
+        return fmodel.MaxConcurrentMatches(
+            by_scope={fmodel.ConcurrencyScope.AWAY: fmodel.ConcurrencyLimit(limit)}
+        )
+
+    def test_any_scope_limit_blocks_two_matches_on_one_date(self) -> None:
+        # X has one home date, so A1 and A2 must both play away that night; an ANY
+        # limit of 1 forbids A playing two matches (home or away) on a date.
+        params = self._params(self._any(1), x_home_dates=[date(2025, 1, 1)])
+        with self.assertRaises(ValueError):
+            fmodel.solve(params)
+
+    def test_any_scope_limit_allows_up_to_the_limit(self) -> None:
+        params = self._params(self._any(2), x_home_dates=[date(2025, 1, 1)])
+        fixtures = list(fmodel.solve(params))
+        away = sorted(sf.date for sf in fixtures if sf.fixture.away_team.club == "A")
+        self.assertEqual(away, [date(2025, 1, 1), date(2025, 1, 1)])
+
+    def test_away_scope_limit_blocks_two_away_matches_on_one_date(self) -> None:
+        params = self._params(self._away(1), x_home_dates=[date(2025, 1, 1)])
+        with self.assertRaises(ValueError):
+            fmodel.solve(params)
+
+    def test_away_scope_does_not_restrict_home_matches(self) -> None:
+        # With two X home dates the away legs fall on separate nights, satisfying
+        # away: 1; A's own two home matches still share A's single home date,
+        # because the AWAY scope doesn't count home matches.
+        params = self._params(
+            self._away(1), x_home_dates=[date(2025, 1, 1), date(2025, 1, 8)]
+        )
+        fixtures = list(fmodel.solve(params))
+        home = sorted(sf.date for sf in fixtures if sf.fixture.home_team.club == "A")
+        self.assertEqual(home, [date(2025, 3, 1), date(2025, 3, 1)])
+        away = sorted(sf.date for sf in fixtures if sf.fixture.away_team.club == "A")
+        self.assertEqual(away, [date(2025, 1, 1), date(2025, 1, 8)])
 
 
 class TestDuplicateRejection(unittest.TestCase):
@@ -1416,9 +1521,9 @@ class TestDuplicateRejection(unittest.TestCase):
                 teams=teams,
                 home_dates={"A": [date(2025, 1, 1)], "B": [date(2025, 2, 1)]},
                 unavailable_away_dates={"A": [], "B": []},
-                max_concurrent_home_matches={
-                    "A": fmodel.MaxConcurrentHomeMatches(default=1),
-                    "B": fmodel.MaxConcurrentHomeMatches(default=1),
+                max_concurrent_matches={
+                    "A": _home_limit(1),
+                    "B": _home_limit(1),
                 },
             )
 
@@ -1435,9 +1540,9 @@ class TestDuplicateRejection(unittest.TestCase):
                     "B": [date(2025, 2, 1)],
                 },
                 unavailable_away_dates={"A": [], "B": []},
-                max_concurrent_home_matches={
-                    "A": fmodel.MaxConcurrentHomeMatches(default=1),
-                    "B": fmodel.MaxConcurrentHomeMatches(default=1),
+                max_concurrent_matches={
+                    "A": _home_limit(1),
+                    "B": _home_limit(1),
                 },
             )
 
@@ -1452,9 +1557,9 @@ class TestDuplicateRejection(unittest.TestCase):
                     "B": [date(2025, 2, 1)],
                 },
                 unavailable_away_dates={"A": [], "B": []},
-                max_concurrent_home_matches={
-                    "A": fmodel.MaxConcurrentHomeMatches(default=1),
-                    "B": fmodel.MaxConcurrentHomeMatches(default=1),
+                max_concurrent_matches={
+                    "A": _home_limit(1),
+                    "B": _home_limit(1),
                 },
                 team_home_dates={
                     a1: [date(2025, 1, 1), date(2025, 1, 1)]  # duplicate

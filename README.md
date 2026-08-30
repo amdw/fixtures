@@ -93,15 +93,16 @@ divisions:                       # each team's division: the only place it's giv
 club_constraints:
   albany:
     home_dates: [2025-09-01, 2025-09-15, 2025-09-29]
-    max_concurrent_home_matches: 2
+    max_concurrent_matches: { home: 2 }
   hackney:
     home_dates: [2025-09-08, 2025-09-22]
-    max_concurrent_home_matches: 2
+    max_concurrent_matches: { home: 2 }
 ```
 
 That's only a fraction of what the format supports -- per-club/per-team date
-exclusions, concurrency limits with per-date overrides, pinned and withheld
-fixtures, and more. For the full field-by-field reference, see:
+exclusions, per-scope (home/away/any) concurrency limits with per-date
+overrides, pinned and withheld fixtures, and more. For the full field-by-field
+reference, see:
 
 - **[spec-schema.json](spec-schema.json)**, the JSON Schema every field is
   defined in (rendered to a browsable reference page at
