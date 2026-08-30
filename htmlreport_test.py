@@ -286,6 +286,18 @@ class TestGenerateReport(unittest.TestCase):
         self.assertIn("Harrow Leisure Centre", header_part)
         self.assertIn("1 Harrow Road, London", header_part)
 
+    def test_club_page_shows_distinct_date_counts_under_consolidated_table(
+        self,
+    ) -> None:
+        harrow_page = (self.output_dir / "club-harrow.html").read_text()
+        # Harrow: home 1 Sep + 15 Sep (derby); away 8 Sep + 15 Sep (derby).
+        # Distinct overall: 1, 8, 15 Sep -> 3 total, 2 home, 2 away.
+        summary = harrow_page.split("</table>")[1].split("<h2")[0]
+        self.assertIn('<p class="date-summary">', summary)
+        self.assertIn("3</strong> total", summary)
+        self.assertIn("2</strong> home", summary)
+        self.assertIn("2</strong> away", summary)
+
     def test_ampersand_club_name_slugified_and_escaped(self) -> None:
         path = self.output_dir / "club-willesden-brent.html"
         self.assertTrue(path.exists())

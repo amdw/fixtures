@@ -152,7 +152,8 @@ The report build writes, for each run, into `_site/runs/<run path>/`:
   with its own venues list covering just that division's home clubs
 - `club-<id>.html` — one page per club, headed by that club's full venue
   name and address, with a consolidated table of all the club's matches
-  followed by one table per team
+  (followed by a count of the distinct dates the club is in action on,
+  split into total / home / away) followed by one table per team
 - `all-matches.csv` — one row per match, `home_team` vs `away_team`, with
   `date` (ISO `yyyy-mm-dd`), `division`, and the home club's `venue`,
   `venue_address`, `start_time` and `time_limit`

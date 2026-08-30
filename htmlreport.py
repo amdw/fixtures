@@ -57,6 +57,7 @@ _STYLE = """
     nav li { margin-bottom: 0.3rem; }
     nav ul ul { padding-left: 1.2rem; margin-top: 0.3rem; }
     .venue { margin-top: -0.5rem; margin-bottom: 1.5rem; color: #333; }
+    .date-summary { margin-top: -1.5rem; margin-bottom: 2rem; color: #333; }
     ul.venues { padding-left: 1.2rem; }
     ul.venues li { margin-bottom: 0.3rem; }
     .anchor-link { margin-left: 0.4rem; font-size: 0.8em; text-decoration: none;
@@ -340,6 +341,20 @@ def _venue_header(club: fmodel.Club) -> str:
     )
 
 
+def _club_date_summary(
+    club_id: str, fixtures: Collection[fmodel.ScheduledFixture]
+) -> str:
+    """A one-line count of the distinct dates a club is in action on, shown under
+    its consolidated table. Excluded (TBC) fixtures have no date and don't count."""
+    counts = reportdata.club_date_counts(club_id, fixtures)
+    return (
+        '<p class="date-summary">Distinct match dates: '
+        f"<strong>{counts.total}</strong> total "
+        f"(<strong>{counts.home}</strong> home, "
+        f"<strong>{counts.away}</strong> away)</p>\n"
+    )
+
+
 def _venues_section(club_ids: Collection[str], clubs: Mapping[str, fmodel.Club]) -> str:
     if not club_ids:
         return ""
@@ -484,10 +499,16 @@ def generate_report(
     # One page per club: venue header, consolidated table, then one table per team
     for club_id in sorted(teams_by_club):
         club_name = clubs[club_id].name
-        body = _venue_header(clubs[club_id]) + _table(
-            _MATCH_HEADERS_WITH_DIVISION,
-            _rows_with_division(fixtures_by_club.get(club_id, []), clubs)
-            + _excluded_rows_with_division(excluded_by_club.get(club_id, []), clubs),
+        body = (
+            _venue_header(clubs[club_id])
+            + _table(
+                _MATCH_HEADERS_WITH_DIVISION,
+                _rows_with_division(fixtures_by_club.get(club_id, []), clubs)
+                + _excluded_rows_with_division(
+                    excluded_by_club.get(club_id, []), clubs
+                ),
+            )
+            + _club_date_summary(club_id, fixtures_by_club.get(club_id, []))
         )
         for team in sorted(teams_by_club[club_id], key=lambda t: t.index):
             team_fixtures = [
