@@ -62,7 +62,7 @@ club_constraints:
 
 
 class TestSolve(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmpdir.cleanup)
@@ -70,7 +70,7 @@ class TestSolve(unittest.TestCase):
         self.spec_path = self.dir / "spec.yaml"
         self.spec_path.write_text(_MINIMAL_SPEC)
 
-    def test_writes_solution_yaml(self):
+    def test_writes_solution_yaml(self) -> None:
         output_dir = self.dir / "out"
         solution_path = solve.solve(self.spec_path, output_dir)
 
@@ -88,12 +88,12 @@ class TestSolve(unittest.TestCase):
         self.assertEqual(len(loaded), 2)  # Albany v Hackney and Hackney v Albany
         self.assertIn("home: albany-1", solution_path.read_text())
 
-    def test_creates_output_dir(self):
+    def test_creates_output_dir(self) -> None:
         output_dir = self.dir / "nested" / "out"
         solution_path = solve.solve(self.spec_path, output_dir)
         self.assertTrue(solution_path.exists())
 
-    def test_overwrites_existing_solution(self):
+    def test_overwrites_existing_solution(self) -> None:
         output_dir = self.dir / "out"
         output_dir.mkdir()
         (output_dir / "solution.yaml").write_text("stale: true\n")
@@ -102,7 +102,7 @@ class TestSolve(unittest.TestCase):
 
         self.assertIn("fixtures:", (output_dir / "solution.yaml").read_text())
 
-    def test_earliest_match_date_excludes_earlier_home_dates(self):
+    def test_earliest_match_date_excludes_earlier_home_dates(self) -> None:
         """Albany has two candidate home dates (2025-09-01 and 2025-09-29); a cutoff
         that excludes the earlier one should still solve, using the later one."""
         output_dir = self.dir / "out"
@@ -120,7 +120,7 @@ class TestSolve(unittest.TestCase):
         for sf in loaded:
             self.assertGreaterEqual(sf.date, date(2025, 9, 2))
 
-    def test_no_cutoff_by_default(self):
+    def test_no_cutoff_by_default(self) -> None:
         output_dir = self.dir / "out"
         solution_path = solve.solve(self.spec_path, output_dir)
         self.assertTrue(solution_path.exists())

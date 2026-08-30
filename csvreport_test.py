@@ -65,7 +65,7 @@ def _club(name: str, venue: str, address: str, start: str, limit: str) -> fmodel
 
 
 class CsvReportTest(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmpdir.cleanup)
@@ -114,7 +114,7 @@ class CsvReportTest(unittest.TestCase):
         with (self.out / name).open(newline="") as f:
             return list(csv.DictReader(f))
 
-    def test_writes_both_files_and_returns_their_paths(self):
+    def test_writes_both_files_and_returns_their_paths(self) -> None:
         paths = _generate_csv(self.fixtures, self.teams, self.clubs, self.out)
         self.assertEqual(
             paths,
@@ -126,7 +126,7 @@ class CsvReportTest(unittest.TestCase):
         for p in paths:
             self.assertTrue(p.exists())
 
-    def test_header_columns(self):
+    def test_header_columns(self) -> None:
         _generate_csv(self.fixtures, self.teams, self.clubs, self.out)
         with (self.out / "all-matches.csv").open(newline="") as f:
             self.assertEqual(
@@ -166,7 +166,7 @@ class CsvReportTest(unittest.TestCase):
                 ],
             )
 
-    def test_all_matches_one_row_per_match_sorted_by_date(self):
+    def test_all_matches_one_row_per_match_sorted_by_date(self) -> None:
         _generate_csv(self.fixtures, self.teams, self.clubs, self.out)
         rows = self._rows("all-matches.csv")
 
@@ -188,7 +188,7 @@ class CsvReportTest(unittest.TestCase):
         self.assertEqual(first["start_time"], "19:30")
         self.assertEqual(first["time_limit"], "75+15")
 
-    def test_all_matches_gives_name_override_plus_club_and_index(self):
+    def test_all_matches_gives_name_override_plus_club_and_index(self) -> None:
         _generate_csv(self.fixtures, self.teams, self.clubs, self.out)
         hendon_row = next(
             r for r in self._rows("all-matches.csv") if r["date"] == "2025-09-03"
@@ -198,7 +198,7 @@ class CsvReportTest(unittest.TestCase):
         self.assertEqual(hendon_row["away_team_club"], "Hendon")
         self.assertEqual(hendon_row["away_team_index"], "2")
 
-    def test_by_team_has_two_rows_per_match_from_each_side(self):
+    def test_by_team_has_two_rows_per_match_from_each_side(self) -> None:
         _generate_csv(self.fixtures, self.teams, self.clubs, self.out)
         rows = self._rows("all-matches-by-team.csv")
 
@@ -222,7 +222,7 @@ class CsvReportTest(unittest.TestCase):
             self.assertEqual(r["venue"], "Harrow Leisure Centre")
             self.assertEqual(r["start_time"], "19:30")
 
-    def test_by_team_grouped_by_team_then_ordered_by_date(self):
+    def test_by_team_grouped_by_team_then_ordered_by_date(self) -> None:
         _generate_csv(self.fixtures, self.teams, self.clubs, self.out)
         rows = self._rows("all-matches-by-team.csv")
 
@@ -239,7 +239,7 @@ class CsvReportTest(unittest.TestCase):
         ealing_dates = [r["date"] for r in rows if r["team"] == "Ealing 1"]
         self.assertEqual(ealing_dates, ["2025-09-01", "2025-09-08"])
 
-    def test_excluded_fixtures_listed_with_empty_date_at_the_end(self):
+    def test_excluded_fixtures_listed_with_empty_date_at_the_end(self) -> None:
         excluded = [fmodel.Fixture(home_team=self.harrow1, away_team=self.harrow2)]
         _generate_csv(
             self.fixtures,
@@ -261,7 +261,7 @@ class CsvReportTest(unittest.TestCase):
         self.assertEqual(harrow1_rows[-1]["date"], "")
         self.assertEqual(harrow1_rows[-1]["opponent"], "Harrow 2")
 
-    def test_empty_fixture_list_writes_header_only(self):
+    def test_empty_fixture_list_writes_header_only(self) -> None:
         _generate_csv([], [], self.clubs, self.out)
 
         for name in ("all-matches.csv", "all-matches-by-team.csv"):
@@ -269,7 +269,7 @@ class CsvReportTest(unittest.TestCase):
             self.assertEqual(text.splitlines()[1:], [], f"{name} has data rows")
             self.assertTrue(text.endswith("\n"))
 
-    def test_uses_unix_line_endings(self):
+    def test_uses_unix_line_endings(self) -> None:
         _generate_csv(self.fixtures, self.teams, self.clubs, self.out)
         raw = (self.out / "all-matches.csv").read_bytes()
         self.assertNotIn(b"\r", raw)
