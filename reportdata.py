@@ -22,7 +22,9 @@ or produces any markup.
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Collection, Mapping
+from datetime import date
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -90,3 +92,36 @@ def by_home_away(
         )
 
     return sorted(fixtures, key=key)
+
+
+@dataclasses.dataclass(frozen=True)
+class ClubDateCounts:
+    """How many distinct calendar dates a club is in action on: `total` across all
+    its matches, `home` across the ones it hosts, `away` across the ones it visits.
+    A date carrying both a home and an away match for the club (two of its teams
+    out the same night, or an internal derby) counts once in `total` but in both
+    `home` and `away`, so `total` can be less than `home + away`."""
+
+    total: int
+    home: int
+    away: int
+
+
+def club_date_counts(
+    club_id: str, fixtures: Collection[fmodel.ScheduledFixture]
+) -> ClubDateCounts:
+    """Count club_id's distinct match dates over the given scheduled fixtures
+    (which may be the whole season or any subset; fixtures not involving club_id
+    are ignored)."""
+    home_dates: set[date] = set()
+    away_dates: set[date] = set()
+    for sf in fixtures:
+        if sf.fixture.home_team.club == club_id:
+            home_dates.add(sf.date)
+        if sf.fixture.away_team.club == club_id:
+            away_dates.add(sf.date)
+    return ClubDateCounts(
+        total=len(home_dates | away_dates),
+        home=len(home_dates),
+        away=len(away_dates),
+    )

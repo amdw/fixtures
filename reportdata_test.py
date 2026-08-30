@@ -97,6 +97,39 @@ class ReportDataTest(unittest.TestCase):
         ordered = reportdata.by_home_away([f1, f2], self.clubs, with_division=False)
         self.assertEqual(ordered, [f2, f1])
 
+    def test_club_date_counts_splits_home_away_and_total(self) -> None:
+        fixtures = [
+            _sf(self.barnet1, self.aardvark1, date(2025, 9, 1)),
+            _sf(self.barnet2, self.aardvark1, date(2025, 9, 15)),
+            _sf(self.aardvark1, self.barnet1, date(2025, 10, 6)),
+        ]
+        self.assertEqual(
+            reportdata.club_date_counts("a-club", fixtures),
+            reportdata.ClubDateCounts(total=3, home=2, away=1),
+        )
+
+    def test_club_date_counts_dedupes_dates_and_ignores_other_clubs(self) -> None:
+        fixtures = [
+            # Two Barnet teams both at home the same night: one home date, not two.
+            _sf(self.barnet1, self.aardvark1, date(2025, 9, 1)),
+            _sf(self.barnet2, self.aardvark1, date(2025, 9, 1)),
+            # An internal derby: same date counts as both a home and an away date.
+            _sf(self.barnet1, self.barnet2, date(2025, 9, 8)),
+            # Not involving a-club at all.
+            _sf(self.aardvark1, self.nick, date(2025, 9, 22)),
+        ]
+        self.assertEqual(
+            reportdata.club_date_counts("a-club", fixtures),
+            reportdata.ClubDateCounts(total=2, home=2, away=1),
+        )
+
+    def test_club_date_counts_zero_when_club_absent(self) -> None:
+        fixtures = [_sf(self.aardvark1, self.nick, date(2025, 9, 1))]
+        self.assertEqual(
+            reportdata.club_date_counts("a-club", fixtures),
+            reportdata.ClubDateCounts(total=0, home=0, away=0),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
