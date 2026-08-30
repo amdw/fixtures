@@ -76,11 +76,25 @@ class Club:
     home_time_limit: str  # chess time control, e.g. "75+15" for 75 min + 15 sec/move
 
 
+class ConcurrencyScope(enum.Enum):
+    """Which of a club's matches on a date a MaxConcurrentMatches limit counts:
+    HOME only its home matches, AWAY only its away matches, ANY every match its
+    teams play (an internal match -- both teams the club's -- counted once).
+
+    Parallel to CoschedulingScope but kept separate: that one's third value is
+    BOTH ("home") and it names a different feature.
+    """
+
+    HOME = "home"
+    AWAY = "away"
+    ANY = "any"
+
+
 @dataclasses.dataclass(frozen=True)
-class MaxConcurrentHomeMatches:
-    """A club's home-match concurrency limit: a default, overridable for specific
-    dates. A value of None (for the default or an override) means no limit is
-    imposed by this mechanism -- e.g. for a club whose concurrency is already
+class ConcurrencyLimit:
+    """A match-count limit for one ConcurrencyScope: a default, overridable for
+    specific dates. A value of None (for the default or an override) means no limit
+    is imposed by this mechanism -- e.g. for a club whose concurrency is already
     bounded by another constraint (such as avoid_coscheduling_teams), where adding
     an explicit number here would just be a redundant, easy-to-forget-to-update
     restatement of that bound.
@@ -91,6 +105,23 @@ class MaxConcurrentHomeMatches:
 
     def for_date(self, d: date) -> int | None:
         return self.overrides.get(d, self.default)
+
+
+@dataclasses.dataclass(frozen=True)
+class MaxConcurrentMatches:
+    """A club's per-scope limits on how many matches its teams may play on the same
+    date. Each ConcurrencyScope present in `by_scope` has its own ConcurrencyLimit;
+    a scope with no entry imposes no limit. See ConcurrencyScope for what each
+    scope counts.
+    """
+
+    by_scope: Mapping[ConcurrencyScope, ConcurrencyLimit] = dataclasses.field(
+        default_factory=dict
+    )
+
+    def for_date(self, scope: ConcurrencyScope, d: date) -> int | None:
+        limit = self.by_scope.get(scope)
+        return None if limit is None else limit.for_date(d)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -223,8 +254,10 @@ class Parameters:
     teams: Collection[Team]
     home_dates: Mapping[ClubT, list[date]]
     unavailable_away_dates: Mapping[ClubT, list[date]]
-    max_concurrent_home_matches: Mapping[ClubT, MaxConcurrentHomeMatches]
     min_gap_days: int = 7
+    max_concurrent_matches: Mapping[ClubT, MaxConcurrentMatches] = dataclasses.field(
+        default_factory=dict
+    )
     home_dates_used: Mapping[ClubT, HomeDatesUsedBounds] = dataclasses.field(
         default_factory=dict
     )
@@ -289,14 +322,20 @@ class Parameters:
     def _teams_per_club(self) -> Mapping[ClubT, int]:
         return collections.Counter(team.club for team in self.teams)
 
-    def max_concurrent_home_matches_for(self, club: ClubT, d: date) -> int | None:
-        """The most home matches `club` may host on date `d`, or None if unlimited.
+    def max_concurrent_matches_for(
+        self, club: ClubT, scope: ConcurrencyScope, d: date
+    ) -> int | None:
+        """The most matches of `scope` (see ConcurrencyScope) `club` may play on
+        date `d`, or None if unlimited.
 
         A configured limit that is >= the club's own number of teams is reported as
-        unlimited too: the club can never field more simultaneous home matches than
-        it has teams, so such a limit could never actually bind.
+        unlimited too: the club can never play more simultaneous matches (of any
+        scope) than it has teams, so such a limit could never actually bind.
         """
-        limit = self.max_concurrent_home_matches[club].for_date(d)
+        entry = self.max_concurrent_matches.get(club)
+        if entry is None:
+            return None
+        limit = entry.for_date(scope, d)
         if limit is not None and limit >= self._teams_per_club[club]:
             return None
         return limit
@@ -443,6 +482,15 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
     vars_by_club_home_date: MutableMapping[tuple[str, date], list[cp_model.IntVar]] = (
         collections.defaultdict(list)
     )
+    vars_by_club_away_date: MutableMapping[tuple[str, date], list[cp_model.IntVar]] = (
+        collections.defaultdict(list)
+    )
+    # Every match either club's teams play on a date (an internal match, both teams
+    # the same club's, appears once): the ConcurrencyScope.ANY counterpart of the
+    # home/away maps above.
+    vars_by_club_any_date: MutableMapping[tuple[str, date], list[cp_model.IntVar]] = (
+        collections.defaultdict(list)
+    )
 
     excluded = set(params.excluded_fixtures)
     fixed_fixture_keys = {(sf.fixture, sf.date) for sf in params.fixed_fixtures}
@@ -483,6 +531,10 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
                 vars_by_team_date[home_team][match_date].append(var)
                 vars_by_team_date[away_team][match_date].append(var)
                 vars_by_club_home_date[(home_team.club, match_date)].append(var)
+                vars_by_club_away_date[(away_team.club, match_date)].append(var)
+                vars_by_club_any_date[(home_team.club, match_date)].append(var)
+                if away_team.club != home_team.club:
+                    vars_by_club_any_date[(away_team.club, match_date)].append(var)
 
     for fixture_vars in vars_by_fixture.values():
         # Each fixture must be scheduled exactly once
@@ -497,12 +549,17 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
             window_vars = [v for d in window for v in team_vars_by_date[d]]
             model.add(cp_model.LinearExpr.Sum(window_vars) <= 1)
 
-    for (club, match_date), club_home_date_vars in vars_by_club_home_date.items():
-        # Each club can host at most max_concurrent_home_matches matches per date
-        # (None means unlimited: no constraint to add).
-        max_matches = params.max_concurrent_home_matches_for(club, match_date)
-        if max_matches is not None:
-            model.add(cp_model.LinearExpr.Sum(club_home_date_vars) <= max_matches)
+    for scope, vars_by_club_date in (
+        (ConcurrencyScope.HOME, vars_by_club_home_date),
+        (ConcurrencyScope.AWAY, vars_by_club_away_date),
+        (ConcurrencyScope.ANY, vars_by_club_any_date),
+    ):
+        for (club, match_date), club_date_vars in vars_by_club_date.items():
+            # Each club may play at most max_concurrent_matches matches of this
+            # scope per date (None means unlimited: no constraint to add).
+            max_matches = params.max_concurrent_matches_for(club, scope, match_date)
+            if max_matches is not None:
+                model.add(cp_model.LinearExpr.Sum(club_date_vars) <= max_matches)
 
     _add_home_dates_used_constraints(
         model, params.home_dates_used, vars_by_club_home_date

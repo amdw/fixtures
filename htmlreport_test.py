@@ -50,7 +50,6 @@ def _generate(
         teams=list(teams),
         home_dates={},
         unavailable_away_dates={},
-        max_concurrent_home_matches={},
         excluded_fixtures=excluded_fixtures,
         division_schemes=division_schemes or {},
     )

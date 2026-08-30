@@ -22,6 +22,17 @@ from pathlib import Path
 import fixturespec
 import fmodel
 
+
+def _mcm(**scopes: fmodel.ConcurrencyLimit) -> fmodel.MaxConcurrentMatches:
+    """Terse fmodel.MaxConcurrentMatches builder for tests: keyword args are
+    ConcurrencyScope names, e.g. _mcm(home=fmodel.ConcurrencyLimit(2))."""
+    return fmodel.MaxConcurrentMatches(
+        by_scope={
+            fmodel.ConcurrencyScope(name): limit for name, limit in scopes.items()
+        }
+    )
+
+
 # Clubs/teams/divisions boilerplate, minus 'club_constraints', for tests that need to
 # supply their own version of that section (concatenating a second copy on top of an
 # existing one would create a duplicate top-level YAML key, which PyYAML resolves by
@@ -55,10 +66,11 @@ divisions:
     teams: [albany-1, hackney-1]
 """
 
-# A valid spec minus 'club_constraints.defaults' (so every club still needs its own
-# max_concurrent_home_matches entry to be valid), for tests that need to append their
-# own version of that piece.
-_MINIMAL_SPEC_NO_MCHM = (
+# A valid spec with no concurrency limits at all (no 'club_constraints.defaults'
+# and no per-club max_concurrent_matches), for tests that need to append their own
+# version of that piece. Concurrency limits are entirely optional, so this is valid
+# as-is too.
+_MINIMAL_SPEC_NO_CONCURRENCY = (
     _BOILERPLATE
     + """
 club_constraints:
@@ -71,7 +83,8 @@ club_constraints:
 )
 
 _MINIMAL_SPEC = (
-    _MINIMAL_SPEC_NO_MCHM + "  defaults:\n    max_concurrent_home_matches: 1\n"
+    _MINIMAL_SPEC_NO_CONCURRENCY
+    + "  defaults:\n    max_concurrent_matches:\n      home: 1\n"
 )
 
 # A three-team spec (two Albany teams plus Hackney) for exclude_fixtures tests, which
@@ -109,7 +122,8 @@ divisions:
 
 club_constraints:
   defaults:
-    max_concurrent_home_matches: 2
+    max_concurrent_matches:
+      home: 2
   albany:
     home_dates: [2025-09-01, 2025-10-01, 2025-11-01, 2025-12-01]
   hackney:
@@ -164,14 +178,14 @@ class TestLoadSpec(unittest.TestCase):
         self.assertEqual(spec.parameters.unavailable_away_dates["hackney"], [])
         self.assertEqual(spec.parameters.min_gap_days, 7)
         # Neither club has its own entry, so both inherit _MINIMAL_SPEC's
-        # club_constraints.defaults.max_concurrent_home_matches (1).
+        # club_constraints.defaults.max_concurrent_matches (home: 1).
         self.assertEqual(
-            spec.parameters.max_concurrent_home_matches["albany"],
-            fmodel.MaxConcurrentHomeMatches(default=1),
+            spec.parameters.max_concurrent_matches["albany"],
+            _mcm(home=fmodel.ConcurrencyLimit(1)),
         )
         self.assertEqual(
-            spec.parameters.max_concurrent_home_matches["hackney"],
-            fmodel.MaxConcurrentHomeMatches(default=1),
+            spec.parameters.max_concurrent_matches["hackney"],
+            _mcm(home=fmodel.ConcurrencyLimit(1)),
         )
         self.assertEqual(spec.name, "")
         self.assertFalse(spec.draft)
@@ -282,7 +296,7 @@ class TestLoadSpec(unittest.TestCase):
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_home_matches: 1\n"
+            "    max_concurrent_matches:\n      home: 1\n"
             "  albany:\n"
             "    home_dates: [2025-09-01]\n"
             "  albany:\n"
@@ -291,121 +305,203 @@ class TestLoadSpec(unittest.TestCase):
         with self.assertRaisesRegex(fixturespec.SpecError, "duplicate key"):
             fixturespec.load_spec(path)
 
-    # These tests write standalone specs rather than extending _MINIMAL_SPEC_NO_MCHM,
-    # since appending a second 'club_constraints' section (or a second entry for a
-    # club already present) would create a duplicate YAML key, which PyYAML resolves
-    # by silently letting the later one clobber the earlier one.
+    # These tests write standalone specs rather than extending
+    # _MINIMAL_SPEC_NO_CONCURRENCY, since appending a second 'club_constraints'
+    # section (or a second entry for a club already present) would create a
+    # duplicate YAML key, which PyYAML resolves by silently letting the later one
+    # clobber the earlier one.
 
-    def test_max_concurrent_home_matches_shorthand_int(self) -> None:
+    def test_max_concurrent_matches_home_shorthand_int(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_home_matches: 1\n"
+            "    max_concurrent_matches:\n"
+            "      home: 1\n"
             "  albany:\n"
-            "    max_concurrent_home_matches: 3\n"
+            "    max_concurrent_matches:\n"
+            "      home: 3\n"
         )
         spec = fixturespec.load_spec(path)
         self.assertEqual(
-            spec.parameters.max_concurrent_home_matches["albany"],
-            fmodel.MaxConcurrentHomeMatches(default=3),
+            spec.parameters.max_concurrent_matches["albany"],
+            _mcm(home=fmodel.ConcurrencyLimit(3)),
         )
         # hackney wasn't given its own entry, so it inherits club_constraints.defaults
         self.assertEqual(
-            spec.parameters.max_concurrent_home_matches["hackney"],
-            fmodel.MaxConcurrentHomeMatches(default=1),
+            spec.parameters.max_concurrent_matches["hackney"],
+            _mcm(home=fmodel.ConcurrencyLimit(1)),
         )
 
-    def test_max_concurrent_home_matches_default_and_overrides(self) -> None:
+    def test_max_concurrent_matches_default_and_overrides(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
-            "    max_concurrent_home_matches:\n"
-            "      default: 2\n"
-            "      overrides:\n"
-            "        2025-09-01: 3\n"
-            "  hackney:\n"
-            "    max_concurrent_home_matches: 1\n"
+            "    max_concurrent_matches:\n"
+            "      home:\n"
+            "        default: 2\n"
+            "        overrides:\n"
+            "          2025-09-01: 3\n"
         )
         spec = fixturespec.load_spec(path)
         self.assertEqual(
-            spec.parameters.max_concurrent_home_matches["albany"],
-            fmodel.MaxConcurrentHomeMatches(default=2, overrides={date(2025, 9, 1): 3}),
+            spec.parameters.max_concurrent_matches["albany"],
+            _mcm(home=fmodel.ConcurrencyLimit(2, {date(2025, 9, 1): 3})),
         )
 
-    def test_max_concurrent_home_matches_null_shorthand(self) -> None:
+    def test_max_concurrent_matches_null_shorthand(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
-            "    max_concurrent_home_matches: null\n"
-            "  hackney:\n"
-            "    max_concurrent_home_matches: 1\n"
+            "    max_concurrent_matches:\n"
+            "      home: null\n"
         )
         spec = fixturespec.load_spec(path)
         self.assertEqual(
-            spec.parameters.max_concurrent_home_matches["albany"],
-            fmodel.MaxConcurrentHomeMatches(default=None),
+            spec.parameters.max_concurrent_matches["albany"],
+            _mcm(home=fmodel.ConcurrencyLimit(None)),
         )
 
-    def test_max_concurrent_home_matches_null_default_with_override(self) -> None:
+    def test_max_concurrent_matches_null_default_with_override(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
-            "    max_concurrent_home_matches:\n"
-            "      default: null\n"
-            "      overrides:\n"
-            "        2025-09-01: 3\n"
-            "  hackney:\n"
-            "    max_concurrent_home_matches: 1\n"
+            "    max_concurrent_matches:\n"
+            "      home:\n"
+            "        default: null\n"
+            "        overrides:\n"
+            "          2025-09-01: 3\n"
         )
         spec = fixturespec.load_spec(path)
         self.assertEqual(
-            spec.parameters.max_concurrent_home_matches["albany"],
-            fmodel.MaxConcurrentHomeMatches(
-                default=None, overrides={date(2025, 9, 1): 3}
+            spec.parameters.max_concurrent_matches["albany"],
+            _mcm(home=fmodel.ConcurrencyLimit(None, {date(2025, 9, 1): 3})),
+        )
+
+    def test_max_concurrent_matches_missing_default(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    max_concurrent_matches:\n"
+            "      home:\n"
+            "        overrides:\n"
+            "          2025-09-01: 3\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "default"):
+            fixturespec.load_spec(path)
+
+    def test_max_concurrent_matches_away_and_any_scopes(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    max_concurrent_matches:\n"
+            "      away: 2\n"
+            "      any:\n"
+            "        default: null\n"
+            "        overrides:\n"
+            "          2025-09-01: 1\n"
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(
+            spec.parameters.max_concurrent_matches["albany"],
+            _mcm(
+                away=fmodel.ConcurrencyLimit(2),
+                any=fmodel.ConcurrencyLimit(None, {date(2025, 9, 1): 1}),
             ),
         )
 
-    def test_max_concurrent_home_matches_missing_default(self) -> None:
+    def test_max_concurrent_matches_defaults_merge_per_scope(self) -> None:
+        # defaults set only 'home'; albany sets only 'any'. albany should end up
+        # with both (its own 'any', the inherited default 'home'); hackney, with no
+        # entry of its own, gets just the default 'home'.
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    max_concurrent_matches:\n"
+            "      home: 1\n"
+            "  albany:\n"
+            "    max_concurrent_matches:\n"
+            "      any: 1\n"
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(
+            spec.parameters.max_concurrent_matches["albany"],
+            _mcm(
+                home=fmodel.ConcurrencyLimit(1),
+                any=fmodel.ConcurrencyLimit(1),
+            ),
+        )
+        self.assertEqual(
+            spec.parameters.max_concurrent_matches["hackney"],
+            _mcm(home=fmodel.ConcurrencyLimit(1)),
+        )
+
+    def test_max_concurrent_matches_club_scope_overrides_default_scope(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    max_concurrent_matches:\n"
+            "      home: 1\n"
+            "  albany:\n"
+            "    max_concurrent_matches:\n"
+            "      home: 3\n"
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(
+            spec.parameters.max_concurrent_matches["albany"],
+            _mcm(home=fmodel.ConcurrencyLimit(3)),
+        )
+
+    def test_max_concurrent_matches_unknown_scope_rejected(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
-            "    max_concurrent_home_matches:\n"
-            "      overrides:\n"
-            "        2025-09-01: 3\n"
-            "  hackney:\n"
-            "    max_concurrent_home_matches: 1\n"
+            "    max_concurrent_matches:\n"
+            "      sideways: 1\n"
         )
-        with self.assertRaisesRegex(fixturespec.SpecError, "default"):
+        with self.assertRaisesRegex(fixturespec.SpecError, "sideways"):
+            fixturespec.load_spec(path)
+
+    def test_max_concurrent_matches_empty_mapping_rejected(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    max_concurrent_matches: {}\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "at least one"):
             fixturespec.load_spec(path)
 
     def test_club_constraints_unknown_club(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
-            "    max_concurrent_home_matches: 1\n"
-            "  hackney:\n"
-            "    max_concurrent_home_matches: 1\n"
+            "    home_dates: [2025-09-01]\n"
             "  nonexistent:\n"
-            "    max_concurrent_home_matches: 3\n"
+            "    home_dates: [2025-09-01]\n"
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
             fixturespec.load_spec(path)
 
-    def test_max_concurrent_home_matches_missing_club_without_section_default(
-        self,
-    ) -> None:
+    def test_max_concurrent_matches_absent_for_a_club_is_allowed(self) -> None:
+        # No defaults, and only albany has an entry: hackney simply has no
+        # concurrency limits (nothing is required).
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
-            "    max_concurrent_home_matches: 1\n"
+            "    max_concurrent_matches:\n"
+            "      home: 1\n"
         )
-        with self.assertRaisesRegex(fixturespec.SpecError, "hackney"):
-            fixturespec.load_spec(path)
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(
+            spec.parameters.max_concurrent_matches,
+            {"albany": _mcm(home=fmodel.ConcurrencyLimit(1))},
+        )
 
-    def test_max_concurrent_home_matches_section_omitted_entirely(self) -> None:
-        path = self._write(_BOILERPLATE)
-        with self.assertRaisesRegex(fixturespec.SpecError, "albany.*hackney"):
-            fixturespec.load_spec(path)
+    def test_max_concurrent_matches_omitted_everywhere_is_allowed(self) -> None:
+        # No club_constraints.defaults and no per-club max_concurrent_matches:
+        # concurrency limits are entirely optional.
+        path = self._write(_MINIMAL_SPEC_NO_CONCURRENCY)
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.parameters.max_concurrent_matches, {})
 
     def test_club_constraints_defaults_unsupported_field(self) -> None:
         path = self._write(
@@ -601,7 +697,7 @@ divisions:
     # to load successfully (the failure-path tests don't get this far).
     _SCHEME_SPEC_TAIL = (
         "club_constraints:\n"
-        "  defaults:\n    max_concurrent_home_matches: 1\n"
+        "  defaults:\n    max_concurrent_matches:\n      home: 1\n"
         "  albany:\n    home_dates: [2025-09-01, 2025-09-08, 2025-09-15]\n"
     )
 
@@ -687,7 +783,8 @@ divisions:
     teams: [albany-1, albany-2, albany-3]
 club_constraints:
   defaults:
-    max_concurrent_home_matches: 1
+    max_concurrent_matches:
+      home: 1
   albany:
     home_dates: [2025-09-01, 2025-09-08, 2025-09-15]
 """)
@@ -803,7 +900,7 @@ club_constraints:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_home_matches: 1\n"
+            "    max_concurrent_matches:\n      home: 1\n"
             "  albany:\n"
             "    home_dates_used:\n"
             "      max: 1\n"
@@ -826,7 +923,7 @@ club_constraints:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_home_matches: 1\n"
+            "    max_concurrent_matches:\n      home: 1\n"
             "  albany:\n"
             "    home_dates_used:\n"
             "      min: 3\n"
@@ -846,7 +943,7 @@ club_constraints:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_home_matches: 1\n"
+            "    max_concurrent_matches:\n      home: 1\n"
             "  unknown-club:\n"
             "    home_dates_used:\n"
             "      max: 1\n"
@@ -858,7 +955,7 @@ club_constraints:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_home_matches: 1\n"
+            "    max_concurrent_matches:\n      home: 1\n"
             "  albany:\n"
             "    home_dates_used:\n"
             "      max: not-an-int\n"
@@ -870,7 +967,7 @@ club_constraints:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_home_matches: 1\n"
+            "    max_concurrent_matches:\n      home: 1\n"
             "  albany:\n"
             "    home_dates_used: 1\n"
         )
@@ -881,7 +978,7 @@ club_constraints:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_home_matches: 1\n"
+            "    max_concurrent_matches:\n      home: 1\n"
             "  albany:\n"
             "    home_dates_used: {}\n"
         )
@@ -892,7 +989,7 @@ club_constraints:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_home_matches: 1\n"
+            "    max_concurrent_matches:\n      home: 1\n"
             "  albany:\n"
             "    home_dates_used:\n"
             "      minimum: 2\n"
@@ -904,7 +1001,7 @@ club_constraints:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_home_matches: 1\n"
+            "    max_concurrent_matches:\n      home: 1\n"
             "  albany:\n"
             "    home_dates_used:\n"
             "      min: 0\n"
@@ -916,7 +1013,7 @@ club_constraints:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_home_matches: 1\n"
+            "    max_concurrent_matches:\n      home: 1\n"
             "  albany:\n"
             "    home_dates_used:\n"
             "      min: 5\n"
@@ -1118,7 +1215,7 @@ club_constraints:
     def test_team_constraints_unsupported_field(self) -> None:
         path = self._write(
             self._with_albany_teams(
-                "    teams:\n      albany-1:\n        max_concurrent_home_matches: 2\n"
+                "    teams:\n      albany-1:\n        max_concurrent_matches:\n          home: 2\n"
             )
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):

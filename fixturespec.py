@@ -310,16 +310,15 @@ def _parse_divisions(
     )
 
 
-def _parse_max_concurrent_home_matches_value(
-    value: Any, context: str
-) -> fmodel.MaxConcurrentHomeMatches:
-    """A club's max_concurrent_home_matches value: either a plain integer, null (no
-    limit from this mechanism -- see fmodel.MaxConcurrentHomeMatches), or a mapping
-    with 'default' (an integer or null) and optionally 'overrides' (a date-keyed
-    mapping of integer-or-null overrides of that default).
+def _parse_concurrency_limit_value(value: Any, context: str) -> fmodel.ConcurrencyLimit:
+    """One ConcurrencyScope's limit within a max_concurrent_matches entry: either a
+    plain integer, null (no limit from this mechanism -- see
+    fmodel.ConcurrencyLimit), or a mapping with 'default' (an integer or null) and
+    optionally 'overrides' (a date-keyed mapping of integer-or-null overrides of
+    that default).
     """
     if value is None or (isinstance(value, int) and not isinstance(value, bool)):
-        return fmodel.MaxConcurrentHomeMatches(default=value)
+        return fmodel.ConcurrencyLimit(default=value)
     if isinstance(value, dict):
         unsupported = value.keys() - {"default", "overrides"}
         if unsupported:
@@ -338,11 +337,46 @@ def _parse_max_concurrent_home_matches_value(
                 overrides[override_date] = _require_int_or_none(
                     count, f"{context}.overrides[{date_key!r}]"
                 )
-        return fmodel.MaxConcurrentHomeMatches(default=default, overrides=overrides)
+        return fmodel.ConcurrencyLimit(default=default, overrides=overrides)
     raise SpecError(
         f"{context}: expected an integer, null (unlimited), or a mapping with "
         f"'default' and optionally 'overrides', got {value!r}"
     )
+
+
+_CONCURRENCY_SCOPES_BY_KEY = {s.value: s for s in fmodel.ConcurrencyScope}
+
+
+def _parse_max_concurrent_matches_by_scope(
+    value: Any, context: str
+) -> dict[fmodel.ConcurrencyScope, fmodel.ConcurrencyLimit]:
+    """A max_concurrent_matches entry: a mapping keyed by ConcurrencyScope value
+    ('home', 'away', 'any'), each value a per-scope limit (see
+    _parse_concurrency_limit_value). At least one scope must be given. Returns the
+    parsed limits keyed by scope, for merging with any club_constraints.defaults
+    entry by the caller.
+    """
+    if not isinstance(value, dict):
+        raise SpecError(
+            f"{context}: expected a mapping keyed by "
+            f"{sorted(_CONCURRENCY_SCOPES_BY_KEY)}, got {value!r}"
+        )
+    unsupported = value.keys() - _CONCURRENCY_SCOPES_BY_KEY.keys()
+    if unsupported:
+        raise SpecError(
+            f"{context}: unsupported scope(s) {sorted(unsupported)} "
+            f"(only {sorted(_CONCURRENCY_SCOPES_BY_KEY)} are)"
+        )
+    if not value:
+        raise SpecError(
+            f"{context}: needs at least one of {sorted(_CONCURRENCY_SCOPES_BY_KEY)}"
+        )
+    return {
+        _CONCURRENCY_SCOPES_BY_KEY[key]: _parse_concurrency_limit_value(
+            scope_value, f"{context}.{key}"
+        )
+        for key, scope_value in value.items()
+    }
 
 
 def _parse_home_dates_used_value(
@@ -383,7 +417,7 @@ def _parse_home_dates_used_value(
 _CLUB_CONSTRAINT_FIELD_KEYS = {
     "home_dates",
     "unavailable_away_dates",
-    "max_concurrent_home_matches",
+    "max_concurrent_matches",
     "home_dates_used",
     "teams",
     "avoid_coscheduling_teams",
@@ -399,14 +433,14 @@ _HOME_DATES_USED_FIELD_KEYS = {"min", "max"}
 # types (home_dates, unavailable_away_dates, home_dates_used, teams,
 # avoid_coscheduling_teams) have no meaningful spec-wide default, so aren't accepted
 # under 'defaults'.
-_CLUB_CONSTRAINT_DEFAULTS_KEYS = {"max_concurrent_home_matches"}
+_CLUB_CONSTRAINT_DEFAULTS_KEYS = {"max_concurrent_matches"}
 
 
 @dataclasses.dataclass(frozen=True)
 class _ClubConstraints:
     home_dates: dict[str, list[date]]
     unavailable_away_dates: dict[str, list[date]]
-    max_concurrent_home_matches: dict[str, fmodel.MaxConcurrentHomeMatches]
+    max_concurrent_matches: dict[str, fmodel.MaxConcurrentMatches]
     home_dates_used: dict[str, fmodel.HomeDatesUsedBounds]
     team_home_dates: dict[fmodel.Team, list[date]]
     team_unavailable_away_dates: dict[fmodel.Team, list[date]]
@@ -420,14 +454,15 @@ def _parse_club_constraints(
     path: Path,
 ) -> _ClubConstraints:
     """Parse the 'club_constraints' section: per-club home_dates, unavailable_away_dates,
-    max_concurrent_home_matches, home_dates_used, teams and
+    max_concurrent_matches, home_dates_used, teams and
     avoid_coscheduling_teams, keyed directly by club ID.
 
-    An optional 'defaults' entry (a sibling of the club entries) supplies a spec-wide
-    default for constraint types that support one (currently just
-    max_concurrent_home_matches); a club's own entry, if present, always takes
-    precedence over 'defaults'. If 'defaults.max_concurrent_home_matches' is omitted,
-    every club must have its own max_concurrent_home_matches entry.
+    An optional 'defaults' entry (a sibling of the club entries) supplies spec-wide
+    defaults for constraint types that support one (currently just
+    max_concurrent_matches). Its max_concurrent_matches is merged with a club's own
+    entry per scope: a club that sets only 'any' still inherits the default 'home'
+    limit, and its own value wins for any scope it does set. Every scope is optional
+    -- a club (and the spec as a whole) may have no concurrency limits at all.
 
     A club's optional 'teams' entry holds per-team exclusions, for clubs whose teams
     don't all share the same availability. Home dates are always specified at the club
@@ -452,11 +487,13 @@ def _parse_club_constraints(
             f"{path}: {section_name}.defaults.{sorted(unsupported_defaults)} not "
             f"supported (only {sorted(_CLUB_CONSTRAINT_DEFAULTS_KEYS)} are)"
         )
-    default_max_concurrent_home_matches = None
-    if "max_concurrent_home_matches" in defaults_spec:
-        default_max_concurrent_home_matches = _parse_max_concurrent_home_matches_value(
-            defaults_spec["max_concurrent_home_matches"],
-            f"{path}: {section_name}.defaults.max_concurrent_home_matches",
+    default_concurrency_by_scope: dict[
+        fmodel.ConcurrencyScope, fmodel.ConcurrencyLimit
+    ] = {}
+    if "max_concurrent_matches" in defaults_spec:
+        default_concurrency_by_scope = _parse_max_concurrent_matches_by_scope(
+            defaults_spec["max_concurrent_matches"],
+            f"{path}: {section_name}.defaults.max_concurrent_matches",
         )
 
     unknown_clubs = section_spec.keys() - clubs.keys() - {"defaults"}
@@ -467,12 +504,11 @@ def _parse_club_constraints(
 
     home_dates: dict[str, list[date]] = {}
     unavailable_away_dates: dict[str, list[date]] = {}
-    max_concurrent_home_matches: dict[str, fmodel.MaxConcurrentHomeMatches] = {}
+    max_concurrent_matches: dict[str, fmodel.MaxConcurrentMatches] = {}
     home_dates_used: dict[str, fmodel.HomeDatesUsedBounds] = {}
     team_home_dates: dict[fmodel.Team, list[date]] = {}
     team_unavailable_away_dates: dict[fmodel.Team, list[date]] = {}
     avoid_coscheduling_teams: list[fmodel.AvoidCoschedulingConstraint] = []
-    missing_max_concurrent: list[str] = []
 
     for club_id in clubs:
         club_spec = section_spec.get(club_id, {})
@@ -494,17 +530,18 @@ def _parse_club_constraints(
             f"{path}: {section_name}[{club_id!r}].unavailable_away_dates",
         )
 
-        if "max_concurrent_home_matches" in club_spec:
-            max_concurrent_home_matches[club_id] = (
-                _parse_max_concurrent_home_matches_value(
-                    club_spec["max_concurrent_home_matches"],
-                    f"{path}: {section_name}[{club_id!r}].max_concurrent_home_matches",
+        club_concurrency_by_scope = dict(default_concurrency_by_scope)
+        if "max_concurrent_matches" in club_spec:
+            club_concurrency_by_scope.update(
+                _parse_max_concurrent_matches_by_scope(
+                    club_spec["max_concurrent_matches"],
+                    f"{path}: {section_name}[{club_id!r}].max_concurrent_matches",
                 )
             )
-        elif default_max_concurrent_home_matches is not None:
-            max_concurrent_home_matches[club_id] = default_max_concurrent_home_matches
-        else:
-            missing_max_concurrent.append(club_id)
+        if club_concurrency_by_scope:
+            max_concurrent_matches[club_id] = fmodel.MaxConcurrentMatches(
+                by_scope=club_concurrency_by_scope
+            )
 
         if "home_dates_used" in club_spec:
             home_dates_used[club_id] = _parse_home_dates_used_value(
@@ -533,17 +570,10 @@ def _parse_club_constraints(
             )
         )
 
-    if missing_max_concurrent:
-        raise SpecError(
-            f"{path}: {section_name} missing max_concurrent_home_matches for "
-            f"club(s) {sorted(missing_max_concurrent)} (no "
-            f"{section_name}.defaults.max_concurrent_home_matches set)"
-        )
-
     return _ClubConstraints(
         home_dates=home_dates,
         unavailable_away_dates=unavailable_away_dates,
-        max_concurrent_home_matches=max_concurrent_home_matches,
+        max_concurrent_matches=max_concurrent_matches,
         home_dates_used=home_dates_used,
         team_home_dates=team_home_dates,
         team_unavailable_away_dates=team_unavailable_away_dates,
@@ -952,13 +982,14 @@ def load_spec(spec_path: str | Path) -> Spec:
         club_id: sorted(set(dates) | set(avoid_dates))
         for club_id, dates in club_constraints.unavailable_away_dates.items()
     }
-    max_concurrent_home_matches = club_constraints.max_concurrent_home_matches
     team_home_dates = club_constraints.team_home_dates
     team_unavailable_away_dates = club_constraints.team_unavailable_away_dates
 
     kwargs: dict[str, Any] = {}
     if "min_gap_days" in data:
         kwargs["min_gap_days"] = data["min_gap_days"]
+    if club_constraints.max_concurrent_matches:
+        kwargs["max_concurrent_matches"] = club_constraints.max_concurrent_matches
     if club_constraints.home_dates_used:
         kwargs["home_dates_used"] = club_constraints.home_dates_used
     if team_home_dates:
@@ -1008,7 +1039,6 @@ def load_spec(spec_path: str | Path) -> Spec:
         teams=list(teams.values()),
         home_dates=home_dates,
         unavailable_away_dates=unavailable_away_dates,
-        max_concurrent_home_matches=max_concurrent_home_matches,
         division_schemes=divisions.schemes,
         **kwargs,
     )

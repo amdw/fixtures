@@ -55,7 +55,8 @@ divisions:
 
 club_constraints:
   defaults:
-    max_concurrent_home_matches: 1
+    max_concurrent_matches:
+      home: 1
   albany:
     home_dates: [2025-09-01, 2025-09-29]
   hackney:

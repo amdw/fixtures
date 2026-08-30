@@ -153,8 +153,11 @@ _UNAVAILABLE_AWAY_DATES = {
     ),
 }
 
-_MAX_CONCURRENT_HOME_MATCHES = {
-    club: fmodel.MaxConcurrentHomeMatches(default=2) for club in _HOME_DATES
+_MAX_CONCURRENT_MATCHES = {
+    club: fmodel.MaxConcurrentMatches(
+        by_scope={fmodel.ConcurrencyScope.HOME: fmodel.ConcurrencyLimit(default=2)}
+    )
+    for club in _HOME_DATES
 }
 _MIN_MATCH_GAP_DAYS = 7
 
@@ -220,7 +223,7 @@ def build_params() -> fmodel.Parameters:
         home_dates=_HOME_DATES,
         unavailable_away_dates=_UNAVAILABLE_AWAY_DATES,
         min_gap_days=_MIN_MATCH_GAP_DAYS,
-        max_concurrent_home_matches=_MAX_CONCURRENT_HOME_MATCHES,
+        max_concurrent_matches=_MAX_CONCURRENT_MATCHES,
     )
 
 

@@ -190,7 +190,8 @@ divisions:
     - potters-bar-1
 club_constraints:
   defaults:
-    max_concurrent_home_matches: 2
+    max_concurrent_matches:
+      home: 2
   albany:
     home_dates:
     - '2025-09-01'
@@ -355,10 +356,11 @@ club_constraints:
     - '2026-04-23'
     - '2026-04-30'
     - '2026-05-28'
-    max_concurrent_home_matches:
-      default: 2
-      overrides:
-        '2025-11-13': 3
+    max_concurrent_matches:
+      home:
+        default: 2
+        overrides:
+          '2025-11-13': 3
   harrow:
     home_dates:
     - '2025-09-11'

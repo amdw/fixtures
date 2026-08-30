@@ -47,7 +47,6 @@ def _generate_csv(
         teams=list(teams),
         home_dates={},
         unavailable_away_dates={},
-        max_concurrent_home_matches={},
         excluded_fixtures=excluded_fixtures,
     )
     spec = fixturespec.Spec(parameters=parameters, clubs=clubs)

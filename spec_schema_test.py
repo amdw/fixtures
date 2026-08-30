@@ -79,19 +79,27 @@ divisions:
 
 club_constraints:
   defaults:
-    max_concurrent_home_matches: 2
+    max_concurrent_matches:
+      home: 2
 
   albany:
     home_dates: [2025-09-01, 2025-09-15, 2025-09-29]
     unavailable_away_dates: [2025-12-25]
-    max_concurrent_home_matches: 3
+    max_concurrent_matches:
+      home: 3
 
   hackney:
     home_dates: [2025-09-08, 2025-09-22]
-    max_concurrent_home_matches:
-      default: 2
-      overrides:
-        2025-09-08: 3
+    max_concurrent_matches:
+      home:
+        default: 2
+        overrides:
+          2025-09-08: 3
+      away: null
+      any:
+        default: null
+        overrides:
+          2025-09-22: 1
     home_dates_used:
       min: 1
       max: 2

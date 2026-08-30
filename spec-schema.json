@@ -80,15 +80,15 @@
     },
     "club_constraints": {
       "type": "object",
-      "description": "Every constraint that can vary by club -- home_dates, unavailable_away_dates, max_concurrent_home_matches, home_dates_used, teams and avoid_coscheduling_teams -- keyed by that club's own ID, alongside an optional 'defaults' entry.",
+      "description": "Every constraint that can vary by club -- home_dates, unavailable_away_dates, max_concurrent_matches, home_dates_used, teams and avoid_coscheduling_teams -- keyed by that club's own ID, alongside an optional 'defaults' entry.",
       "additionalProperties": { "$ref": "#/$defs/club_constraints_entry" },
       "properties": {
         "defaults": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Spec-wide defaults for constraint types that support one, overridable per club. Today that's just max_concurrent_home_matches: if defaults.max_concurrent_home_matches is omitted, every club must have its own max_concurrent_home_matches entry -- there's no built-in fallback value.",
+          "description": "Spec-wide defaults for constraint types that support one, merged with each club's own entry. Today that's just max_concurrent_matches, merged per scope (see its definition). All of it is optional -- there is no requirement that any club have a concurrency limit.",
           "properties": {
-            "max_concurrent_home_matches": { "$ref": "#/$defs/max_concurrent_home_matches" }
+            "max_concurrent_matches": { "$ref": "#/$defs/max_concurrent_matches" }
           }
         }
       }
@@ -180,8 +180,8 @@
         }
       }
     },
-    "max_concurrent_home_matches": {
-      "description": "How many home matches a club may host on the same date. Either a plain integer, null (no limit imposed by this mechanism -- e.g. for a club whose concurrency is already bounded by another constraint, such as a full set of avoid_coscheduling_teams pairings across its teams, where restating that bound as a number here would be redundant and easy to leave stale), or a mapping giving a default plus per-date overrides. A value that's simply set high enough to never bind -- i.e. >= the club's number of teams -- needs no special-casing: the solver recognises this case itself and skips adding a constraint for it.",
+    "concurrency_limit": {
+      "description": "A limit on how many matches of one scope (see max_concurrent_matches) a club may play on the same date. Either a plain integer, null (no limit imposed by this mechanism -- e.g. for a club whose concurrency is already bounded by another constraint, such as a full set of avoid_coscheduling_teams pairings across its teams, where restating that bound as a number here would be redundant and easy to leave stale), or a mapping giving a default plus per-date overrides. A value that's simply set high enough to never bind -- i.e. >= the club's number of teams -- needs no special-casing: the solver recognises this case itself and skips adding a constraint for it.",
       "oneOf": [
         { "type": "integer" },
         { "type": "null" },
@@ -205,6 +205,26 @@
         }
       ]
     },
+    "max_concurrent_matches": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "description": "Per-scope limits on how many matches a club's teams may play on the same date. Give any of 'home', 'away', 'any' (at least one). Each is a concurrency_limit (an integer, null, or a default plus per-date overrides). Under club_constraints.defaults it sets spec-wide defaults; a club's own entry is merged with those per scope (its value wins for the scopes it sets, the default applies to the rest). Every scope is optional -- a club, and the spec as a whole, may set no concurrency limits at all.",
+      "properties": {
+        "home": {
+          "description": "Counts only the club's home matches on a date.",
+          "$ref": "#/$defs/concurrency_limit"
+        },
+        "away": {
+          "description": "Counts only the club's away matches on a date.",
+          "$ref": "#/$defs/concurrency_limit"
+        },
+        "any": {
+          "description": "Counts every match the club's teams play on a date (an internal match, both teams the club's, counted once).",
+          "$ref": "#/$defs/concurrency_limit"
+        }
+      }
+    },
     "club_constraints_entry": {
       "type": "object",
       "additionalProperties": false,
@@ -224,7 +244,7 @@
           "items": { "$ref": "#/$defs/date" },
           "uniqueItems": true
         },
-        "max_concurrent_home_matches": { "$ref": "#/$defs/max_concurrent_home_matches" },
+        "max_concurrent_matches": { "$ref": "#/$defs/max_concurrent_matches" },
         "home_dates_used": {
           "type": "object",
           "additionalProperties": false,
