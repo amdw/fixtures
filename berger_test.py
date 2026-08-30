@@ -20,8 +20,20 @@ import unittest
 
 import berger
 
-# The canonical FIDE Berger table for 9 or 10 players (FIDE Handbook C.06,
-# "Berger Tables"), round by round, each entry "home-away" (White-Black).
+# The canonical FIDE Berger tables (FIDE Handbook C.06, "Berger Tables"),
+# round by round, each entry "home-away" (White-Black). The table for an odd
+# number of players is the one for the next even number with the last player's
+# games treated as byes.
+_FIDE_8 = [
+    [(1, 8), (2, 7), (3, 6), (4, 5)],
+    [(8, 5), (6, 4), (7, 3), (1, 2)],
+    [(2, 8), (3, 1), (4, 7), (5, 6)],
+    [(8, 6), (7, 5), (1, 4), (2, 3)],
+    [(3, 8), (4, 2), (5, 1), (6, 7)],
+    [(8, 7), (1, 6), (2, 5), (3, 4)],
+    [(4, 8), (5, 3), (6, 2), (7, 1)],
+]
+
 _FIDE_10 = [
     [(1, 10), (2, 9), (3, 8), (4, 7), (5, 6)],
     [(10, 6), (7, 5), (8, 4), (9, 3), (1, 2)],
@@ -34,11 +46,27 @@ _FIDE_10 = [
     [(5, 10), (6, 4), (7, 3), (8, 2), (9, 1)],
 ]
 
+_FIDE_12 = [
+    [(1, 12), (2, 11), (3, 10), (4, 9), (5, 8), (6, 7)],
+    [(12, 7), (8, 6), (9, 5), (10, 4), (11, 3), (1, 2)],
+    [(2, 12), (3, 1), (4, 11), (5, 10), (6, 9), (7, 8)],
+    [(12, 8), (9, 7), (10, 6), (11, 5), (1, 4), (2, 3)],
+    [(3, 12), (4, 2), (5, 1), (6, 11), (7, 10), (8, 9)],
+    [(12, 9), (10, 8), (11, 7), (1, 6), (2, 5), (3, 4)],
+    [(4, 12), (5, 3), (6, 2), (7, 1), (8, 11), (9, 10)],
+    [(12, 10), (11, 9), (1, 8), (2, 7), (3, 6), (4, 5)],
+    [(5, 12), (6, 4), (7, 3), (8, 2), (9, 1), (10, 11)],
+    [(12, 11), (1, 10), (2, 9), (3, 8), (4, 7), (5, 6)],
+    [(6, 12), (7, 5), (8, 4), (9, 3), (10, 2), (11, 1)],
+]
+
 
 class BergerPairingsTest(unittest.TestCase):
-    def test_matches_canonical_fide_table_for_10(self):
-        expected = [pair for rnd in _FIDE_10 for pair in rnd]
-        self.assertEqual(expected, berger.berger_pairings(10))
+    def test_matches_canonical_fide_tables(self):
+        for n, table in ((8, _FIDE_8), (10, _FIDE_10), (12, _FIDE_12)):
+            with self.subTest(n=n):
+                expected = [pair for rnd in table for pair in rnd]
+                self.assertEqual(expected, berger.berger_pairings(n))
 
     def test_two_entrants(self):
         self.assertEqual([(1, 2)], berger.berger_pairings(2))
