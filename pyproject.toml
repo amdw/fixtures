@@ -16,6 +16,11 @@ dev = [
     "types-pyyaml",
     "jsonschema",
     "types-jsonschema",
+    { include-group = "docs" },
+]
+# Only needed to build the schema reference page (build_schema_docs.py) for the
+# GitHub Pages site; not a runtime dependency of the fixture generator itself.
+docs = [
     "json-schema-for-humans",
 ]
 

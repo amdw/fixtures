@@ -1,25 +1,24 @@
-name: Deploy Pages
+name: Pages
 
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  # Per-ref: main deploys still serialise (same group, no cancel), while each
+  # PR builds in its own group and doesn't queue behind main or other PRs.
+  group: pages-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
 
@@ -31,19 +30,49 @@ jobs:
           python-version: "3.14"
 
       - name: Install dependencies
-        run: uv sync --dev --locked
+        # The Pages build only needs the core deps plus the docs group
+        # (json-schema-for-humans); it does not need the dev toolchain.
+        run: uv sync --no-default-groups --group docs --locked
+
+      - name: Activate the virtualenv for subsequent steps
+        # Put uv's .venv on PATH so later steps can run `python3 foo.py`
+        # directly, without a `uv run` prefix (and without uv re-syncing the
+        # default dependency groups on each invocation).
+        run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Build run reports into _site (HTML pages, CSV exports, index)
-        run: uv run python3 build_site.py
+        run: python3 build_site.py
 
       - name: Build schema reference page into _site
-        run: uv run python3 build_schema_docs.py
+        run: python3 build_schema_docs.py
 
       - name: Upload pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
+      - name: Upload _site for PR preview download
+        # A plain, easily downloadable copy of the built site so a reviewer can
+        # inspect what a PR would publish before it's merged.
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: _site
+          path: _site
+          retention-days: 14
+
+  deploy:
+    # Only the real branch/dispatch runs deploy; PRs stop after build.
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5

@@ -228,9 +228,17 @@ not source -- gitignored, and regenerated before every deploy from whatever
   `_site/schema-docs/`; it needs `json-schema-for-humans`.
 
 Both write straight into `_site/`, so the workflow uploads that directory
-as-is -- there's no separate copy/assemble step. It installs the dev
-dependencies first, so both scripts can run. Run them locally any time you
-want a preview that exactly matches what gets deployed:
+as-is -- there's no separate copy/assemble step. It installs the core
+dependencies plus the `docs` dependency group (`json-schema-for-humans`) --
+but not the dev toolchain -- so both scripts can run.
+
+Pull requests targeting `main` run the same `build` job but stop short of
+deploying: the built site is attached to the run as a downloadable `_site`
+artifact, so a reviewer can check what a PR would publish before it's merged.
+Only pushes to `main` (and manual `workflow_dispatch` runs) go on to deploy.
+
+Run the build locally any time you want a preview that exactly matches what
+gets deployed:
 
 ```bash
 uv run python3 build_site.py
