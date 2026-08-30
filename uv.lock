@@ -248,6 +248,9 @@ dev = [
     { name = "types-jsonschema" },
     { name = "types-pyyaml" },
 ]
+docs = [
+    { name = "json-schema-for-humans" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -265,6 +268,7 @@ dev = [
     { name = "types-jsonschema" },
     { name = "types-pyyaml" },
 ]
+docs = [{ name = "json-schema-for-humans" }]
 
 [[package]]
 name = "hypothesis"
