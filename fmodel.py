@@ -93,6 +93,34 @@ class MaxConcurrentHomeMatches:
         return self.overrides.get(d, self.default)
 
 
+@dataclasses.dataclass(frozen=True)
+class HomeDatesUsedBounds:
+    """Bounds on how many distinct dates a club actually hosts home matches on in
+    the solved schedule (out of the dates offered in its home_dates).
+
+    A `maximum` packs the club's home matches onto fewer dates -- more matches per
+    evening on average; a `minimum` spreads them over more dates -- fewer per
+    evening. Either bound may be None (unbounded on that side), but at least one
+    must be set.
+    """
+
+    minimum: int | None = None
+    maximum: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.minimum is None and self.maximum is None:
+            raise ValueError("HomeDatesUsedBounds needs a minimum or a maximum")
+        if (
+            self.minimum is not None
+            and self.maximum is not None
+            and self.minimum > self.maximum
+        ):
+            raise ValueError(
+                f"HomeDatesUsedBounds minimum {self.minimum} exceeds "
+                f"maximum {self.maximum}"
+            )
+
+
 class FixtureScheme(enum.Enum):
     """How a division's fixtures are generated.
 
@@ -197,7 +225,9 @@ class Parameters:
     unavailable_away_dates: Mapping[ClubT, list[date]]
     max_concurrent_home_matches: Mapping[ClubT, MaxConcurrentHomeMatches]
     min_gap_days: int = 7
-    max_home_dates_used: Mapping[ClubT, int] = dataclasses.field(default_factory=dict)
+    home_dates_used: Mapping[ClubT, HomeDatesUsedBounds] = dataclasses.field(
+        default_factory=dict
+    )
     fixed_fixtures: Collection[ScheduledFixture] = ()
     excluded_fixtures: Collection[Fixture] = ()
     latest_internal_match_date: date | None = None
@@ -306,19 +336,20 @@ def date_windows(dates: Collection[date], window_days: int) -> list[frozenset[da
     return result
 
 
-def _add_max_home_dates_used_constraints(
+def _add_home_dates_used_constraints(
     model: cp_model.CpModel,
-    max_home_dates_used: Mapping[ClubT, int],
+    home_dates_used: Mapping[ClubT, HomeDatesUsedBounds],
     vars_by_club_home_date: Mapping[tuple[str, date], list[cp_model.IntVar]],
 ) -> None:
-    """For each club in max_home_dates_used, add constraints limiting the number of home dates used."""
+    """For each club in home_dates_used, bound the number of its home dates that
+    end up hosting at least one match (below by `minimum`, above by `maximum`)."""
     # Collect the set of home dates per club that appear in the variable map
     clubs_home_dates: MutableMapping[str, list[date]] = collections.defaultdict(list)
     for club, d in vars_by_club_home_date:
-        if club in max_home_dates_used:
+        if club in home_dates_used:
             clubs_home_dates[club].append(d)
 
-    for club, limit in max_home_dates_used.items():
+    for club, bounds in home_dates_used.items():
         date_used_vars = []
         for d in clubs_home_dates[club]:
             date_vars = vars_by_club_home_date[(club, d)]
@@ -331,7 +362,11 @@ def _add_max_home_dates_used_constraints(
                 date_used.negated()
             )
             date_used_vars.append(date_used)
-        model.add(cp_model.LinearExpr.Sum(date_used_vars) <= limit)
+        total_used = cp_model.LinearExpr.Sum(date_used_vars)
+        if bounds.maximum is not None:
+            model.add(total_used <= bounds.maximum)
+        if bounds.minimum is not None:
+            model.add(total_used >= bounds.minimum)
 
 
 def _add_avoid_coscheduling_constraints(
@@ -469,8 +504,8 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
         if max_matches is not None:
             model.add(cp_model.LinearExpr.Sum(club_home_date_vars) <= max_matches)
 
-    _add_max_home_dates_used_constraints(
-        model, params.max_home_dates_used, vars_by_club_home_date
+    _add_home_dates_used_constraints(
+        model, params.home_dates_used, vars_by_club_home_date
     )
     _add_avoid_coscheduling_constraints(
         model, params.avoid_coscheduling_teams, vars_by_fixture_date

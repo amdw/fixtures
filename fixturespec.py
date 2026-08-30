@@ -343,11 +343,46 @@ def _parse_max_concurrent_home_matches_value(
     )
 
 
+def _parse_home_dates_used_value(
+    value: Any, context: str
+) -> fmodel.HomeDatesUsedBounds:
+    """A club's home_dates_used value: a mapping with 'min', 'max', or both (each a
+    positive integer). Bounds how many of the club's home_dates end up hosting a
+    match -- 'max' to pack matches onto fewer evenings, 'min' to spread them out.
+    """
+    if not isinstance(value, dict):
+        raise SpecError(
+            f"{context}: expected a mapping with 'min' and/or 'max', got {value!r}"
+        )
+    unsupported = value.keys() - _HOME_DATES_USED_FIELD_KEYS
+    if unsupported:
+        raise SpecError(
+            f"{context}.{sorted(unsupported)} not supported (only "
+            f"{sorted(_HOME_DATES_USED_FIELD_KEYS)} are)"
+        )
+    if not value:
+        raise SpecError(f"{context}: needs at least one of 'min', 'max'")
+
+    bounds: dict[str, int] = {}
+    for key in ("min", "max"):
+        if key in value:
+            n = _require_int(value[key], f"{context}.{key}")
+            if n < 1:
+                raise SpecError(f"{context}.{key} must be at least 1, got {n}")
+            bounds[key] = n
+    try:
+        return fmodel.HomeDatesUsedBounds(
+            minimum=bounds.get("min"), maximum=bounds.get("max")
+        )
+    except ValueError as e:
+        raise SpecError(f"{context}: {e}") from e
+
+
 _CLUB_CONSTRAINT_FIELD_KEYS = {
     "home_dates",
     "unavailable_away_dates",
     "max_concurrent_home_matches",
-    "max_home_dates_used",
+    "home_dates_used",
     "teams",
     "avoid_coscheduling_teams",
 }
@@ -356,8 +391,10 @@ _TEAM_CONSTRAINT_FIELD_KEYS = {"unavailable_home_dates", "unavailable_away_dates
 
 _AVOID_COSCHEDULING_FIELD_KEYS = {"teams", "within_days", "applies_to"}
 
+_HOME_DATES_USED_FIELD_KEYS = {"min", "max"}
+
 # Constraint types with a notion of a default, overridable per club. Other constraint
-# types (home_dates, unavailable_away_dates, max_home_dates_used, teams,
+# types (home_dates, unavailable_away_dates, home_dates_used, teams,
 # avoid_coscheduling_teams) have no meaningful spec-wide default, so aren't accepted
 # under 'defaults'.
 _CLUB_CONSTRAINT_DEFAULTS_KEYS = {"max_concurrent_home_matches"}
@@ -368,7 +405,7 @@ class _ClubConstraints:
     home_dates: dict[str, list[date]]
     unavailable_away_dates: dict[str, list[date]]
     max_concurrent_home_matches: dict[str, fmodel.MaxConcurrentHomeMatches]
-    max_home_dates_used: dict[str, int]
+    home_dates_used: dict[str, fmodel.HomeDatesUsedBounds]
     team_home_dates: dict[fmodel.Team, list[date]]
     team_unavailable_away_dates: dict[fmodel.Team, list[date]]
     avoid_coscheduling_teams: list[fmodel.AvoidCoschedulingConstraint]
@@ -381,7 +418,7 @@ def _parse_club_constraints(
     path: Path,
 ) -> _ClubConstraints:
     """Parse the 'club_constraints' section: per-club home_dates, unavailable_away_dates,
-    max_concurrent_home_matches, max_home_dates_used, teams and
+    max_concurrent_home_matches, home_dates_used, teams and
     avoid_coscheduling_teams, keyed directly by club ID.
 
     An optional 'defaults' entry (a sibling of the club entries) supplies a spec-wide
@@ -429,7 +466,7 @@ def _parse_club_constraints(
     home_dates: dict[str, list[date]] = {}
     unavailable_away_dates: dict[str, list[date]] = {}
     max_concurrent_home_matches: dict[str, fmodel.MaxConcurrentHomeMatches] = {}
-    max_home_dates_used: dict[str, int] = {}
+    home_dates_used: dict[str, fmodel.HomeDatesUsedBounds] = {}
     team_home_dates: dict[fmodel.Team, list[date]] = {}
     team_unavailable_away_dates: dict[fmodel.Team, list[date]] = {}
     avoid_coscheduling_teams: list[fmodel.AvoidCoschedulingConstraint] = []
@@ -467,10 +504,10 @@ def _parse_club_constraints(
         else:
             missing_max_concurrent.append(club_id)
 
-        if "max_home_dates_used" in club_spec:
-            max_home_dates_used[club_id] = _require_int(
-                club_spec["max_home_dates_used"],
-                f"{path}: {section_name}[{club_id!r}].max_home_dates_used",
+        if "home_dates_used" in club_spec:
+            home_dates_used[club_id] = _parse_home_dates_used_value(
+                club_spec["home_dates_used"],
+                f"{path}: {section_name}[{club_id!r}].home_dates_used",
             )
 
         club_team_home_dates, club_team_unavailable_away_dates = (
@@ -505,7 +542,7 @@ def _parse_club_constraints(
         home_dates=home_dates,
         unavailable_away_dates=unavailable_away_dates,
         max_concurrent_home_matches=max_concurrent_home_matches,
-        max_home_dates_used=max_home_dates_used,
+        home_dates_used=home_dates_used,
         team_home_dates=team_home_dates,
         team_unavailable_away_dates=team_unavailable_away_dates,
         avoid_coscheduling_teams=avoid_coscheduling_teams,
@@ -920,8 +957,8 @@ def load_spec(spec_path: str | Path) -> Spec:
     kwargs: dict[str, Any] = {}
     if "min_gap_days" in data:
         kwargs["min_gap_days"] = data["min_gap_days"]
-    if club_constraints.max_home_dates_used:
-        kwargs["max_home_dates_used"] = club_constraints.max_home_dates_used
+    if club_constraints.home_dates_used:
+        kwargs["home_dates_used"] = club_constraints.home_dates_used
     if team_home_dates:
         kwargs["team_home_dates"] = team_home_dates
     if team_unavailable_away_dates:

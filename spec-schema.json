@@ -80,7 +80,7 @@
     },
     "club_constraints": {
       "type": "object",
-      "description": "Every constraint that can vary by club -- home_dates, unavailable_away_dates, max_concurrent_home_matches, max_home_dates_used, teams and avoid_coscheduling_teams -- keyed by that club's own ID, alongside an optional 'defaults' entry.",
+      "description": "Every constraint that can vary by club -- home_dates, unavailable_away_dates, max_concurrent_home_matches, home_dates_used, teams and avoid_coscheduling_teams -- keyed by that club's own ID, alongside an optional 'defaults' entry.",
       "additionalProperties": { "$ref": "#/$defs/club_constraints_entry" },
       "properties": {
         "defaults": {
@@ -225,9 +225,23 @@
           "uniqueItems": true
         },
         "max_concurrent_home_matches": { "$ref": "#/$defs/max_concurrent_home_matches" },
-        "max_home_dates_used": {
-          "type": "integer",
-          "description": "Caps how many of this club's 'home_dates' actually get used in the solved schedule."
+        "home_dates_used": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "description": "Bounds how many of this club's 'home_dates' actually host a match in the solved schedule. Give 'min', 'max', or both. 'max' packs the club's home matches onto fewer dates (more matches per evening on average); 'min' spreads them over more dates (fewer per evening).",
+          "properties": {
+            "min": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "At least this many distinct home dates must host a match."
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "At most this many distinct home dates may host a match."
+            }
+          }
         },
         "teams": {
           "type": "object",
