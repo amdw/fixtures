@@ -372,14 +372,14 @@ class TestLoadSpec(unittest.TestCase):
         )
         self.assertEqual(hackney.max, 1)
 
-    def test_match_count_limits_overrides_parsed(self) -> None:
+    def test_match_count_limits_date_max_overrides_parsed(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
             "    match_count_limits:\n"
             "      - venue_scope: home\n"
             "        max: 2\n"
-            "        overrides:\n"
+            "        date_max_overrides:\n"
             "          2025-09-01: 3\n"
         )
         spec = fixturespec.load_spec(path)
@@ -390,7 +390,7 @@ class TestLoadSpec(unittest.TestCase):
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
         self.assertEqual(albany.max, 2)
-        self.assertEqual(albany.overrides, {date(2025, 9, 1): 3})
+        self.assertEqual(albany.date_max_overrides, {date(2025, 9, 1): 3})
 
     def test_match_count_limits_override_null_lifts_the_cap_that_day(self) -> None:
         path = self._write(
@@ -399,7 +399,7 @@ class TestLoadSpec(unittest.TestCase):
             "    match_count_limits:\n"
             "      - venue_scope: home\n"
             "        max: null\n"
-            "        overrides:\n"
+            "        date_max_overrides:\n"
             "          2025-09-01: 3\n"
         )
         spec = fixturespec.load_spec(path)
@@ -410,7 +410,7 @@ class TestLoadSpec(unittest.TestCase):
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
         self.assertIsNone(albany.max)
-        self.assertEqual(albany.overrides, {date(2025, 9, 1): 3})
+        self.assertEqual(albany.date_max_overrides, {date(2025, 9, 1): 3})
 
     def test_match_count_limits_null_max_cancels_default_via_override_key(self) -> None:
         path = self._write(
@@ -505,7 +505,7 @@ class TestLoadSpec(unittest.TestCase):
         with self.assertRaisesRegex(fixturespec.SpecError, "override_key"):
             fixturespec.load_spec(path)
 
-    def test_match_count_limits_overrides_require_one_day_window(self) -> None:
+    def test_match_count_limits_date_max_overrides_require_one_day_window(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
@@ -513,10 +513,10 @@ class TestLoadSpec(unittest.TestCase):
             "      - venue_scope: home\n"
             "        max: 2\n"
             "        time_window_days: 7\n"
-            "        overrides:\n"
+            "        date_max_overrides:\n"
             "          2025-09-01: 3\n"
         )
-        with self.assertRaisesRegex(fixturespec.SpecError, "overrides"):
+        with self.assertRaisesRegex(fixturespec.SpecError, "date_max_overrides"):
             fixturespec.load_spec(path)
 
     def test_match_count_limits_missing_max_field_rejected(self) -> None:
@@ -1232,7 +1232,9 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "max"):
             fixturespec.load_spec(path)
 
-    def test_match_count_limits_null_max_without_overrides_rejected(self) -> None:
+    def test_match_count_limits_null_max_without_date_max_overrides_rejected(
+        self,
+    ) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"

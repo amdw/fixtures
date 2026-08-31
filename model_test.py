@@ -1626,8 +1626,8 @@ class TestPerClubGap(unittest.TestCase):
 
 
 class TestSharedHomeLimitNullAndOverrides(unittest.TestCase):
-    """A shared home-scope MatchCountLimit with max=None imposes no cap; an
-    `overrides` entry of None lifts it for that one date, an int replaces it.
+    """A shared home-scope MatchCountLimit with max=None imposes no cap; a
+    `date_max_overrides` entry of None lifts it for that one date, an int replaces it.
     """
 
     def test_finite_default_makes_it_infeasible(self) -> None:
@@ -1701,7 +1701,7 @@ class TestSharedHomeLimitNullAndOverrides(unittest.TestCase):
                     teams=[a1, a2],
                     max=1,
                     venue_scope=fmodel.VenueScope.HOME,
-                    overrides={date(2025, 1, 1): None},
+                    date_max_overrides={date(2025, 1, 1): None},
                 ),
             ),
             min_gap_days=7,

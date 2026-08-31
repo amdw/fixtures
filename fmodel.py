@@ -215,9 +215,9 @@ class MatchCountLimit:
     fixtures, still allowing one to play away on a night another is hosting.
 
     `max` may be None, meaning no cap from the plain value -- only useful alongside
-    `overrides`, which replace `max` on specific dates (an int, or None to lift the
-    cap that day). Overrides are only meaningful, and only permitted, when
-    `time_window_days` is 1, so each window is a single date.
+    `date_max_overrides`, which replace `max` on specific dates (an int, or None to
+    lift the cap that day). These per-date overrides are only meaningful, and only
+    permitted, when `time_window_days` is 1, so each window is a single date.
     """
 
     teams: Collection[Team]
@@ -225,18 +225,22 @@ class MatchCountLimit:
     time_window_days: int = 1
     venue_scope: VenueScope = VenueScope.ALL
     apply_per: ApplyPer = ApplyPer.ACROSS_TEAMS
-    overrides: Mapping[date, int | None] = dataclasses.field(default_factory=dict)
+    date_max_overrides: Mapping[date, int | None] = dataclasses.field(
+        default_factory=dict
+    )
 
     def __post_init__(self) -> None:
-        if self.overrides and self.time_window_days != 1:
-            raise ValueError("MatchCountLimit.overrides requires time_window_days == 1")
+        if self.date_max_overrides and self.time_window_days != 1:
+            raise ValueError(
+                "MatchCountLimit.date_max_overrides requires time_window_days == 1"
+            )
 
     def max_for_window(self, window: Collection[date]) -> int | None:
-        """The effective cap for one window: an `overrides` entry when the window
-        is a single overridden date, otherwise `max`."""
-        if self.overrides and len(window) == 1:
+        """The effective cap for one window: a `date_max_overrides` entry when the
+        window is a single overridden date, otherwise `max`."""
+        if self.date_max_overrides and len(window) == 1:
             (d,) = tuple(window)
-            return self.overrides.get(d, self.max)
+            return self.date_max_overrides.get(d, self.max)
         return self.max
 
 

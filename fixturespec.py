@@ -363,7 +363,7 @@ _MATCH_COUNT_LIMIT_FIELD_KEYS = {
     "time_window_days",
     "venue_scope",
     "apply_per",
-    "overrides",
+    "date_max_overrides",
     "override_key",
 }
 
@@ -398,8 +398,8 @@ class _ParsedMatchCountLimit:
     club it applies to"). `override_key`, on a club entry, names the
     club_constraints.defaults entry this one replaces for that club; None means the
     entry is purely additive. Every defaults entry has an `override_key`. `max` is
-    None only for an entry that exists solely to carry `overrides`, or to cancel an
-    inherited default (a club entry with an override_key and nothing else).
+    None only for an entry that exists solely to carry `date_max_overrides`, or to
+    cancel an inherited default (a club entry with an override_key and nothing else).
     """
 
     team_ids: tuple[str, ...] | None
@@ -407,7 +407,7 @@ class _ParsedMatchCountLimit:
     time_window_days: int
     venue_scope: fmodel.VenueScope
     apply_per: fmodel.ApplyPer
-    overrides: Mapping[date, int | None]
+    date_max_overrides: Mapping[date, int | None]
     override_key: str | None
 
 
@@ -631,19 +631,21 @@ def _club_team_ids(club_id: str, teams: Mapping[str, fmodel.Team]) -> list[str]:
     return [tid for tid, team in teams.items() if team.club == club_id]
 
 
-def _parse_match_count_overrides(value: Any, context: str) -> dict[date, int | None]:
-    """Parse a match_count_limits entry's optional 'overrides': a date-keyed mapping
-    of per-date limits (an integer >= 1, or null to lift the limit that day)."""
+def _parse_match_count_date_max_overrides(
+    value: Any, context: str
+) -> dict[date, int | None]:
+    """Parse a match_count_limits entry's optional 'date_max_overrides': a date-keyed
+    mapping of per-date limits (an integer >= 1, or null to lift the limit that day)."""
     if not isinstance(value, dict):
         raise SpecError(f"{context} must be a mapping keyed by date")
-    overrides: dict[date, int | None] = {}
+    date_max_overrides: dict[date, int | None] = {}
     for date_key, count in value.items():
         override_date = _parse_date(date_key, context)
         count = _require_int_or_none(count, f"{context}[{date_key!r}]")
         if count is not None and count < 1:
             raise SpecError(f"{context}[{date_key!r}] must be >= 1 or null")
-        overrides[override_date] = count
-    return overrides
+        date_max_overrides[override_date] = count
+    return date_max_overrides
 
 
 def _parse_match_count_limits(
@@ -658,7 +660,7 @@ def _parse_match_count_limits(
     Each entry:
       - 'max' (required key): an integer >= 1, or null. null on its own is only
         allowed for a club entry carrying an 'override_key' (it cancels that
-        default); otherwise null needs 'overrides' to carry the actual caps.
+        default); otherwise null needs 'date_max_overrides' to carry the actual caps.
       - 'teams' (optional): IDs of this club's teams whose matches are counted.
         Omitted => every team of the club. Not allowed under 'defaults', nor
         alongside 'override_key' (an override replaces a spec-wide, all-teams
@@ -670,8 +672,8 @@ def _parse_match_count_limits(
         calendar days. 7 limits matches in any 7-consecutive-day period -- two
         matches exactly a week apart fall in separate windows.
       - 'venue_scope' (optional, default 'all'): 'home', 'away' or 'all'.
-      - 'overrides' (optional): per-date replacements of 'max'. Only allowed when
-        'time_window_days' is 1.
+      - 'date_max_overrides' (optional): per-date replacements of 'max'. Only allowed
+        when 'time_window_days' is 1.
       - 'override_key': required for a 'defaults' entry (and unique within that
         list); optional for a club entry, where it names the default this one
         replaces for the club.
@@ -792,21 +794,21 @@ def _parse_match_count_limits(
                     f"{entry['venue_scope']!r}"
                 ) from None
 
-        overrides: dict[date, int | None] = {}
-        if "overrides" in entry:
+        date_max_overrides: dict[date, int | None] = {}
+        if "date_max_overrides" in entry:
             if time_window_days != 1:
                 raise SpecError(
-                    f"{entry_context}.overrides is only allowed when "
+                    f"{entry_context}.date_max_overrides is only allowed when "
                     "time_window_days is 1"
                 )
-            overrides = _parse_match_count_overrides(
-                entry["overrides"], f"{entry_context}.overrides"
+            date_max_overrides = _parse_match_count_date_max_overrides(
+                entry["date_max_overrides"], f"{entry_context}.date_max_overrides"
             )
 
-        if max_ is None and not overrides and override_key is None:
+        if max_ is None and not date_max_overrides and override_key is None:
             raise SpecError(
-                f"{entry_context}.max: null needs 'overrides' to carry the actual "
-                "per-date caps (or an 'override_key' to cancel a default)"
+                f"{entry_context}.max: null needs 'date_max_overrides' to carry the "
+                "actual per-date caps (or an 'override_key' to cancel a default)"
             )
 
         limits.append(
@@ -816,7 +818,7 @@ def _parse_match_count_limits(
                 time_window_days=time_window_days,
                 venue_scope=venue_scope,
                 apply_per=apply_per,
-                overrides=overrides,
+                date_max_overrides=date_max_overrides,
                 override_key=override_key,
             )
         )
@@ -837,8 +839,8 @@ def _resolve_match_count_limits(
     A club entry whose 'override_key' names a default entry replaces that default
     for the club (an unknown key, or two club entries sharing one, is an error);
     every other club entry is additive. Entries that carry neither a 'max' nor any
-    'overrides' (a pure cancel-the-default marker) and entries that resolve to no
-    teams are dropped.
+    'date_max_overrides' (a pure cancel-the-default marker) and entries that resolve
+    to no teams are dropped.
     """
     default_keys = {pl.override_key for pl in default_limits}
     resolved: list[fmodel.MatchCountLimit] = []
@@ -867,7 +869,7 @@ def _resolve_match_count_limits(
 
         club_team_objs = [teams[tid] for tid in _club_team_ids(club_id, teams)]
         for pl in effective:
-            if pl.max is None and not pl.overrides:
+            if pl.max is None and not pl.date_max_overrides:
                 continue
             team_objs = (
                 club_team_objs
@@ -883,7 +885,7 @@ def _resolve_match_count_limits(
                     time_window_days=pl.time_window_days,
                     venue_scope=pl.venue_scope,
                     apply_per=pl.apply_per,
-                    overrides=pl.overrides,
+                    date_max_overrides=pl.date_max_overrides,
                 )
             )
     return resolved
