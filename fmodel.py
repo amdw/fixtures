@@ -304,6 +304,15 @@ class Parameters:
     # expected, not an error, and must keep solving correctly however far into the
     # season this is re-run.
     earliest_match_date: date | None = None
+    # Per-club cutoff: no fixture involving one of a listed club's teams -- home or
+    # away -- may be scheduled after that club's date here. A club with no entry has
+    # no such cutoff. Unlike latest_internal_match_date this covers every match the
+    # club plays, not just same-club derbies; like it (and unlike earliest_match_date)
+    # a fixed_fixtures entry past a club's cutoff is a contradiction, rejected by
+    # fixturespec.load_spec().
+    club_latest_match_date: Mapping[ClubT, date] = dataclasses.field(
+        default_factory=dict
+    )
     # Per-team overrides/additions to a club's home_dates/unavailable_away_dates, for
     # clubs whose teams don't all share the same availability (e.g. different squads
     # of players). A team not present here just uses its club's dates as before.
@@ -394,6 +403,11 @@ class Parameters:
         return set(self.unavailable_away_dates.get(team.club, ())) | set(
             self.team_unavailable_away_dates.get(team, ())
         )
+
+    def latest_match_date_for(self, team: Team) -> date | None:
+        """The last date `team` may play any match, home or away: its club's
+        club_latest_match_date entry, or None if the club has no such cutoff."""
+        return self.club_latest_match_date.get(team.club)
 
 
 def date_windows(dates: Collection[date], window_days: int) -> list[frozenset[date]]:
@@ -589,8 +603,9 @@ def _add_fixed_fixtures_constraints(
                 "(check that the two teams are in the same division, that the date "
                 "is a home date for the home team's club, that it isn't an "
                 "unavailable away date for the away team's club, that the fixture "
-                "isn't also in excluded_fixtures, and -- if the two teams share a "
-                "club -- that the date isn't after latest_internal_match_date)"
+                "isn't also in excluded_fixtures, that the date isn't after either "
+                "club's latest_match_date, and -- if the two teams share a club -- "
+                "that the date isn't after latest_internal_match_date)"
             )
         model.add(var == 1)
 
@@ -619,6 +634,12 @@ def _build_model(params: Parameters) -> tuple[cp_model.CpModel, _FixtureVars]:
                     and params.latest_internal_match_date is not None
                     and match_date > params.latest_internal_match_date
                 ):
+                    continue
+                home_cutoff = params.latest_match_date_for(home_team)
+                away_cutoff = params.latest_match_date_for(away_team)
+                if home_cutoff is not None and match_date > home_cutoff:
+                    continue
+                if away_cutoff is not None and match_date > away_cutoff:
                     continue
                 if (
                     params.earliest_match_date is not None

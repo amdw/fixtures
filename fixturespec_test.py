@@ -1074,6 +1074,29 @@ club_constraints:
         ):
             fixturespec.load_spec(path)
 
+    def test_club_latest_match_date_parsed(self) -> None:
+        """A per-club latest_match_date lands in Parameters.club_latest_match_date,
+        keyed by club, and only for the clubs that set one."""
+        path = self._write(
+            _MINIMAL_SPEC_NO_CONCURRENCY + "    latest_match_date: 2025-09-20\n"
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(
+            spec.parameters.club_latest_match_date, {"hackney": date(2025, 9, 20)}
+        )
+
+    def test_club_latest_match_date_absent(self) -> None:
+        path = self._write(_MINIMAL_SPEC)
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.parameters.club_latest_match_date, {})
+
+    def test_club_latest_match_date_invalid(self) -> None:
+        path = self._write(
+            _MINIMAL_SPEC_NO_CONCURRENCY + "    latest_match_date: not-a-date\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "latest_match_date"):
+            fixturespec.load_spec(path)
+
     def test_fixed_fixture(self) -> None:
         path = self._write(
             _MINIMAL_SPEC + "fixed_fixtures:\n"
@@ -1666,6 +1689,52 @@ club_constraints:
         self.assertEqual(len(internal), 2)
         for sf in internal:
             self.assertLessEqual(sf.date, date(2025, 10, 15))
+
+    def test_club_latest_match_date_conflicts_with_fixed_fixture_home_team(
+        self,
+    ) -> None:
+        path = self._write(
+            _THREE_TEAM_SPEC + "    latest_match_date: 2026-01-15\n"
+            "fixed_fixtures:\n"
+            "  - home: hackney-1\n"
+            "    away: albany-1\n"
+            "    date: 2026-02-01\n"
+        )
+        with self.assertRaisesRegex(
+            fixturespec.SpecError, r"is after club_constraints\['hackney'\]"
+        ):
+            fixturespec.load_spec(path)
+
+    def test_club_latest_match_date_conflicts_with_fixed_fixture_away_team(
+        self,
+    ) -> None:
+        """The cutoff also rejects a fixed fixture where the club plays away."""
+        path = self._write(
+            _THREE_TEAM_SPEC + "    latest_match_date: 2025-11-15\n"
+            "fixed_fixtures:\n"
+            "  - home: albany-1\n"
+            "    away: hackney-1\n"
+            "    date: 2025-12-01\n"
+        )
+        with self.assertRaisesRegex(
+            fixturespec.SpecError, r"is after club_constraints\['hackney'\]"
+        ):
+            fixturespec.load_spec(path)
+
+    def test_club_latest_match_date_solves_end_to_end(self) -> None:
+        """A cutoff before all of hackney's home dates makes every hackney-hosted
+        fixture unschedulable, so (like the other date-cutoff constraints) those are
+        silently left out; the rest of the schedule still solves."""
+        path = self._write(_THREE_TEAM_SPEC + "    latest_match_date: 2025-12-31\n")
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(
+            spec.parameters.club_latest_match_date, {"hackney": date(2025, 12, 31)}
+        )
+        fixtures = list(fmodel.solve(spec.parameters).fixtures)
+        self.assertTrue(fixtures)
+        self.assertFalse(
+            [sf for sf in fixtures if sf.fixture.home_team.club == "hackney"]
+        )
 
     def test_solves_end_to_end(self) -> None:
         """A loaded spec's Parameters should be usable directly with fmodel.solve()."""

@@ -421,6 +421,7 @@ _CLUB_CONSTRAINT_FIELD_KEYS = {
     "min_gap_days",
     "max_concurrent_matches",
     "home_dates_used",
+    "latest_match_date",
     "teams",
     "avoid_coscheduling_teams",
 }
@@ -447,6 +448,7 @@ class _ClubConstraints:
     # club_min_gap_days below, which holds the per-club overrides.
     default_min_gap_days: int | None
     club_min_gap_days: dict[str, int]
+    club_latest_match_date: dict[str, date]
     max_concurrent_matches: dict[str, fmodel.MaxConcurrentMatches]
     home_dates_used: dict[str, fmodel.HomeDatesUsedBounds]
     team_home_dates: dict[fmodel.Team, list[date]]
@@ -461,8 +463,13 @@ def _parse_club_constraints(
     path: Path,
 ) -> _ClubConstraints:
     """Parse the 'club_constraints' section: per-club home_dates, unavailable_away_dates,
-    max_concurrent_matches, home_dates_used, teams and
+    max_concurrent_matches, home_dates_used, latest_match_date, teams and
     avoid_coscheduling_teams, keyed directly by club ID.
+
+    A club's optional 'latest_match_date' entry is the last date on which any fixture
+    involving one of that club's teams -- home or away -- may be scheduled (a
+    fixed_fixtures entry involving the club after it is an error). It has no spec-wide
+    default, so it isn't accepted under 'defaults'.
 
     An optional 'defaults' entry (a sibling of the club entries) supplies spec-wide
     defaults for constraint types that support one (max_concurrent_matches and
@@ -525,6 +532,7 @@ def _parse_club_constraints(
     home_dates: dict[str, list[date]] = {}
     unavailable_away_dates: dict[str, list[date]] = {}
     club_min_gap_days: dict[str, int] = {}
+    club_latest_match_date: dict[str, date] = {}
     max_concurrent_matches: dict[str, fmodel.MaxConcurrentMatches] = {}
     home_dates_used: dict[str, fmodel.HomeDatesUsedBounds] = {}
     team_home_dates: dict[fmodel.Team, list[date]] = {}
@@ -561,6 +569,12 @@ def _parse_club_constraints(
                     f"{path}: {section_name}[{club_id!r}].min_gap_days must be >= 0"
                 )
             club_min_gap_days[club_id] = club_gap
+
+        if "latest_match_date" in club_spec:
+            club_latest_match_date[club_id] = _parse_date(
+                club_spec["latest_match_date"],
+                f"{path}: {section_name}[{club_id!r}].latest_match_date",
+            )
 
         club_concurrency_by_scope = dict(default_concurrency_by_scope)
         if "max_concurrent_matches" in club_spec:
@@ -607,6 +621,7 @@ def _parse_club_constraints(
         unavailable_away_dates=unavailable_away_dates,
         default_min_gap_days=default_min_gap_days,
         club_min_gap_days=club_min_gap_days,
+        club_latest_match_date=club_latest_match_date,
         max_concurrent_matches=max_concurrent_matches,
         home_dates_used=home_dates_used,
         team_home_dates=team_home_dates,
@@ -1054,6 +1069,8 @@ def load_spec(spec_path: str | Path) -> Spec:
         kwargs["min_gap_days"] = club_constraints.default_min_gap_days
     if club_constraints.club_min_gap_days:
         kwargs["club_min_gap_days"] = club_constraints.club_min_gap_days
+    if club_constraints.club_latest_match_date:
+        kwargs["club_latest_match_date"] = club_constraints.club_latest_match_date
     if club_constraints.max_concurrent_matches:
         kwargs["max_concurrent_matches"] = club_constraints.max_concurrent_matches
     if club_constraints.home_dates_used:
@@ -1100,6 +1117,17 @@ def load_spec(spec_path: str | Path) -> Spec:
                     "latest_internal_match_date"
                 )
         kwargs["latest_internal_match_date"] = latest_internal_match_date
+
+    for sf in fixed_fixtures:
+        for team in (sf.fixture.home_team, sf.fixture.away_team):
+            cutoff = club_constraints.club_latest_match_date.get(team.club)
+            if cutoff is not None and sf.date > cutoff:
+                raise SpecError(
+                    f"{path}: fixed_fixtures entry {sf.fixture.home_team.name} vs "
+                    f"{sf.fixture.away_team.name} on {sf.date.isoformat()} is after "
+                    f"club_constraints[{team.club!r}].latest_match_date "
+                    f"({cutoff.isoformat()})"
+                )
 
     parameters = fmodel.Parameters(
         teams=list(teams.values()),
