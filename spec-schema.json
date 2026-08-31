@@ -26,13 +26,6 @@
       "$ref": "#/$defs/date",
       "description": "Latest date allowed for a fixture between two teams of the same club (e.g. Hendon 1 v Hendon 2) -- useful for requiring 'derby' matches to be settled earlier in the season than the rest of the fixture list. Has no effect on fixtures between teams from different clubs. If omitted, no such cutoff is applied. Any 'fixed_fixtures' entry between two teams of the same club must not be dated after it."
     },
-    "avoid_dates": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/date" },
-      "uniqueItems": true,
-      "default": [],
-      "description": "Dates blocked for every club (added to every club's club_constraints.<club>.unavailable_away_dates), so no fixture -- home or away, for any club -- can be scheduled on any of them. Useful for Christmas/New Year or other dates that would otherwise need repeating in every affected club's unavailable_away_dates. A club can still list one of these dates in its own home_dates (e.g. by oversight); it just won't ever be used, since every possible away team is unavailable that day."
-    },
     "clubs": {
       "type": "object",
       "description": "Every club in the season, keyed by club ID (a stable key referenced from teams, club_constraints, fixed_fixtures and exclude_fixtures).",
@@ -194,7 +187,7 @@
         "unavailable_away_dates": {
           "type": "array",
           "default": [],
-          "description": "Dates this club's teams are unavailable to play away. Defaults to empty if omitted. Combined with the spec-wide 'avoid_dates', not replaced by it.",
+          "description": "Dates this club's teams are unavailable to play away. Defaults to empty if omitted. For a contiguous span, or a block that applies to every club, a match_count_limits entry with 'max: 0' and 'date_ranges' is usually tidier.",
           "items": { "$ref": "#/$defs/date" },
           "uniqueItems": true
         },
@@ -227,7 +220,7 @@
         },
         "match_count_limits": {
           "type": "array",
-          "description": "The sole match-count constraint mechanism: each entry caps how many matches involving a set of this club's teams may fall within a rolling window of consecutive days. Covers a per-team weekly gap ('apply_per: each_team', 'max: 1', 'time_window_days: 7'), a venue's concurrent-match capacity ('apply_per: across_teams', 'venue_scope: home'), and keeping adjacent-division teams apart ('teams: [...]', 'max: 1'). Additive, with as many entries as needed; combined with any inherited from club_constraints.defaults -- an entry with an 'override_key' replaces the like-keyed default for this club instead.",
+          "description": "The sole match-count constraint mechanism: each entry caps how many matches involving a set of this club's teams may fall within a rolling window of consecutive days -- or, when the entry sets 'date_ranges', within each of a few explicit calendar ranges. Covers a per-team weekly gap ('apply_per: each_team', 'max: 1', 'time_window_days: 7'), a venue's concurrent-match capacity ('apply_per: across_teams', 'venue_scope: home'), keeping adjacent-division teams apart ('teams: [...]', 'max: 1'), and holding a club's load down over a named holiday week ('date_ranges: [...]', 'max: 1', or 'max: 0' to bar it entirely). Additive, with as many entries as needed; combined with any inherited from club_constraints.defaults -- an entry with an 'override_key' replaces the like-keyed default for this club instead.",
           "items": { "$ref": "#/$defs/match_count_limit_entry" }
         }
       }
@@ -252,8 +245,8 @@
     },
     "match_count_limit_fields": {
       "max": {
-        "oneOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }],
-        "description": "The most matches (of the kind selected by 'venue_scope') allowed within any window of 'time_window_days' consecutive days. The key is required, so an entry is never accidentally a no-op. null means no plain cap -- only useful with 'date_max_overrides', or (on a club entry with an 'override_key') to cancel a default. 'max: 1' forbids a second match in a window; a higher value caps density."
+        "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }],
+        "description": "The most matches (of the kind selected by 'venue_scope') allowed within any window of 'time_window_days' consecutive days (or, with 'date_ranges', within each listed range). The key is required, so an entry is never accidentally a no-op. null means no plain cap -- only useful with 'date_max_overrides', or (on a club entry with an 'override_key') to cancel a default. 'max: 1' forbids a second match in a window; a higher value caps density. 'max: 0' is only meaningful together with 'date_ranges' (a full blackout of those ranges); in the rolling-window form use 'max: 1' or higher."
       },
       "apply_per": {
         "type": "string",
@@ -278,6 +271,26 @@
         "description": "Per-date replacements of 'max', keyed by date; each value an integer >= 1, or null to lift the cap that day. Only allowed when 'time_window_days' is 1 (so each window is a single date).",
         "additionalProperties": {
           "oneOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }]
+        }
+      },
+      "date_ranges": {
+        "type": "array",
+        "minItems": 1,
+        "description": "Restricts this rule to one or more explicit, inclusive calendar ranges instead of every rolling 'time_window_days' window: the cap ('max') then applies to the counted matches whose date falls within each listed range, each range enforced independently. Use for a limit tied to specific weeks -- a school-holiday week, a congress fortnight -- that a rolling window cannot target. Allowed on club and 'defaults' entries alike; not combinable with 'time_window_days' or 'date_max_overrides', nor (on a club entry) with 'override_key'. With 'date_ranges' set, 'max' must be an integer >= 0 ('max: 0' bars every counted match in the range; a whole-club 'defaults' entry with 'max: 0' is the spec-wide 'nobody plays these dates' block).",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["start_date", "end_date"],
+          "properties": {
+            "start_date": {
+              "$ref": "#/$defs/date",
+              "description": "First day of the range (inclusive)."
+            },
+            "end_date": {
+              "$ref": "#/$defs/date",
+              "description": "Last day of the range (inclusive); must be on or after 'start_date'."
+            }
+          }
         }
       },
       "override_key": {
@@ -307,6 +320,9 @@
         "date_max_overrides": {
           "$ref": "#/$defs/match_count_limit_fields/date_max_overrides"
         },
+        "date_ranges": {
+          "$ref": "#/$defs/match_count_limit_fields/date_ranges"
+        },
         "override_key": {
           "$ref": "#/$defs/match_count_limit_fields/override_key"
         }
@@ -316,7 +332,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["max", "override_key"],
-      "description": "A club_constraints.defaults.match_count_limits entry: like a per-club match_count_limits entry but without 'teams' (defaults apply to every team of every club) and with a required, list-unique 'override_key'.",
+      "description": "A club_constraints.defaults.match_count_limits entry: like a per-club match_count_limits entry but without 'teams' (defaults apply to every team of every club) and with a required, list-unique 'override_key'. A club's own entry naming that 'override_key' replaces this one for the club wholesale. A 'max: 0' entry with 'date_ranges' is the spec-wide way to say no club plays on those dates (a club can opt back in by overriding the key).",
       "properties": {
         "max": { "$ref": "#/$defs/match_count_limit_fields/max" },
         "apply_per": { "$ref": "#/$defs/match_count_limit_fields/apply_per" },
@@ -326,6 +342,9 @@
         "venue_scope": { "$ref": "#/$defs/match_count_limit_fields/venue_scope" },
         "date_max_overrides": {
           "$ref": "#/$defs/match_count_limit_fields/date_max_overrides"
+        },
+        "date_ranges": {
+          "$ref": "#/$defs/match_count_limit_fields/date_ranges"
         },
         "override_key": {
           "$ref": "#/$defs/match_count_limit_fields/override_key"

@@ -283,38 +283,70 @@ class TestLoadSpec(unittest.TestCase):
         with self.assertRaisesRegex(fixturespec.SpecError, "not-a-date"):
             fixturespec.load_spec(path)
 
-    def test_avoid_dates_absent(self) -> None:
-        path = self._write(_MINIMAL_SPEC)
-        spec = fixturespec.load_spec(path)
-        self.assertEqual(
-            spec.parameters.unavailable_away_dates["albany"], [date(2025, 12, 25)]
-        )
-        self.assertEqual(spec.parameters.unavailable_away_dates["hackney"], [])
-
-    def test_avoid_dates_merged_into_every_clubs_unavailable_away_dates(self) -> None:
-        path = self._write(_MINIMAL_SPEC + "avoid_dates: [2025-12-25, 2026-01-01]\n")
-        spec = fixturespec.load_spec(path)
-        # albany already had 2025-12-25 of its own; avoid_dates adds 2026-01-01
-        # without duplicating the date it already had.
-        self.assertEqual(
-            spec.parameters.unavailable_away_dates["albany"],
-            [date(2025, 12, 25), date(2026, 1, 1)],
-        )
-        # hackney had no unavailable_away_dates of its own; picks up both avoid_dates.
-        self.assertEqual(
-            spec.parameters.unavailable_away_dates["hackney"],
-            [date(2025, 12, 25), date(2026, 1, 1)],
-        )
-
-    def test_avoid_dates_invalid_date(self) -> None:
-        path = self._write(_MINIMAL_SPEC + "avoid_dates: [not-a-date]\n")
-        with self.assertRaisesRegex(fixturespec.SpecError, "not-a-date"):
+    def test_avoid_dates_key_no_longer_recognised(self) -> None:
+        # avoid_dates was removed in favour of a defaults max: 0 date_ranges
+        # entry; the old top-level key is now an unknown field.
+        path = self._write(_MINIMAL_SPEC + "avoid_dates: [2025-12-25]\n")
+        with self.assertRaisesRegex(fixturespec.SpecError, "avoid_dates"):
             fixturespec.load_spec(path)
 
-    def test_avoid_dates_duplicate_rejected(self) -> None:
-        path = self._write(_MINIMAL_SPEC + "avoid_dates: [2025-12-25, 2025-12-25]\n")
-        with self.assertRaisesRegex(fixturespec.SpecError, "duplicate date"):
-            fixturespec.load_spec(path)
+    def test_no_play_dates_default_resolves_per_club(self) -> None:
+        # A whole-club max: 0 date_ranges defaults entry (the avoid_dates
+        # replacement): every club gets a resolved limit over all its teams.
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    match_count_limits:\n"
+            "      - override_key: no-play-dates\n"
+            "        max: 0\n"
+            "        date_ranges:\n"
+            "          - start_date: 2025-12-22\n"
+            "            end_date: 2026-01-04\n"
+            "  albany:\n"
+            "    home_dates: [2025-12-15]\n"
+            "  hackney:\n"
+            "    home_dates: [2025-12-08]\n"
+        )
+        spec = fixturespec.load_spec(path)
+        by_club = {}
+        for limit in spec.parameters.match_count_limits:
+            if limit.max == 0:
+                (club,) = {t.club for t in limit.teams}
+                by_club[club] = limit
+        self.assertEqual(set(by_club), {"albany", "hackney"})
+        self.assertEqual(
+            by_club["albany"].date_ranges,
+            (fmodel.DateRange(date(2025, 12, 22), date(2026, 1, 4)),),
+        )
+
+    def test_no_play_dates_default_can_be_overridden_by_a_club(self) -> None:
+        # A club naming the override_key replaces the block wholesale -- here
+        # cancelling it, so that club has no max: 0 limit.
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    match_count_limits:\n"
+            "      - override_key: no-play-dates\n"
+            "        max: 0\n"
+            "        date_ranges:\n"
+            "          - start_date: 2025-12-22\n"
+            "            end_date: 2026-01-04\n"
+            "  albany:\n"
+            "    home_dates: [2025-12-15]\n"
+            "    match_count_limits:\n"
+            "      - override_key: no-play-dates\n"
+            "        max: null\n"
+            "  hackney:\n"
+            "    home_dates: [2025-12-08]\n"
+        )
+        spec = fixturespec.load_spec(path)
+        zero_clubs = {
+            t.club
+            for limit in spec.parameters.match_count_limits
+            if limit.max == 0
+            for t in limit.teams
+        }
+        self.assertEqual(zero_clubs, {"hackney"})
 
     def test_duplicate_top_level_key_rejected(self) -> None:
         path = self._write(_MINIMAL_SPEC + '\nname: "one"\nname: "two"\n')
@@ -641,6 +673,200 @@ class TestLoadSpec(unittest.TestCase):
             t.club for limit in spec.parameters.match_count_limits for t in limit.teams
         }
         self.assertEqual(clubs, {"albany"})
+
+    def test_match_count_limits_date_ranges_parsed(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - max: 1\n"
+            "        date_ranges:\n"
+            "          - start_date: 2025-10-27\n"
+            "            end_date: 2025-11-02\n"
+            "          - start_date: 2026-02-16\n"
+            "            end_date: 2026-02-22\n"
+        )
+        spec = fixturespec.load_spec(path)
+        limit = _find_limit(
+            spec.parameters.match_count_limits,
+            club="albany",
+            venue_scope=fmodel.VenueScope.ALL,
+            apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
+        )
+        self.assertEqual(
+            limit.date_ranges,
+            (
+                fmodel.DateRange(date(2025, 10, 27), date(2025, 11, 2)),
+                fmodel.DateRange(date(2026, 2, 16), date(2026, 2, 22)),
+            ),
+        )
+        self.assertEqual((limit.max, limit.time_window_days), (1, 1))
+
+    def test_match_count_limits_date_ranges_allow_max_zero(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - max: 0\n"
+            "        date_ranges:\n"
+            "          - start_date: 2025-10-27\n"
+            "            end_date: 2025-11-02\n"
+        )
+        spec = fixturespec.load_spec(path)
+        limit = _find_limit(
+            spec.parameters.match_count_limits,
+            club="albany",
+            venue_scope=fmodel.VenueScope.ALL,
+            apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
+        )
+        self.assertEqual(limit.max, 0)
+
+    def test_match_count_limits_max_zero_rejected_without_date_ranges(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - venue_scope: home\n"
+            "        max: 0\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "must be >= 1"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_date_ranges_reject_time_window_days(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - max: 1\n"
+            "        time_window_days: 7\n"
+            "        date_ranges:\n"
+            "          - start_date: 2025-10-27\n"
+            "            end_date: 2025-11-02\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "time_window_days"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_date_ranges_reject_date_max_overrides(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - max: 1\n"
+            "        date_max_overrides:\n"
+            "          2025-10-27: 1\n"
+            "        date_ranges:\n"
+            "          - start_date: 2025-10-27\n"
+            "            end_date: 2025-11-02\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "date_max_overrides"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_date_ranges_reject_override_key(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    match_count_limits:\n"
+            "      - override_key: venue-capacity\n"
+            "        venue_scope: home\n"
+            "        max: 1\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - override_key: venue-capacity\n"
+            "        max: 1\n"
+            "        date_ranges:\n"
+            "          - start_date: 2025-10-27\n"
+            "            end_date: 2025-11-02\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "date_ranges"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_date_ranges_allowed_under_defaults(self) -> None:
+        # A defaults entry may carry date_ranges; its own override_key is the
+        # entry's identity, not a replace-target, so the two coexist.
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    match_count_limits:\n"
+            "      - override_key: k\n"
+            "        max: 1\n"
+            "        date_ranges:\n"
+            "          - start_date: 2025-10-27\n"
+            "            end_date: 2025-11-02\n"
+        )
+        spec = fixturespec.load_spec(path)
+        limit = _find_limit(
+            spec.parameters.match_count_limits,
+            club="albany",
+            venue_scope=fmodel.VenueScope.ALL,
+            apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
+        )
+        self.assertEqual(
+            limit.date_ranges,
+            (fmodel.DateRange(date(2025, 10, 27), date(2025, 11, 2)),),
+        )
+
+    def test_match_count_limits_date_ranges_reject_null_max(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - max: null\n"
+            "        date_ranges:\n"
+            "          - start_date: 2025-10-27\n"
+            "            end_date: 2025-11-02\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "integer 'max'"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_date_ranges_reject_start_after_end(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - max: 1\n"
+            "        date_ranges:\n"
+            "          - start_date: 2025-11-02\n"
+            "            end_date: 2025-10-27\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "is after end"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_date_ranges_reject_missing_end_date(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - max: 1\n"
+            "        date_ranges:\n"
+            "          - start_date: 2025-10-27\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "end_date"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_date_ranges_reject_unknown_key(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - max: 1\n"
+            "        date_ranges:\n"
+            "          - start_date: 2025-10-27\n"
+            "            end_date: 2025-11-02\n"
+            "            note: half term\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_date_ranges_reject_empty_list(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - max: 1\n"
+            "        date_ranges: []\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "non-empty list"):
+            fixturespec.load_spec(path)
 
     def test_match_count_limits_omitted_everywhere_is_allowed(self) -> None:
         # No club_constraints.defaults and no per-club match_count_limits: limits
@@ -1948,19 +2174,34 @@ club_constraints:
             fixturespec.load_spec(path)
 
     def test_club_latest_match_date_solves_end_to_end(self) -> None:
-        """A cutoff before all of hackney's home dates makes every hackney-hosted
-        fixture unschedulable, so (like the other date-cutoff constraints) those are
-        silently left out; the rest of the schedule still solves."""
-        path = self._write(_THREE_TEAM_SPEC + "    latest_match_date: 2025-12-31\n")
+        """A cutoff that still leaves hackney a usable home date solves, with every
+        hackney fixture on or before the cutoff."""
+        path = self._write(_THREE_TEAM_SPEC + "    latest_match_date: 2026-01-15\n")
         spec = fixturespec.load_spec(path)
         self.assertEqual(
-            spec.parameters.club_latest_match_date, {"hackney": date(2025, 12, 31)}
+            spec.parameters.club_latest_match_date, {"hackney": date(2026, 1, 15)}
         )
         fixtures = list(fmodel.solve(spec.parameters).fixtures)
-        self.assertTrue(fixtures)
-        self.assertFalse(
-            [sf for sf in fixtures if sf.fixture.home_team.club == "hackney"]
-        )
+        hackney_fixtures = [
+            sf
+            for sf in fixtures
+            if "hackney" in (sf.fixture.home_team.club, sf.fixture.away_team.club)
+        ]
+        self.assertEqual(
+            len(hackney_fixtures), 4
+        )  # hackney-1 home and away vs each albany
+        for sf in hackney_fixtures:
+            self.assertLessEqual(sf.date, date(2026, 1, 15))
+
+    def test_club_latest_match_date_before_all_its_home_dates_is_infeasible(
+        self,
+    ) -> None:
+        """A cutoff before every hackney home date leaves the hackney-hosted
+        fixtures with no schedulable date -- required, so solve() raises."""
+        path = self._write(_THREE_TEAM_SPEC + "    latest_match_date: 2025-12-31\n")
+        spec = fixturespec.load_spec(path)
+        with self.assertRaisesRegex(ValueError, "no schedulable date"):
+            fmodel.solve(spec.parameters)
 
     def test_solves_end_to_end(self) -> None:
         """A loaded spec's Parameters should be usable directly with fmodel.solve()."""

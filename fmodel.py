@@ -171,6 +171,29 @@ class Division:
         return [Fixture(home_team=home, away_team=away) for home, away in pairs]
 
 
+@dataclasses.dataclass(frozen=True)
+class DateRange:
+    """An inclusive span of calendar dates, `start` on or before `end`.
+
+    Used by MatchCountLimit.date_ranges to pin a cap to specific calendar periods
+    (a school-holiday week, say) rather than a rolling window. `d in date_range`
+    tests membership.
+    """
+
+    start: date
+    end: date
+
+    def __post_init__(self) -> None:
+        if self.start > self.end:
+            raise ValueError(
+                f"DateRange start {self.start.isoformat()} is after end "
+                f"{self.end.isoformat()}"
+            )
+
+    def __contains__(self, d: object) -> bool:
+        return isinstance(d, date) and self.start <= d <= self.end
+
+
 class VenueScope(enum.Enum):
     """Which of a MatchCountLimit's teams' matches are counted towards its cap:
     only their home matches, only their away matches, or all of them."""
@@ -218,6 +241,14 @@ class MatchCountLimit:
     `date_max_overrides`, which replace `max` on specific dates (an int, or None to
     lift the cap that day). These per-date overrides are only meaningful, and only
     permitted, when `time_window_days` is 1, so each window is a single date.
+
+    `date_ranges`, when non-empty, replaces the rolling-window behaviour entirely:
+    instead of every run of `time_window_days` consecutive days, the cap applies to
+    exactly the given DateRanges, each counted independently. This targets a limit
+    tied to specific weeks -- a school-holiday week, a congress fortnight -- that a
+    rolling window can't express. It requires `time_window_days` left at its default
+    of 1, is mutually exclusive with `date_max_overrides`, and `max` must then be a
+    non-negative integer (`max=0` bars every counted match in the range).
     """
 
     teams: Collection[Team]
@@ -228,12 +259,24 @@ class MatchCountLimit:
     date_max_overrides: Mapping[date, int | None] = dataclasses.field(
         default_factory=dict
     )
+    date_ranges: tuple[DateRange, ...] = ()
 
     def __post_init__(self) -> None:
         if self.date_max_overrides and self.time_window_days != 1:
             raise ValueError(
                 "MatchCountLimit.date_max_overrides requires time_window_days == 1"
             )
+        if self.date_ranges:
+            if self.time_window_days != 1:
+                raise ValueError(
+                    "MatchCountLimit.date_ranges can't be combined with a "
+                    "non-default time_window_days (it replaces the rolling window)"
+                )
+            if self.date_max_overrides:
+                raise ValueError(
+                    "MatchCountLimit.date_ranges and date_max_overrides are "
+                    "mutually exclusive"
+                )
 
     def max_for_window(self, window: Collection[date]) -> int | None:
         """The effective cap for one window: a `date_max_overrides` entry when the
@@ -242,6 +285,31 @@ class MatchCountLimit:
             (d,) = tuple(window)
             return self.date_max_overrides.get(d, self.max)
         return self.max
+
+    def counts_fixture(self, fixture: Fixture) -> bool:
+        """Whether this limit counts `fixture` at all: its home team (for a HOME or
+        ALL scope) or away team (AWAY or ALL) is among `teams`."""
+        teams = set(self.teams)
+        return (
+            self.venue_scope in (VenueScope.HOME, VenueScope.ALL)
+            and fixture.home_team in teams
+        ) or (
+            self.venue_scope in (VenueScope.AWAY, VenueScope.ALL)
+            and fixture.away_team in teams
+        )
+
+    def forbids(self, fixture: Fixture, d: date) -> bool:
+        """Whether this limit makes `fixture` on `d` outright impossible -- an
+        effective cap of 0 over a window that covers `d`. _build_model skips
+        creating a decision variable for such a candidate (it could only ever be
+        0)."""
+        if not self.counts_fixture(fixture):
+            return False
+        if self.date_ranges:
+            return self.max == 0 and any(d in rng for rng in self.date_ranges)
+        if self.max == 0:
+            return True
+        return self.date_max_overrides.get(d) == 0
 
 
 def _check_no_duplicate_teams(teams: Collection[Team]) -> None:
@@ -440,9 +508,12 @@ class _FixtureVars:
         """The master map: the single bool var for each candidate (fixture, date)."""
         return self._by_fixture_date
 
-    def per_fixture(self) -> Iterable[list[cp_model.IntVar]]:
-        """Each fixture's vars over all its candidate dates (exactly one is true)."""
-        return self._by_fixture.values()
+    def vars_for_fixture(self, fixture: Fixture) -> list[cp_model.IntVar]:
+        """`fixture`'s vars over all its candidate dates (exactly one is true in a
+        solved model). Empty if every candidate date was filtered out while
+        building -- the caller must treat that as the schedule being infeasible,
+        since nothing else records that the fixture is still required."""
+        return self._by_fixture.get(fixture, [])
 
     def by_club_home_date(
         self,
@@ -491,10 +562,11 @@ def _add_match_count_limit_constraints(
     fixture_vars: _FixtureVars,
 ) -> None:
     """Apply every MatchCountLimit: no window of `time_window_days` consecutive days
-    may hold more than the rule's effective cap (see max_for_window) matches from
-    the counted set. `venue_scope` selects which of the teams' matches count (home
-    only, away only, or all); `apply_per` decides whether `max` is a shared budget
-    for the whole group or enforced separately per team.
+    -- or, when the rule sets `date_ranges`, no listed calendar range -- may hold
+    more than the rule's effective cap (see max_for_window) matches from the counted
+    set. `venue_scope` selects which of the teams' matches count (home only, away
+    only, or all); `apply_per` decides whether `max` is a shared budget for the
+    whole group or enforced separately per team.
     """
     fixture_date_vars = fixture_vars.fixture_date_vars()
     for rule in limits:
@@ -514,21 +586,31 @@ def _add_match_count_limit_constraints(
                 ):
                     vars_by_date[d].append(var)
 
-            # date_windows groups dates spanning up to its window arg in days, so
-            # pass time_window_days - 1: a window is then any run of
-            # time_window_days consecutive calendar days, and two dates exactly
-            # time_window_days apart (e.g. a week apart when time_window_days=7)
-            # fall in separate windows. time_window_days=1 gives one window per
-            # date.
-            for window in date_windows(vars_by_date.keys(), rule.time_window_days - 1):
+            # With explicit date_ranges the windows are exactly those inclusive
+            # ranges (each counted independently). Otherwise date_windows groups
+            # dates spanning up to its window arg in days, so pass
+            # time_window_days - 1: a window is then any run of time_window_days
+            # consecutive calendar days, and two dates exactly time_window_days
+            # apart (e.g. a week apart when time_window_days=7) fall in separate
+            # windows. time_window_days=1 gives one window per date.
+            windows: Iterable[Collection[date]]
+            if rule.date_ranges:
+                windows = [
+                    [d for d in vars_by_date if d in rng] for rng in rule.date_ranges
+                ]
+            else:
+                windows = date_windows(vars_by_date.keys(), rule.time_window_days - 1)
+            for window in windows:
                 cap = rule.max_for_window(window)
                 if cap is None:
                     continue
                 # A shared-budget cap that is >= the group size can never bind: the
                 # teams can't play more simultaneous matches than there are of them
                 # (this is how a stated venue capacity above a club's team count
-                # stays a no-op).
-                if not each_team and cap >= len(team_set):
+                # stays a no-op). A date range spans many days, in which one team
+                # can play more than once, so the shortcut only holds for the
+                # single-instant rolling-window form.
+                if not each_team and not rule.date_ranges and cap >= len(team_set):
                     continue
                 window_vars = [v for d in window for v in vars_by_date[d]]
                 if len(window_vars) > cap:
@@ -553,10 +635,11 @@ def _add_fixed_fixtures_constraints(
                 f"{scheduled.date.isoformat()} is not schedulable on that date "
                 "(check that the two teams are in the same division, that the date "
                 "is a home date for the home team's club, that it isn't an "
-                "unavailable away date for the away team's club, that the fixture "
-                "isn't also in excluded_fixtures, that the date isn't after either "
-                "club's latest_match_date, and -- if the two teams share a club -- "
-                "that the date isn't after latest_internal_match_date)"
+                "unavailable away date for the away team's club, that no "
+                "match_count_limits entry bars all play on that date, that the "
+                "fixture isn't also in excluded_fixtures, that the date isn't after "
+                "either club's latest_match_date, and -- if the two teams share a "
+                "club -- that the date isn't after latest_internal_match_date)"
             )
         model.add(var == 1)
 
@@ -570,42 +653,82 @@ def _build_model(params: Parameters) -> tuple[cp_model.CpModel, _FixtureVars]:
     excluded = set(params.excluded_fixtures)
     fixed_fixture_keys = {(sf.fixture, sf.date) for sf in params.fixed_fixtures}
 
-    for division in params.divisions:
-        for fixture in division.required_fixtures():
-            if fixture in excluded:
-                continue
-            home_team = fixture.home_team
-            away_team = fixture.away_team
-            is_internal = home_team.club == away_team.club
-            for match_date in params.home_dates_for(home_team):
-                if match_date in params.unavailable_away_dates_for(away_team):
-                    continue
-                if (
-                    is_internal
-                    and params.latest_internal_match_date is not None
-                    and match_date > params.latest_internal_match_date
-                ):
-                    continue
-                home_cutoff = params.latest_match_date_for(home_team)
-                away_cutoff = params.latest_match_date_for(away_team)
-                if home_cutoff is not None and match_date > home_cutoff:
-                    continue
-                if away_cutoff is not None and match_date > away_cutoff:
-                    continue
-                if (
-                    params.earliest_match_date is not None
-                    and match_date < params.earliest_match_date
-                    and (fixture, match_date) not in fixed_fixture_keys
-                ):
-                    continue
-                var = model.new_bool_var(
-                    f"{home_team.name}_vs_{away_team.name}_{match_date.isoformat()}"
-                )
-                fixture_vars.register(fixture, match_date, var)
+    required_fixtures = [
+        fixture
+        for division in params.divisions
+        for fixture in division.required_fixtures()
+        if fixture not in excluded
+    ]
 
-    for scheduled_vars in fixture_vars.per_fixture():
-        # Each fixture must be scheduled exactly once
+    for fixture in required_fixtures:
+        home_team = fixture.home_team
+        away_team = fixture.away_team
+        is_internal = home_team.club == away_team.club
+        for match_date in params.home_dates_for(home_team):
+            if match_date in params.unavailable_away_dates_for(away_team):
+                continue
+            if (
+                is_internal
+                and params.latest_internal_match_date is not None
+                and match_date > params.latest_internal_match_date
+            ):
+                continue
+            home_cutoff = params.latest_match_date_for(home_team)
+            away_cutoff = params.latest_match_date_for(away_team)
+            if home_cutoff is not None and match_date > home_cutoff:
+                continue
+            if away_cutoff is not None and match_date > away_cutoff:
+                continue
+            if (
+                params.earliest_match_date is not None
+                and match_date < params.earliest_match_date
+                and (fixture, match_date) not in fixed_fixture_keys
+            ):
+                continue
+            # A match_count_limits entry with an effective cap of 0 over this date
+            # (e.g. a spec-wide "nobody plays these dates" block) makes the
+            # candidate a certain zero -- don't create a variable for it. Unlike
+            # earliest_match_date this is not waived for fixed_fixtures: a fixture
+            # pinned onto a barred date is a real contradiction, and
+            # _add_fixed_fixtures_constraints reports it clearly.
+            if any(
+                limit.forbids(fixture, match_date)
+                for limit in params.match_count_limits
+            ):
+                continue
+            var = model.new_bool_var(
+                f"{home_team.name}_vs_{away_team.name}_{match_date.isoformat()}"
+            )
+            fixture_vars.register(fixture, match_date, var)
+
+    # Each required fixture must be scheduled exactly once. Drive this off the
+    # required_fixtures list, not the vars actually registered: a fixture whose
+    # every candidate date was filtered out above registers no vars, and iterating
+    # only what registered would silently skip its constraint -- letting the solve
+    # return a schedule quietly missing it. Zero candidates means the spec is
+    # infeasible; collect every such fixture and say so.
+    unschedulable: list[Fixture] = []
+    for fixture in required_fixtures:
+        scheduled_vars = fixture_vars.vars_for_fixture(fixture)
+        if not scheduled_vars:
+            unschedulable.append(fixture)
+            continue
         model.add(cp_model.LinearExpr.Sum(scheduled_vars) == 1)
+
+    if unschedulable:
+        shown = ", ".join(
+            f"{f.home_team.name} vs {f.away_team.name}" for f in unschedulable[:12]
+        )
+        if len(unschedulable) > 12:
+            shown += f", ... (+{len(unschedulable) - 12} more)"
+        raise ValueError(
+            f"{len(unschedulable)} required fixture(s) have no schedulable date: "
+            f"{shown}. For each, every home date of the home team's club is ruled "
+            "out for that fixture -- by the away team's unavailable away dates, a "
+            "latest_match_date / latest_internal_match_date / earliest_match_date "
+            "cutoff, or a match_count_limits entry barring all play on those dates. "
+            "Add a usable date, or exclude the fixture."
+        )
 
     _add_home_dates_used_constraints(model, params.home_dates_used, fixture_vars)
     _add_match_count_limit_constraints(model, params.match_count_limits, fixture_vars)

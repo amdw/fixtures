@@ -258,8 +258,8 @@ class TestSolve(unittest.TestCase):
             )
 
     def test_simple_impossible_constraint(self) -> None:
-        """Test that impossible constraints result in no fixtures being scheduled."""
-        # Create a scenario that's impossible to solve
+        """A required fixture with no schedulable date makes solve() raise, rather
+        than silently returning a schedule that omits it."""
         team1 = fmodel.Team(division=1, club="Test Club A", index=1)
         team2 = fmodel.Team(division=1, club="Test Club B", index=1)
 
@@ -284,15 +284,8 @@ class TestSolve(unittest.TestCase):
             },
         )
 
-        # This should be impossible to schedule any fixtures due to conflicting constraints
-        result = list(fmodel.solve(params).fixtures)
-        # Since constraints make it impossible to schedule required fixtures,
-        # the solver returns an empty list (no feasible schedule)
-        self.assertEqual(
-            len(result),
-            0,
-            "Expected no fixtures to be scheduled due to impossible constraints",
-        )
+        with self.assertRaisesRegex(ValueError, "no schedulable date"):
+            fmodel.solve(params)
 
 
 class TestSolveStats(unittest.TestCase):
@@ -730,24 +723,13 @@ class TestLatestInternalMatchDate(unittest.TestCase):
         )
         self.assertGreater(cross_club.date, date(2025, 2, 15))
 
-    def test_cutoff_before_any_home_date_drops_the_internal_fixture(self) -> None:
-        """No A home date qualifies, so the internal fixture has zero candidate
-        variables: consistent with how a fixture that unavailable_away_dates makes
-        wholly unschedulable is silently omitted (see
-        TestSolve.test_simple_impossible_constraint) rather than erroring, it's simply
-        left out of the result -- other fixtures are unaffected.
-        """
-        a1 = fmodel.Team(division=1, club="A", index=1)
-        a2 = fmodel.Team(division=1, club="A", index=2)
+    def test_cutoff_before_any_home_date_makes_the_solve_infeasible(self) -> None:
+        """A cutoff before every A home date leaves the required A1 v A2 internal
+        fixture (both directions) with no schedulable date, so solve() raises
+        rather than returning a schedule quietly missing those matches."""
         params = self._params(latest_internal_match_date=date(2024, 12, 1))
-        fixtures = list(fmodel.solve(params).fixtures)
-        internal = [
-            sf
-            for sf in fixtures
-            if {sf.fixture.home_team, sf.fixture.away_team} == {a1, a2}
-        ]
-        self.assertEqual(internal, [])
-        self.assertTrue(fixtures)  # the other (non-internal) fixtures still solve
+        with self.assertRaisesRegex(ValueError, "no schedulable date"):
+            fmodel.solve(params)
 
     def test_fixed_internal_fixture_after_cutoff_rejected(self) -> None:
         a1 = fmodel.Team(division=1, club="A", index=1)
@@ -784,7 +766,9 @@ class TestClubLatestMatchDate(unittest.TestCase):
     for a cutoff to remove some and still solve.
     """
 
-    def _params(self, **kwargs: Any) -> fmodel.Parameters:
+    def _params(
+        self, *, b_home_dates: list[date] | None = None, **kwargs: Any
+    ) -> fmodel.Parameters:
         teams = [
             fmodel.Team(division=1, club="A", index=1),
             fmodel.Team(division=1, club="A", index=2),
@@ -799,7 +783,7 @@ class TestClubLatestMatchDate(unittest.TestCase):
                 date(2025, 3, 1),
                 date(2025, 3, 8),
             ],
-            "B": [date(2025, 5, 1), date(2025, 6, 1)],
+            "B": b_home_dates or [date(2025, 5, 1), date(2025, 6, 1)],
         }
         return _params(
             teams=teams,
@@ -810,28 +794,52 @@ class TestClubLatestMatchDate(unittest.TestCase):
             **kwargs,
         )
 
-    def test_cutoff_limits_the_clubs_home_dates(self) -> None:
-        """A cutoff on club A keeps every A-hosted fixture on or before it."""
-        params = self._params(club_latest_match_date={"A": date(2025, 2, 8)})
+    # B offers both early dates (playable within A's cutoff) and late ones, so the
+    # scenario stays feasible and the tests can check that A's cutoff pulls the
+    # B-hosted fixtures against A onto the early dates.
+    _B_EARLY_AND_LATE = [
+        date(2025, 1, 15),
+        date(2025, 1, 22),
+        date(2025, 5, 1),
+        date(2025, 6, 1),
+    ]
+
+    def test_cutoff_limits_every_fixture_the_club_is_in(self) -> None:
+        """A cutoff on club A keeps every fixture involving an A team -- hosted by
+        A or not -- on or before it."""
+        params = self._params(
+            b_home_dates=self._B_EARLY_AND_LATE,
+            club_latest_match_date={"A": date(2025, 2, 8)},
+        )
         fixtures = list(fmodel.solve(params).fixtures)
-        a_hosted = [sf for sf in fixtures if sf.fixture.home_team.club == "A"]
-        self.assertEqual(len(a_hosted), 4)
-        for sf in a_hosted:
+        a_involved = [
+            sf
+            for sf in fixtures
+            if "A" in (sf.fixture.home_team.club, sf.fixture.away_team.club)
+        ]
+        self.assertEqual(len(a_involved), 6)  # 4 A-hosted + B1 v A1 + B1 v A2
+        for sf in a_involved:
             self.assertLessEqual(sf.date, date(2025, 2, 8))
 
     def test_cutoff_also_blocks_the_club_playing_away(self) -> None:
-        """Club B's home dates are all after A's cutoff, so the B-hosted fixtures
-        against A teams (B1 v A1, B1 v A2) have no candidate date and are dropped;
-        the A-hosted fixtures still solve.
-        """
-        params = self._params(club_latest_match_date={"A": date(2025, 2, 8)})
-        fixtures = list(fmodel.solve(params).fixtures)
-        self.assertTrue(fixtures)
-        # B1 v A1 and B1 v A2 are the only B-hosted fixtures; both are dropped.
-        self.assertEqual(
-            [], [sf for sf in fixtures if sf.fixture.home_team.club == "B"]
+        """B1 v A1 and B1 v A2 are hosted by B, which offers May/June dates, but
+        A's cutoff still forces them onto B's early dates."""
+        params = self._params(
+            b_home_dates=self._B_EARLY_AND_LATE,
+            club_latest_match_date={"A": date(2025, 2, 8)},
         )
-        self.assertEqual([], [sf for sf in fixtures if sf.date > date(2025, 2, 8)])
+        fixtures = list(fmodel.solve(params).fixtures)
+        b_hosted = [sf for sf in fixtures if sf.fixture.home_team.club == "B"]
+        self.assertEqual(len(b_hosted), 2)
+        for sf in b_hosted:
+            self.assertLessEqual(sf.date, date(2025, 2, 8))
+
+    def test_cutoff_after_a_needed_away_date_makes_it_infeasible(self) -> None:
+        """With B hosting only after A's cutoff, B1 v A1 / B1 v A2 have no
+        schedulable date -- required fixtures, so solve() raises."""
+        params = self._params(club_latest_match_date={"A": date(2025, 2, 8)})
+        with self.assertRaisesRegex(ValueError, "no schedulable date"):
+            fmodel.solve(params)
 
     def test_other_clubs_unaffected(self) -> None:
         """A cutoff on A doesn't constrain a fixture between two non-A teams."""
@@ -844,8 +852,10 @@ class TestClubLatestMatchDate(unittest.TestCase):
             teams=teams,
             home_dates={
                 "A": [date(2025, 1, 1), date(2025, 1, 15)],
-                "B": [date(2025, 6, 1)],
-                "C": [date(2025, 6, 8)],
+                # Early dates keep A's away legs at B/C schedulable within its
+                # cutoff; the late dates carry the B-C fixtures.
+                "B": [date(2025, 1, 8), date(2025, 6, 1)],
+                "C": [date(2025, 1, 22), date(2025, 6, 8)],
             },
             unavailable_away_dates={"A": [], "B": [], "C": []},
             min_gap_days=7,
@@ -929,18 +939,17 @@ class TestEarliestMatchDate(unittest.TestCase):
         for sf in fixtures:
             self.assertGreaterEqual(sf.date, date(2025, 2, 1))
 
-    def test_cutoff_after_all_of_a_clubs_home_dates_drops_its_fixtures(self) -> None:
-        """A cutoff after all of club A's home dates (but before club B's) makes
-        every A-hosted fixture unschedulable -- each has zero candidate
-        variables, so (consistent with
-        TestLatestInternalMatchDate.test_cutoff_before_any_home_date_drops_the_internal_fixture)
-        it's silently left out of the result rather than erroring. B-hosted
-        fixtures are unaffected since none of B's dates are excluded.
-        """
+    def test_cutoff_after_all_of_a_clubs_home_dates_makes_the_solve_infeasible(
+        self,
+    ) -> None:
+        """A cutoff after all of club A's home dates makes every A-hosted fixture
+        unschedulable. Those fixtures are still required, so solve() raises rather
+        than returning a schedule that silently omits them -- an already-played
+        match belongs in fixed_fixtures (which bypass earliest_match_date), not
+        inferred from a truncated result."""
         params = self._params(earliest_match_date=date(2025, 4, 1))
-        fixtures = list(fmodel.solve(params).fixtures)
-        self.assertFalse([sf for sf in fixtures if sf.fixture.home_team.club == "A"])
-        self.assertTrue([sf for sf in fixtures if sf.fixture.home_team.club == "B"])
+        with self.assertRaisesRegex(ValueError, "no schedulable date"):
+            fmodel.solve(params)
 
     def test_fixed_fixture_before_cutoff_still_solves(self) -> None:
         """Unlike latest_internal_match_date, a fixed fixture dated before the cutoff
@@ -1166,12 +1175,16 @@ class TestTeamConstraints(unittest.TestCase):
 
     def test_team_unavailable_away_dates_is_additive(self) -> None:
         """A1's team-specific unavailable_away_dates blocks it from playing away on
-        B's home date, even though club A has no such club-wide restriction."""
+        one of B's home dates, even though club A has no such club-wide
+        restriction: B1 v A1 must then use B's other home date."""
         a1 = fmodel.Team(division=1, club="A", index=1)
         b1 = fmodel.Team(division=1, club="B", index=1)
         params = _params(
             teams=[a1, b1],
-            home_dates={"A": [date(2025, 1, 1)], "B": [date(2025, 2, 1)]},
+            home_dates={
+                "A": [date(2025, 1, 1)],
+                "B": [date(2025, 2, 1), date(2025, 2, 15)],
+            },
             unavailable_away_dates={"A": [], "B": []},
             max_concurrent_matches={
                 "A": _home_limit(1),
@@ -1181,21 +1194,13 @@ class TestTeamConstraints(unittest.TestCase):
             team_unavailable_away_dates={a1: [date(2025, 2, 1)]},
         )
         fixtures = list(fmodel.solve(params).fixtures)
-        # A1 v B1 (A1 away at B) can't be scheduled: B's only home date is blocked
-        # for A1 specifically, so that fixture is left unschedulable.
-        self.assertFalse(
-            any(
-                sf.fixture.home_team == b1 and sf.fixture.away_team == a1
-                for sf in fixtures
-            )
+        b_hosted = next(
+            sf
+            for sf in fixtures
+            if sf.fixture.home_team == b1 and sf.fixture.away_team == a1
         )
-        # B1 v A1 (A1 at home) is unaffected.
-        self.assertTrue(
-            any(
-                sf.fixture.home_team == a1 and sf.fixture.away_team == b1
-                for sf in fixtures
-            )
-        )
+        # Feb 1 is blocked for A1 specifically, so B1 v A1 falls on Feb 15.
+        self.assertEqual(b_hosted.date, date(2025, 2, 15))
 
     def test_team_without_override_falls_back_to_club(self) -> None:
         a1 = fmodel.Team(division=1, club="A", index=1)
@@ -1571,6 +1576,244 @@ class TestMatchCountLimits(unittest.TestCase):
             fmodel.solve(self._three_a_teams_in_one_window(limit=3)).fixtures
         )
         self.assertEqual(len(fixtures), 3)
+
+
+class TestMatchCountLimitDateRanges(unittest.TestCase):
+    """A MatchCountLimit with explicit `date_ranges` caps matches within each
+    listed inclusive range rather than within every rolling `time_window_days`
+    window; matches outside every range are unaffected.
+    """
+
+    def _three_a_teams(
+        self,
+        *,
+        a_home_dates: list[date],
+        date_ranges: tuple[fmodel.DateRange, ...],
+        limit: int,
+    ) -> fmodel.Parameters:
+        """A1/A2/A3 each have exactly one fixture (their home leg; the reverse
+        legs against X are excluded), and A can host only one match a night. A
+        `date_ranges` cap of `limit` then bounds how many of the three home legs
+        may land inside the listed range(s)."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=2, club="A", index=2)
+        a3 = fmodel.Team(division=3, club="A", index=3)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        x2 = fmodel.Team(division=2, club="X", index=2)
+        x3 = fmodel.Team(division=3, club="X", index=3)
+        return _params(
+            teams=[a1, a2, a3, x1, x2, x3],
+            home_dates={"A": a_home_dates, "X": []},
+            unavailable_away_dates={"A": [], "X": []},
+            min_gap_days=7,
+            max_concurrent_matches={"A": _home_limit(1)},
+            excluded_fixtures=[
+                fmodel.Fixture(home_team=x1, away_team=a1),
+                fmodel.Fixture(home_team=x2, away_team=a2),
+                fmodel.Fixture(home_team=x3, away_team=a3),
+            ],
+            match_count_limits=[
+                fmodel.MatchCountLimit(
+                    teams=[a1, a2, a3], max=limit, date_ranges=date_ranges
+                )
+            ],
+        )
+
+    def test_cap_binds_inside_the_range_only(self) -> None:
+        """The range covers January; A also has two February home dates. max=1
+        inside the range forces at least two of the three home legs into
+        February, leaving at most one in January."""
+        params = self._three_a_teams(
+            a_home_dates=[
+                date(2025, 1, 7),
+                date(2025, 1, 14),
+                date(2025, 2, 4),
+                date(2025, 2, 11),
+            ],
+            date_ranges=(fmodel.DateRange(date(2025, 1, 1), date(2025, 1, 31)),),
+            limit=1,
+        )
+        fixtures = list(fmodel.solve(params).fixtures)
+        self.assertEqual(len(fixtures), 3)
+        in_january = [sf for sf in fixtures if sf.date.month == 1]
+        self.assertLessEqual(len(in_january), 1)
+
+    def test_infeasible_when_range_cap_leaves_nowhere(self) -> None:
+        """Three in-range home dates plus one outside; with a one-a-night venue
+        and max=1 inside the range, only two of the three required home legs can
+        be placed -> infeasible."""
+        params = self._three_a_teams(
+            a_home_dates=[
+                date(2025, 1, 7),
+                date(2025, 1, 14),
+                date(2025, 1, 21),
+                date(2025, 2, 4),
+            ],
+            date_ranges=(fmodel.DateRange(date(2025, 1, 1), date(2025, 1, 31)),),
+            limit=1,
+        )
+        with self.assertRaises(ValueError):
+            fmodel.solve(params)
+
+    def test_second_range_is_enforced_independently(self) -> None:
+        """Two ranges, each capped at 1: A's home dates are two in January and
+        two in March, so at most one leg per range -> the third leg has nowhere
+        to go and the solve is infeasible."""
+        params = self._three_a_teams(
+            a_home_dates=[
+                date(2025, 1, 7),
+                date(2025, 1, 14),
+                date(2025, 3, 4),
+                date(2025, 3, 11),
+            ],
+            date_ranges=(
+                fmodel.DateRange(date(2025, 1, 1), date(2025, 1, 31)),
+                fmodel.DateRange(date(2025, 3, 1), date(2025, 3, 31)),
+            ),
+            limit=1,
+        )
+        with self.assertRaises(ValueError):
+            fmodel.solve(params)
+
+    def test_max_zero_forces_matches_out_of_the_range(self) -> None:
+        """max=0 bars every counted match inside the range: A1's one home leg,
+        with an in-range and an out-of-range home date available, is forced onto
+        the out-of-range one."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        params = _params(
+            teams=[a1, x1],
+            home_dates={"A": [date(2025, 1, 7), date(2025, 2, 4)], "X": []},
+            unavailable_away_dates={"A": [], "X": []},
+            min_gap_days=7,
+            excluded_fixtures=[fmodel.Fixture(home_team=x1, away_team=a1)],
+            match_count_limits=[
+                fmodel.MatchCountLimit(
+                    teams=[a1],
+                    max=0,
+                    date_ranges=(
+                        fmodel.DateRange(date(2025, 1, 1), date(2025, 1, 31)),
+                    ),
+                )
+            ],
+        )
+        fixtures = list(fmodel.solve(params).fixtures)
+        self.assertEqual([sf.date for sf in fixtures], [date(2025, 2, 4)])
+
+    def test_single_team_set_range_cap_still_binds(self) -> None:
+        """The 'a shared cap >= group size can't bind' shortcut must not fire for
+        a date-range rule: one team can play more than once inside a multi-day
+        range. A1 has two required home legs, both home dates inside the range
+        and none outside it, so a cap of 1 makes the solve infeasible."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        y1 = fmodel.Team(division=1, club="Y", index=1)
+        params = _params(
+            teams=[a1, x1, y1],
+            home_dates={"A": [date(2025, 1, 7), date(2025, 1, 14)], "X": [], "Y": []},
+            unavailable_away_dates={"A": [], "X": [], "Y": []},
+            min_gap_days=7,
+            excluded_fixtures=[
+                fmodel.Fixture(home_team=x1, away_team=a1),
+                fmodel.Fixture(home_team=y1, away_team=a1),
+                fmodel.Fixture(home_team=x1, away_team=y1),
+                fmodel.Fixture(home_team=y1, away_team=x1),
+            ],
+            match_count_limits=[
+                fmodel.MatchCountLimit(
+                    teams=[a1],
+                    max=1,
+                    date_ranges=(
+                        fmodel.DateRange(date(2025, 1, 1), date(2025, 1, 31)),
+                    ),
+                )
+            ],
+        )
+        with self.assertRaises(ValueError):
+            fmodel.solve(params)
+
+    def test_rejects_non_default_time_window_days(self) -> None:
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        with self.assertRaises(ValueError):
+            fmodel.MatchCountLimit(
+                teams=[a1],
+                max=1,
+                time_window_days=7,
+                date_ranges=(fmodel.DateRange(date(2025, 1, 1), date(2025, 1, 31)),),
+            )
+
+    def test_rejects_date_max_overrides(self) -> None:
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        with self.assertRaises(ValueError):
+            fmodel.MatchCountLimit(
+                teams=[a1],
+                max=1,
+                date_max_overrides={date(2025, 1, 1): 1},
+                date_ranges=(fmodel.DateRange(date(2025, 1, 1), date(2025, 1, 31)),),
+            )
+
+    def test_date_range_rejects_start_after_end(self) -> None:
+        with self.assertRaises(ValueError):
+            fmodel.DateRange(date(2025, 2, 1), date(2025, 1, 1))
+
+    def test_date_range_contains_is_inclusive(self) -> None:
+        rng = fmodel.DateRange(date(2025, 1, 1), date(2025, 1, 31))
+        self.assertIn(date(2025, 1, 1), rng)
+        self.assertIn(date(2025, 1, 31), rng)
+        self.assertNotIn(date(2025, 2, 1), rng)
+
+    def test_max_zero_prunes_candidate_var(self) -> None:
+        """A max: 0 limit makes its candidates a certain zero, so _build_model
+        never creates a decision variable for them -- observable because a
+        fixed_fixtures entry pinned onto such a date then fails with the
+        descriptive 'not schedulable on that date' error (the fixture is still
+        placeable on its other, unbarred home date, so this is the fixed-fixture
+        lookup failing, not the whole fixture being unschedulable)."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        params = _params(
+            teams=[a1, x1],
+            home_dates={
+                "A": [date(2025, 12, 29), date(2026, 1, 19)],
+                "X": [date(2026, 1, 12)],
+            },
+            unavailable_away_dates={"A": [], "X": []},
+            min_gap_days=7,
+            fixed_fixtures=[
+                fmodel.ScheduledFixture(
+                    fmodel.Fixture(home_team=a1, away_team=x1), date(2025, 12, 29)
+                )
+            ],
+            match_count_limits=[
+                fmodel.MatchCountLimit(
+                    teams=[a1, x1],
+                    max=0,
+                    date_ranges=(
+                        fmodel.DateRange(date(2025, 12, 22), date(2026, 1, 4)),
+                    ),
+                )
+            ],
+        )
+        with self.assertRaisesRegex(ValueError, "not schedulable on that date"):
+            fmodel.solve(params)
+
+    def test_forbids_respects_venue_scope_and_range(self) -> None:
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        home_fix = fmodel.Fixture(home_team=a1, away_team=x1)
+        away_fix = fmodel.Fixture(home_team=x1, away_team=a1)
+        rng = fmodel.DateRange(date(2025, 12, 22), date(2026, 1, 4))
+        away_only = fmodel.MatchCountLimit(
+            teams=[a1], max=0, venue_scope=fmodel.VenueScope.AWAY, date_ranges=(rng,)
+        )
+        # AWAY scope: bars a1's away fixture in the range, not its home one.
+        self.assertTrue(away_only.forbids(away_fix, date(2025, 12, 29)))
+        self.assertFalse(away_only.forbids(home_fix, date(2025, 12, 29)))
+        # Outside the range: not forbidden.
+        self.assertFalse(away_only.forbids(away_fix, date(2026, 1, 5)))
+        # max > 0: never an up-front bar.
+        keep = fmodel.MatchCountLimit(teams=[a1], max=1, date_ranges=(rng,))
+        self.assertFalse(keep.forbids(away_fix, date(2025, 12, 29)))
 
 
 class TestPerClubGap(unittest.TestCase):
