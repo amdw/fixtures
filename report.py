@@ -30,12 +30,35 @@ every run's report plus the top-level index -- into _site/, run build_site.py.
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 import csvreport
 import fixturesolution
 import fixturespec
+import fmodel
 import htmlreport
+
+logger = logging.getLogger(__name__)
+
+
+def _check_spec_checksum(spec_path: Path, result: fmodel.SolveResult) -> None:
+    """Warn if the solution records a spec checksum that doesn't match the spec
+    we've been handed -- i.e. this report is being built from a different (or
+    reformatted) spec than the one the schedule was solved from."""
+    recorded = result.spec_checksum
+    if not recorded:
+        return
+    actual = fixturespec.spec_checksum(spec_path)
+    if actual != recorded:
+        logger.warning(
+            "Spec checksum mismatch: the solution was solved from a spec hashing "
+            "to %s, but %s hashes to %s -- this report may not match the spec the "
+            "schedule was solved from.",
+            recorded,
+            spec_path,
+            actual,
+        )
 
 
 def report(spec_path: Path, solution_path: Path, output_dir: Path) -> Path:
@@ -47,6 +70,7 @@ def report(spec_path: Path, solution_path: Path, output_dir: Path) -> Path:
     result = fixturesolution.load_solution(
         solution_path, spec.parameters.teams, team_ids
     )
+    _check_spec_checksum(spec_path, result)
     csvreport.generate_csv(spec, result.fixtures, output_dir)
     return htmlreport.generate_report(spec, result, output_dir)
 
@@ -61,6 +85,8 @@ def main() -> None:
         "output_dir", type=Path, help="Directory to write this run's HTML report into"
     )
     args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 
     run_index_path = report(args.spec, args.solution, args.output_dir)
 

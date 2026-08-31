@@ -14,6 +14,7 @@
 
 """Test cases for the YAML fixture specification reader."""
 
+import hashlib
 import tempfile
 import unittest
 from datetime import date
@@ -250,6 +251,19 @@ class TestLoadSpec(unittest.TestCase):
             fixturespec.SpecError, "top-level 'min_gap_days' is no longer supported"
         ):
             fixturespec.load_spec(path)
+
+    def test_spec_checksum_helper_is_self_describing_sha256(self) -> None:
+        path = self._write("name: Test\n")
+        self.assertEqual(
+            fixturespec.spec_checksum(path),
+            "sha256:" + hashlib.sha256(b"name: Test\n").hexdigest(),
+        )
+
+    def test_load_spec_records_matching_spec_checksum_on_parameters(self) -> None:
+        path = self._write(_MINIMAL_SPEC)
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.parameters.spec_checksum, fixturespec.spec_checksum(path))
+        self.assertTrue(spec.parameters.spec_checksum.startswith("sha256:"))
 
     def test_latest_internal_match_date_absent(self) -> None:
         path = self._write(_MINIMAL_SPEC)

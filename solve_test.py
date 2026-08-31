@@ -20,6 +20,7 @@ from datetime import date
 from pathlib import Path
 
 import fixturesolution
+import fixturespec
 import fmodel
 import solve
 
@@ -109,6 +110,24 @@ class TestSolve(unittest.TestCase):
         )
         self.assertIn("#Variables", loaded.model_stats)
         self.assertIn("status:", loaded.solve_stats)
+
+    def test_records_spec_checksum_matching_the_spec_file(self) -> None:
+        output_dir = self.dir / "out"
+        solution_path = solve.solve(self.spec_path, output_dir)
+
+        expected = fixturespec.spec_checksum(self.spec_path)
+        self.assertTrue(expected.startswith("sha256:"))
+        self.assertIn(f"spec_checksum: {expected}", solution_path.read_text())
+
+        loaded = fixturesolution.load_solution(
+            solution_path,
+            [
+                fmodel.Team(division=1, club="albany", index=1),
+                fmodel.Team(division=1, club="hackney", index=1),
+            ],
+            {"albany-1": ("albany", 1), "hackney-1": ("hackney", 1)},
+        )
+        self.assertEqual(loaded.spec_checksum, expected)
 
     def test_creates_output_dir(self) -> None:
         output_dir = self.dir / "nested" / "out"

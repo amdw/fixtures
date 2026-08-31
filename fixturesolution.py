@@ -21,7 +21,10 @@ back into a report -- without re-running the solver -- given the original spec.
 Each fixture is identified by its home and away teams' stable spec team ID
 (the same IDs used by fixed_fixtures/exclude_fixtures in the spec file, e.g.
 "albany-1"), so a solution.yaml only makes sense alongside the spec it was
-solved from. fmodel.Team itself doesn't carry that ID (it's a
+solved from. To make that pairing checkable, the file also records a
+"spec_checksum" of the spec's bytes (see fixturespec.spec_checksum()).
+
+fmodel.Team itself doesn't carry that ID (it's a
 club/index/division/name_override value type, solver-internal), so callers
 provide a team_ids mapping -- see fixturespec.load_team_ids() -- to translate
 between the two.
@@ -94,6 +97,10 @@ def save_solution(
     pair (see fixturespec.load_team_ids()) -- used to translate fmodel.Team,
     which doesn't carry a spec team ID, back into one.
 
+    result.spec_checksum, when non-empty, is written under a "spec_checksum" key
+    after the fixtures so the solution records a fingerprint of the exact spec it
+    was solved from (see fixturespec.spec_checksum()).
+
     result.model_stats/result.solve_stats, when non-empty, are written under a
     trailing "stats" key so the OR-Tools summaries travel with the schedule to
     the report; empty strings leave the key out entirely. load_solution()
@@ -112,6 +119,8 @@ def save_solution(
     ]
     entries.sort(key=lambda e: (e["date"], e["home"], e["away"]))
     document: dict[str, Any] = {"fixtures": entries}
+    if result.spec_checksum:
+        document["spec_checksum"] = result.spec_checksum
     if result.model_stats or result.solve_stats:
         document["stats"] = {
             "model": result.model_stats,
@@ -151,6 +160,16 @@ def _load_stats(data: dict[str, Any], path: Path) -> tuple[str, str]:
     return model_stats, solve_stats
 
 
+def _load_spec_checksum(data: dict[str, Any], path: Path) -> str:
+    """Pull the optional spec-file checksum out of a loaded solution document. A
+    file with no 'spec_checksum' key (one written before it was recorded) yields
+    an empty string."""
+    checksum = data.get("spec_checksum", "")
+    if not isinstance(checksum, str):
+        raise SolutionError(f"{path}: 'spec_checksum' must be a string")
+    return checksum
+
+
 def load_solution(
     path: Path,
     teams: Collection[fmodel.Team],
@@ -162,8 +181,9 @@ def load_solution(
     solution was solved from) to recover full Team objects (division,
     name_override, etc.).
 
-    Any model/solver summary text stored under the file's 'stats' key comes back
-    on the result too (empty strings if the file predates it).
+    Any model/solver summary text stored under the file's 'stats' key, and the
+    spec-file checksum under its 'spec_checksum' key, come back on the result too
+    (empty strings if the file predates either).
     """
     with path.open() as f:
         data = yaml.safe_load(f)
@@ -176,6 +196,7 @@ def load_solution(
         raise SolutionError(f"{path}: 'fixtures' must be a list")
 
     model_stats, solve_stats = _load_stats(data, path)
+    spec_file_checksum = _load_spec_checksum(data, path)
 
     teams_by_club_index = {(t.club, t.index): t for t in teams}
     teams_by_id = {
@@ -219,5 +240,8 @@ def load_solution(
             )
         )
     return fmodel.SolveResult(
-        fixtures=result, model_stats=model_stats, solve_stats=solve_stats
+        fixtures=result,
+        model_stats=model_stats,
+        solve_stats=solve_stats,
+        spec_checksum=spec_file_checksum,
     )

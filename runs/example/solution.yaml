@@ -548,6 +548,7 @@ fixtures:
 - home: hendon-1
   away: hackney-1
   date: 2026-05-28
+spec_checksum: sha256:047ca7f38776496599e9ac9c8e63000e9720c7a029fa407f7cad6f8201e78eeb
 stats:
   model: |-
     satisfaction model '': (model_fingerprint: 0x68b3d8a681956b57)
