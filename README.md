@@ -113,10 +113,11 @@ club_constraints:
 `match_count_limits` is the one match-count constraint: each entry caps how many
 matches involving a set of teams may fall in any window of `time_window_days`
 consecutive days. It expresses a per-team gap (`apply_per: each_team`), a venue's
-concurrent-match capacity (`venue_scope: home`, with per-date `overrides`), and a
-keep-these-teams-apart rule (`teams: [...]`) alike. Every spec-wide default entry
-carries a unique `override_key`; a club entry repeating one replaces that default
-for the club, and a club entry with no `override_key` is additive.
+concurrent-match capacity (`venue_scope: home`, with per-date
+`date_max_overrides`), and a keep-these-teams-apart rule (`teams: [...]`) alike.
+Every spec-wide default entry carries a unique `override_key`; a club entry
+repeating one replaces that default for the club, and a club entry with no
+`override_key` is additive.
 
 That's only a fraction of what the format supports -- per-club/per-team date
 exclusions, pinned and withheld fixtures, and more. For the full field-by-field

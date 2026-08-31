@@ -106,11 +106,11 @@ club_constraints:
       - override_key: venue-capacity
         venue_scope: home
         max: 2
-        overrides:
+        date_max_overrides:
           2025-09-08: 3
       - max: null
         venue_scope: all
-        overrides:
+        date_max_overrides:
           2025-09-22: 1
       - teams: [hackney-1, hackney-5]
         time_window_days: 7

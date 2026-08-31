@@ -369,7 +369,7 @@ club_constraints:
       - override_key: venue-capacity
         venue_scope: home
         max: 2
-        overrides:
+        date_max_overrides:
           "2025-11-13": 3
   harrow:
     match_count_limits:

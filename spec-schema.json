@@ -253,7 +253,7 @@
     "match_count_limit_fields": {
       "max": {
         "oneOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }],
-        "description": "The most matches (of the kind selected by 'venue_scope') allowed within any window of 'time_window_days' consecutive days. The key is required, so an entry is never accidentally a no-op. null means no plain cap -- only useful with 'overrides', or (on a club entry with an 'override_key') to cancel a default. 'max: 1' forbids a second match in a window; a higher value caps density."
+        "description": "The most matches (of the kind selected by 'venue_scope') allowed within any window of 'time_window_days' consecutive days. The key is required, so an entry is never accidentally a no-op. null means no plain cap -- only useful with 'date_max_overrides', or (on a club entry with an 'override_key') to cancel a default. 'max: 1' forbids a second match in a window; a higher value caps density."
       },
       "apply_per": {
         "type": "string",
@@ -273,7 +273,7 @@
         "default": "all",
         "description": "Which of the counted teams' matches the cap counts: 'home' only their home matches, 'away' only their away matches, or 'all' (the default) every match they play. E.g. 'away' counts only away fixtures, still allowing one team to play away on a night another is hosting."
       },
-      "overrides": {
+      "date_max_overrides": {
         "type": "object",
         "description": "Per-date replacements of 'max', keyed by date; each value an integer >= 1, or null to lift the cap that day. Only allowed when 'time_window_days' is 1 (so each window is a single date).",
         "additionalProperties": {
@@ -304,7 +304,9 @@
           "$ref": "#/$defs/match_count_limit_fields/time_window_days"
         },
         "venue_scope": { "$ref": "#/$defs/match_count_limit_fields/venue_scope" },
-        "overrides": { "$ref": "#/$defs/match_count_limit_fields/overrides" },
+        "date_max_overrides": {
+          "$ref": "#/$defs/match_count_limit_fields/date_max_overrides"
+        },
         "override_key": {
           "$ref": "#/$defs/match_count_limit_fields/override_key"
         }
@@ -322,7 +324,9 @@
           "$ref": "#/$defs/match_count_limit_fields/time_window_days"
         },
         "venue_scope": { "$ref": "#/$defs/match_count_limit_fields/venue_scope" },
-        "overrides": { "$ref": "#/$defs/match_count_limit_fields/overrides" },
+        "date_max_overrides": {
+          "$ref": "#/$defs/match_count_limit_fields/date_max_overrides"
+        },
         "override_key": {
           "$ref": "#/$defs/match_count_limit_fields/override_key"
         }
