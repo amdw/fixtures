@@ -109,7 +109,7 @@ club_constraints:
         unavailable_away_dates: [2025-09-22]
     avoid_coscheduling_teams:
       - teams: [hackney-1, hackney-5]
-        within_days: 0
+        min_gap_days: 7
         applies_to: away
 
 fixed_fixtures:
