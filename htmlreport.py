@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import dataclasses
 import html
-import re
 from collections import defaultdict
 from collections.abc import Collection, Mapping
 from datetime import date
@@ -59,6 +58,7 @@ _STYLE = """
     nav ul ul { padding-left: 1.2rem; margin-top: 0.3rem; }
     .venue { margin-top: -0.5rem; margin-bottom: 1.5rem; color: #333; }
     .date-summary { margin-top: -1.5rem; margin-bottom: 2rem; color: #333; }
+    .export-link { margin-top: -1rem; margin-bottom: 2rem; }
     ul.venues { padding-left: 1.2rem; }
     ul.venues li { margin-bottom: 0.3rem; }
     .anchor-link { margin-left: 0.4rem; font-size: 0.8em; text-decoration: none;
@@ -70,12 +70,6 @@ _STYLE = """
         th, td { padding: 0.4rem 0.5rem; white-space: nowrap; }
     }
 """
-
-
-def slugify(value: str) -> str:
-    """Turn a name into a filesystem/URL-safe slug, e.g. 'Willesden & Brent' -> 'willesden-brent'."""
-    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
-    return slug or "unnamed"
 
 
 def _fmt_date(d: date) -> str:
@@ -327,6 +321,12 @@ def _scheme_label(
     return "Single-round all-play-all" if single else "Double-round all-play-all"
 
 
+def _csv_link(filename: str, label: str) -> str:
+    """A short paragraph linking a CSV export sitting next to the page, shown only
+    when csvreport.generate_csv has actually written that file."""
+    return f'<p class="export-link"><a href="{filename}">{html.escape(label)}</a></p>\n'
+
+
 def _venue_header(club: fmodel.Club) -> str:
     return (
         f'<p class="venue"><strong>{html.escape(club.home_venue_name)}</strong><br>\n'
@@ -429,9 +429,11 @@ def generate_report(
     in a later run; these are appended to the bottom of every relevant table with
     "TBC" in place of a date). `fixtures` is the solved schedule for that spec.
 
-    The index links whichever all-matches.csv / all-matches-by-team.csv exports
-    are already present in output_dir (csvreport.generate_csv writes them), so
-    run that first if the index should link them.
+    Wherever csvreport.generate_csv has already written its exports into
+    output_dir, they get linked too: all-matches.csv / all-matches-by-team.csv
+    from the run index, each club's club-<slug>-dates.csv from its club page, and
+    each team's team-<slug>.csv from that team's section. Run generate_csv first
+    if those links are wanted.
 
     Returns the path to the run's index.html.
     """
@@ -531,6 +533,9 @@ def generate_report(
             )
             + _club_date_summary(club_id, fixtures_by_club.get(club_id, []))
         )
+        club_csv = reportdata.club_dates_csv_filename(club_id)
+        if (output_dir / club_csv).exists():
+            body += _csv_link(club_csv, "Download CSV (one row per match date)")
         for team in sorted(teams_by_club[club_id], key=lambda t: t.index):
             team_fixtures = [
                 sf
@@ -543,7 +548,7 @@ def generate_report(
                 if f.home_team == team or f.away_team == team
             ]
             team_name = reportdata.team_name(team, clubs)
-            body += _anchored_heading(2, team_name, slugify(team_name))
+            body += _anchored_heading(2, team_name, reportdata.slugify(team_name))
             scheme_label = _scheme_label(schemes, team.division)
             body += f"<h3>Division {team.division} ({html.escape(scheme_label)})</h3>\n"
             body += _table(
@@ -551,7 +556,10 @@ def generate_report(
                 _team_rows(team, team_fixtures, clubs)
                 + _excluded_team_rows(team, team_excluded, clubs),
             )
-        club_slug = slugify(club_id)
+            team_csv = reportdata.team_csv_filename(team)
+            if (output_dir / team_csv).exists():
+                body += _csv_link(team_csv, "Download CSV")
+        club_slug = reportdata.slugify(club_id)
         (output_dir / f"club-{club_slug}.html").write_text(
             _page(club_name, body, name, draft, description)
         )

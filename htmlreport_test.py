@@ -79,20 +79,6 @@ def _club(
     )
 
 
-class TestSlugify(unittest.TestCase):
-    def test_simple(self) -> None:
-        self.assertEqual(htmlreport.slugify("Albany"), "albany")
-
-    def test_spaces_and_punctuation(self) -> None:
-        self.assertEqual(htmlreport.slugify("Willesden & Brent"), "willesden-brent")
-
-    def test_leading_trailing_punctuation(self) -> None:
-        self.assertEqual(htmlreport.slugify("  Kings Head!!"), "kings-head")
-
-    def test_empty(self) -> None:
-        self.assertEqual(htmlreport.slugify("---"), "unnamed")
-
-
 class TestGenerateReport(unittest.TestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -335,6 +321,38 @@ class TestGenerateReport(unittest.TestCase):
     def test_run_index_has_no_csv_links_when_exports_absent(self) -> None:
         # setUp's _generate() writes HTML pages only, no CSV files.
         self.assertNotIn(".csv", self.index_path.read_text())
+
+    def test_club_page_links_per_club_and_per_team_csv_when_present(self) -> None:
+        # generate_report links the per-club / per-team exports it finds already
+        # written into the output dir (csvreport.generate_csv writes them).
+        for name in ("club-harrow-dates.csv", "team-harrow-1.csv", "team-harrow-2.csv"):
+            (self.output_dir / name).write_text("date\n")
+
+        _generate(self.fixtures, self.teams, self.clubs, self.output_dir)
+        harrow_page = (self.output_dir / "club-harrow.html").read_text()
+
+        # Per-club link sits under the consolidated table, ahead of the first team.
+        self.assertIn(
+            '<p class="export-link"><a href="club-harrow-dates.csv">', harrow_page
+        )
+        self.assertLess(
+            harrow_page.index("club-harrow-dates.csv"),
+            harrow_page.index('<h2 id="harrow-1">'),
+        )
+        # Each team section links its own file, under that team's table.
+        h1_section = harrow_page.split('<h2 id="harrow-1">')[1].split("<h2")[0]
+        self.assertIn(
+            '<p class="export-link"><a href="team-harrow-1.csv">Download CSV</a></p>',
+            h1_section,
+        )
+        self.assertLess(
+            h1_section.index("</table>"), h1_section.index("team-harrow-1.csv")
+        )
+        self.assertNotIn("team-harrow-2.csv", h1_section)
+
+    def test_club_page_has_no_csv_links_when_exports_absent(self) -> None:
+        # setUp's _generate() writes HTML pages only, no CSV files.
+        self.assertNotIn(".csv", (self.output_dir / "club-harrow.html").read_text())
 
     def test_division_numbers_sort_numerically_not_lexically(self) -> None:
         clubs = {"c": _club("C"), "d": _club("D")}

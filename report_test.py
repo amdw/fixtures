@@ -83,7 +83,14 @@ class TestReport(unittest.TestCase):
     def test_also_writes_csv_exports(self) -> None:
         report.report(self.spec_path, self.solution_path, self.output_dir)
 
-        for name in ("all-matches.csv", "all-matches-by-team.csv"):
+        for name in (
+            "all-matches.csv",
+            "all-matches-by-team.csv",
+            "club-albany-dates.csv",
+            "club-hackney-dates.csv",
+            "team-albany-1.csv",
+            "team-hackney-1.csv",
+        ):
             self.assertTrue((self.output_dir / name).exists(), f"{name} not written")
         self.assertIn("Albany 1", (self.output_dir / "all-matches.csv").read_text())
 
@@ -93,6 +100,13 @@ class TestReport(unittest.TestCase):
         index = (self.output_dir / "index.html").read_text()
         self.assertIn('href="all-matches.csv"', index)
         self.assertIn('href="all-matches-by-team.csv"', index)
+
+    def test_club_page_links_its_per_club_and_per_team_csv(self) -> None:
+        report.report(self.spec_path, self.solution_path, self.output_dir)
+
+        club_page = (self.output_dir / "club-albany.html").read_text()
+        self.assertIn('href="club-albany-dates.csv"', club_page)
+        self.assertIn('href="team-albany-1.csv"', club_page)
 
     def test_does_not_require_resolving(self) -> None:
         """Deleting nothing but the intermediate solving step should still work:
