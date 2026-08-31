@@ -311,15 +311,19 @@ class TestGenerateReport(unittest.TestCase):
         self.assertIn("division-2.html", content)
         self.assertIn("club-harrow.html", content)
         self.assertIn("club-willesden-brent.html", content)
-        # Titles recovered from the linked pages, not raw filenames
+        # Link labels are the pages' own titles, not raw filenames
         self.assertIn(">Division 1<", content)
         self.assertIn(">Willesden &amp; Brent<", content)
 
     def test_run_index_links_to_csv_exports_when_present(self) -> None:
+        # generate_report links whichever CSV exports it finds already written
+        # into the output dir (csvreport.generate_csv writes them in production).
         for name in ("all-matches.csv", "all-matches-by-team.csv"):
             (self.output_dir / name).write_text("date\n")
 
-        content = htmlreport.build_run_index(self.output_dir).read_text()
+        content = _generate(
+            self.fixtures, self.teams, self.clubs, self.output_dir
+        ).read_text()
 
         self.assertIn('href="all-matches.csv"', content)
         self.assertIn('href="all-matches-by-team.csv"', content)
@@ -332,24 +336,19 @@ class TestGenerateReport(unittest.TestCase):
         # setUp's _generate() writes HTML pages only, no CSV files.
         self.assertNotIn(".csv", self.index_path.read_text())
 
-    def test_build_run_index_is_rebuildable_from_disk_alone(self) -> None:
-        """Deleting index.html and rebuilding from the other report files must reproduce it."""
-        self.index_path.unlink()
-        rebuilt_path = htmlreport.build_run_index(self.output_dir)
-        self.assertEqual(rebuilt_path, self.index_path)
-        content = self.index_path.read_text()
-        self.assertIn("division-1.html", content)
-        self.assertIn("club-harrow.html", content)
-
     def test_division_numbers_sort_numerically_not_lexically(self) -> None:
-        out2 = Path(self._tmpdir.name) / "out3"
-        out2.mkdir()
-        for n in [1, 2, 10]:
-            (out2 / f"division-{n}.html").write_text(
-                htmlreport._page(f"Division {n}", "")
-            )
-        (out2 / "all-matches.html").write_text(htmlreport._page("All matches", ""))
-        content = htmlreport.build_run_index(out2).read_text()
+        clubs = {"c": _club("C"), "d": _club("D")}
+        teams: list[fmodel.Team] = []
+        fixtures: list[fmodel.ScheduledFixture] = []
+        for n in (1, 2, 10):
+            home = fmodel.Team(division=n, club="c", index=1)
+            away = fmodel.Team(division=n, club="d", index=1)
+            teams += [home, away]
+            fixtures.append(_sf(home, away, date(2025, 9, 1)))
+
+        out2 = Path(self._tmpdir.name) / "out-div-sort"
+        content = _generate(fixtures, teams, clubs, out2).read_text()
+
         self.assertLess(
             content.index("division-1.html"), content.index("division-2.html")
         )
@@ -399,19 +398,6 @@ class TestGenerateReport(unittest.TestCase):
             self.assertIn('<span class="draft-label">DRAFT</span>', content)
             self.assertIn('<span class="run-name">2025-26 Season</span>', content)
 
-    def test_index_recovers_name_and_draft_from_disk_alone(self) -> None:
-        """Rebuilding index.html from scratch must recover the run name/draft status
-        from the other report files, since build_run_index has no other source for them."""
-        out2 = Path(self._tmpdir.name) / "out-rebuilt"
-        index_path = _generate(
-            self.fixtures, self.teams, self.clubs, out2, name="Test Run", draft=True
-        )
-        index_path.unlink()
-        rebuilt_path = htmlreport.build_run_index(out2)
-        content = rebuilt_path.read_text()
-        self.assertIn('<span class="draft-label">DRAFT</span>', content)
-        self.assertIn('<span class="run-name">Test Run</span>', content)
-
     def test_description_shown_on_every_page(self) -> None:
         out2 = Path(self._tmpdir.name) / "out-described"
         index_path = _generate(
@@ -431,20 +417,71 @@ class TestGenerateReport(unittest.TestCase):
             self.assertIn('<p class="description">', content)
             self.assertIn("Final schedule", content)
 
-    def test_index_recovers_description_from_disk_alone(self) -> None:
-        """Rebuilding index.html must recover the description from the other report files."""
-        out2 = Path(self._tmpdir.name) / "out-desc-rebuilt"
+    def test_head_title_is_bare_page_title_without_a_run_name(self) -> None:
+        # setUp generates with no run name and draft=False.
+        self.assertIn(
+            "<title>All matches</title>",
+            (self.output_dir / "all-matches.html").read_text(),
+        )
+        self.assertIn(
+            "<title>Division 1</title>",
+            (self.output_dir / "division-1.html").read_text(),
+        )
+        self.assertIn(
+            "<title>Harrow</title>",
+            (self.output_dir / "club-harrow.html").read_text(),
+        )
+        self.assertIn("<title>Fixtures</title>", self.index_path.read_text())
+
+    def test_head_title_carries_run_name_club_or_division_and_draft(self) -> None:
+        out2 = Path(self._tmpdir.name) / "out-head-title"
         index_path = _generate(
             self.fixtures,
             self.teams,
             self.clubs,
             out2,
-            description="Test description.",
+            name="2025-26 Season",
+            draft=True,
         )
-        index_path.unlink()
-        rebuilt_path = htmlreport.build_run_index(out2)
-        content = rebuilt_path.read_text()
-        self.assertIn('<p class="description">Test description.</p>', content)
+        self.assertIn("<title>2025-26 Season (DRAFT)</title>", index_path.read_text())
+        self.assertIn(
+            "<title>2025-26 Season – All matches (DRAFT)</title>",
+            (out2 / "all-matches.html").read_text(),
+        )
+        self.assertIn(
+            "<title>2025-26 Season – Division 1 (DRAFT)</title>",
+            (out2 / "division-1.html").read_text(),
+        )
+        self.assertIn(
+            "<title>2025-26 Season – Harrow (DRAFT)</title>",
+            (out2 / "club-harrow.html").read_text(),
+        )
+
+    def test_head_title_omits_draft_marker_for_non_draft_runs(self) -> None:
+        out2 = Path(self._tmpdir.name) / "out-head-title-final"
+        index_path = _generate(
+            self.fixtures, self.teams, self.clubs, out2, name="2025-26 Season"
+        )
+        self.assertIn("<title>2025-26 Season</title>", index_path.read_text())
+        self.assertIn(
+            "<title>2025-26 Season – Division 1</title>",
+            (out2 / "division-1.html").read_text(),
+        )
+
+    def test_nav_link_labels_stay_bare_despite_richer_head_titles(self) -> None:
+        out2 = Path(self._tmpdir.name) / "out-nav-labels"
+        index_path = _generate(
+            self.fixtures,
+            self.teams,
+            self.clubs,
+            out2,
+            name="2025-26 Season",
+            draft=True,
+        )
+        content = index_path.read_text()
+        self.assertIn(">All matches</a>", content)
+        self.assertIn(">Division 1</a>", content)
+        self.assertNotIn("2025-26 Season – Division 1</a>", content)
 
 
 class TestExcludedFixturesInReport(unittest.TestCase):
@@ -550,6 +587,10 @@ class TestWriteRunsIndex(unittest.TestCase):
         htmlreport.write_runs_index(self.runs_dir, self.index_path)
         content = self.index_path.read_text()
         self.assertIn("No runs yet", content)
+
+    def test_head_title_of_top_level_index(self) -> None:
+        htmlreport.write_runs_index(self.runs_dir, self.index_path)
+        self.assertIn("<title>Fixture runs</title>", self.index_path.read_text())
 
     def test_lists_runs_with_report_only(self) -> None:
         for name in ["2024-25-season", "2025-26-season"]:

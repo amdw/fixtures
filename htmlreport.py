@@ -14,10 +14,11 @@
 
 """Render a solved fixture list as a set of linked HTML pages.
 
-The index-building helpers here (build_run_index and write_runs_index) derive
-the per-run and top-level index.html pages purely from the report files present
-on disk, without needing the original fixtures/teams data. build_site.py calls
-them after re-rendering the report pages during a GitHub Pages deploy.
+generate_report writes each run's report pages plus that run's own index.html,
+all from the spec + solved fixtures it is handed. write_runs_index then derives
+the single top-level index.html from the run directories present on disk (their
+folder layout is the only input it needs). build_site.py drives both during a
+GitHub Pages deploy.
 """
 
 from __future__ import annotations
@@ -70,11 +71,6 @@ _STYLE = """
     }
 """
 
-_TITLE_RE = re.compile(r"<title>(.*?)</title>", re.DOTALL)
-_RUN_NAME_RE = re.compile(r'<span class="run-name">(.*?)</span>', re.DOTALL)
-_DESCRIPTION_RE = re.compile(r'<p class="description">(.*?)</p>', re.DOTALL)
-_DRAFT_MARKER = 'class="draft-label"'
-
 
 def slugify(value: str) -> str:
     """Turn a name into a filesystem/URL-safe slug, e.g. 'Willesden & Brent' -> 'willesden-brent'."""
@@ -86,12 +82,32 @@ def _fmt_date(d: date) -> str:
     return d.strftime("%a %d %b %Y")
 
 
+def _head_title(title: str, run_name: str, draft: bool, is_run_home: bool) -> str:
+    """The text for the page's <title> element.
+
+    A run's home page gets just the run name; every other page in the run gets
+    the run name followed by that page's own title (a club or division name, or
+    "All matches"). A trailing "(DRAFT)" is added whenever the run is a draft.
+    Pages with no run name (e.g. the top-level list of runs) fall back to their
+    own title alone.
+    """
+    if run_name and is_run_home:
+        text = run_name
+    elif run_name:
+        text = f"{run_name} – {title}"
+    else:
+        text = title
+    return f"{text} (DRAFT)" if draft else text
+
+
 def _page(
     title: str,
     body: str,
     run_name: str = "",
     draft: bool = False,
     description: str = "",
+    *,
+    is_run_home: bool = False,
 ) -> str:
     banner_html = ""
     if run_name or draft:
@@ -111,7 +127,7 @@ def _page(
         "<head>\n"
         '<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-        f"<title>{html.escape(title)}</title>\n"
+        f"<title>{html.escape(_head_title(title, run_name, draft, is_run_home))}</title>\n"
         f"<style>{_STYLE}</style>\n"
         "</head>\n"
         "<body>\n"
@@ -122,29 +138,6 @@ def _page(
         "</body>\n"
         "</html>\n"
     )
-
-
-def _page_title(path: Path) -> str:
-    """Recover the display title of a page previously written by _page(), for nav links."""
-    match = _TITLE_RE.search(path.read_text())
-    return html.unescape(match.group(1)) if match else path.stem
-
-
-def _page_run_name(path: Path) -> str:
-    """Recover the run name banner text of a page previously written by _page(), if any."""
-    match = _RUN_NAME_RE.search(path.read_text())
-    return html.unescape(match.group(1)) if match else ""
-
-
-def _page_is_draft(path: Path) -> bool:
-    """Recover whether a page previously written by _page() carried a draft banner."""
-    return _DRAFT_MARKER in path.read_text()
-
-
-def _page_description(path: Path) -> str:
-    """Recover the description of a page previously written by _page(), if any."""
-    match = _DESCRIPTION_RE.search(path.read_text())
-    return html.unescape(match.group(1)) if match else ""
 
 
 def _table_cell(cell: str) -> str:
@@ -384,8 +377,21 @@ def _nav(links: list[tuple[str, str]]) -> str:
     return f"<nav><ul>\n{items}</ul></nav>\n"
 
 
-def _division_number(path: Path) -> int:
-    return int(path.stem.removeprefix("division-"))
+def _run_index_body(
+    all_matches_links: list[tuple[str, str]],
+    division_links: list[tuple[str, str]],
+    club_links: list[tuple[str, str]],
+) -> str:
+    """The body of a run's index.html: three lists of (href, label) links, one
+    per section, in the order they'll appear on the page."""
+    return (
+        "<h2>All matches</h2>\n"
+        + _nav(all_matches_links)
+        + "<h2>Divisions</h2>\n"
+        + _nav(division_links)
+        + "<h2>Clubs</h2>\n"
+        + _nav(club_links)
+    )
 
 
 _MATCH_HEADERS = ["Date", "Home", "Away", "Venue", "Start", "Time Limit"]
@@ -414,13 +420,18 @@ def generate_report(
     fixtures: Collection[fmodel.ScheduledFixture],
     output_dir: Path,
 ) -> Path:
-    """Write all HTML report pages for a solved fixture list into output_dir.
+    """Write a solved fixture list's report pages, plus the run's index.html
+    linking them, into output_dir.
 
     `spec` supplies everything about the season except the solved dates -- teams,
     clubs, the run name/draft/description banners, each division's fixture scheme,
     and any excluded_fixtures (withheld from scheduling entirely, to be arranged
     in a later run; these are appended to the bottom of every relevant table with
     "TBC" in place of a date). `fixtures` is the solved schedule for that spec.
+
+    The index links whichever all-matches.csv / all-matches-by-team.csv exports
+    are already present in output_dir (csvreport.generate_csv writes them), so
+    run that first if the index should link them.
 
     Returns the path to the run's index.html.
     """
@@ -474,8 +485,16 @@ def generate_report(
             description,
         )
     )
+    all_matches_links: list[tuple[str, str]] = [("all-matches.html", "All matches")]
+    for csv_name, csv_label in (
+        ("all-matches.csv", "CSV: one row per match"),
+        ("all-matches-by-team.csv", "CSV: two rows per match, one per team"),
+    ):
+        if (output_dir / csv_name).exists():
+            all_matches_links.append((csv_name, csv_label))
 
     # One page per division
+    division_links: list[tuple[str, str]] = []
     for division in sorted(set(fixtures_by_division) | set(excluded_by_division)):
         division_club_ids = _home_club_ids_scheduled(
             fixtures_by_division[division]
@@ -495,8 +514,10 @@ def generate_report(
                 description,
             )
         )
+        division_links.append((f"division-{division}.html", f"Division {division}"))
 
     # One page per club: venue header, consolidated table, then one table per team
+    club_links: list[tuple[str, str]] = []
     for club_id in sorted(teams_by_club):
         club_name = clubs[club_id].name
         body = (
@@ -530,48 +551,24 @@ def generate_report(
                 _team_rows(team, team_fixtures, clubs)
                 + _excluded_team_rows(team, team_excluded, clubs),
             )
-        (output_dir / f"club-{slugify(club_id)}.html").write_text(
+        club_slug = slugify(club_id)
+        (output_dir / f"club-{club_slug}.html").write_text(
             _page(club_name, body, name, draft, description)
         )
+        club_links.append((f"club-{club_slug}.html", club_name))
+    club_links.sort()
 
-    return build_run_index(output_dir)
-
-
-def build_run_index(run_dir: Path) -> Path:
-    """(Re)build a run's index.html purely from the report files present in run_dir."""
-    all_matches_path = run_dir / "all-matches.html"
-    division_paths = sorted(run_dir.glob("division-*.html"), key=_division_number)
-    club_paths = sorted(run_dir.glob("club-*.html"))
-
-    body = "<h2>All matches</h2>\n"
-    all_matches_links: list[tuple[str, str]] = []
-    if all_matches_path.exists():
-        all_matches_links.append(("all-matches.html", _page_title(all_matches_path)))
-    for csv_name, csv_label in (
-        ("all-matches.csv", "CSV: one row per match"),
-        ("all-matches-by-team.csv", "CSV: two rows per match, one per team"),
-    ):
-        if (run_dir / csv_name).exists():
-            all_matches_links.append((csv_name, csv_label))
-    if all_matches_links:
-        body += _nav(all_matches_links)
-    body += "<h2>Divisions</h2>\n"
-    body += _nav([(p.name, _page_title(p)) for p in division_paths])
-    body += "<h2>Clubs</h2>\n"
-    body += _nav([(p.name, _page_title(p)) for p in club_paths])
-
-    # Run name/draft status aren't known here (this can run standalone, from
-    # just the files on disk), so recover them from an already-written page.
-    reference_page = next(
-        (p for p in [all_matches_path, *division_paths, *club_paths] if p.exists()),
-        None,
+    index_path = output_dir / "index.html"
+    index_path.write_text(
+        _page(
+            "Fixtures",
+            _run_index_body(all_matches_links, division_links, club_links),
+            name,
+            draft,
+            description,
+            is_run_home=True,
+        )
     )
-    run_name = _page_run_name(reference_page) if reference_page else ""
-    draft = _page_is_draft(reference_page) if reference_page else False
-    description = _page_description(reference_page) if reference_page else ""
-
-    index_path = run_dir / "index.html"
-    index_path.write_text(_page("Fixtures", body, run_name, draft, description))
     return index_path
 
 
