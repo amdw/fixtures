@@ -1022,6 +1022,25 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "exceeds"):
             fixturespec.load_spec(path)
 
+    def test_club_min_gap_days_parsed(self) -> None:
+        """A per-club min_gap_days lands in Parameters.club_min_gap_days, keyed by
+        club, and only for the clubs that set one."""
+        path = self._write(_MINIMAL_SPEC_NO_CONCURRENCY + "    min_gap_days: 3\n")
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.parameters.club_min_gap_days, {"hackney": 3})
+        # The spec-wide default is untouched.
+        self.assertEqual(spec.parameters.min_gap_days, 7)
+
+    def test_club_min_gap_days_absent(self) -> None:
+        path = self._write(_MINIMAL_SPEC)
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.parameters.club_min_gap_days, {})
+
+    def test_club_min_gap_days_negative_rejected(self) -> None:
+        path = self._write(_MINIMAL_SPEC_NO_CONCURRENCY + "    min_gap_days: -1\n")
+        with self.assertRaisesRegex(fixturespec.SpecError, "min_gap_days"):
+            fixturespec.load_spec(path)
+
     def test_fixed_fixture(self) -> None:
         path = self._write(
             _MINIMAL_SPEC + "fixed_fixtures:\n"

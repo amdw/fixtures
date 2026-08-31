@@ -417,6 +417,7 @@ def _parse_home_dates_used_value(
 _CLUB_CONSTRAINT_FIELD_KEYS = {
     "home_dates",
     "unavailable_away_dates",
+    "min_gap_days",
     "max_concurrent_matches",
     "home_dates_used",
     "teams",
@@ -440,6 +441,7 @@ _CLUB_CONSTRAINT_DEFAULTS_KEYS = {"max_concurrent_matches"}
 class _ClubConstraints:
     home_dates: dict[str, list[date]]
     unavailable_away_dates: dict[str, list[date]]
+    club_min_gap_days: dict[str, int]
     max_concurrent_matches: dict[str, fmodel.MaxConcurrentMatches]
     home_dates_used: dict[str, fmodel.HomeDatesUsedBounds]
     team_home_dates: dict[fmodel.Team, list[date]]
@@ -504,6 +506,7 @@ def _parse_club_constraints(
 
     home_dates: dict[str, list[date]] = {}
     unavailable_away_dates: dict[str, list[date]] = {}
+    club_min_gap_days: dict[str, int] = {}
     max_concurrent_matches: dict[str, fmodel.MaxConcurrentMatches] = {}
     home_dates_used: dict[str, fmodel.HomeDatesUsedBounds] = {}
     team_home_dates: dict[fmodel.Team, list[date]] = {}
@@ -529,6 +532,17 @@ def _parse_club_constraints(
             club_spec.get("unavailable_away_dates"),
             f"{path}: {section_name}[{club_id!r}].unavailable_away_dates",
         )
+
+        if "min_gap_days" in club_spec:
+            club_gap = _require_int(
+                club_spec["min_gap_days"],
+                f"{path}: {section_name}[{club_id!r}].min_gap_days",
+            )
+            if club_gap < 0:
+                raise SpecError(
+                    f"{path}: {section_name}[{club_id!r}].min_gap_days must be >= 0"
+                )
+            club_min_gap_days[club_id] = club_gap
 
         club_concurrency_by_scope = dict(default_concurrency_by_scope)
         if "max_concurrent_matches" in club_spec:
@@ -573,6 +587,7 @@ def _parse_club_constraints(
     return _ClubConstraints(
         home_dates=home_dates,
         unavailable_away_dates=unavailable_away_dates,
+        club_min_gap_days=club_min_gap_days,
         max_concurrent_matches=max_concurrent_matches,
         home_dates_used=home_dates_used,
         team_home_dates=team_home_dates,
@@ -992,6 +1007,8 @@ def load_spec(spec_path: str | Path) -> Spec:
     kwargs: dict[str, Any] = {}
     if "min_gap_days" in data:
         kwargs["min_gap_days"] = data["min_gap_days"]
+    if club_constraints.club_min_gap_days:
+        kwargs["club_min_gap_days"] = club_constraints.club_min_gap_days
     if club_constraints.max_concurrent_matches:
         kwargs["max_concurrent_matches"] = club_constraints.max_concurrent_matches
     if club_constraints.home_dates_used:

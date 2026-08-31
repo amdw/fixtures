@@ -85,6 +85,7 @@ club_constraints:
   albany:
     home_dates: [2025-09-01, 2025-09-15, 2025-09-29]
     unavailable_away_dates: [2025-12-25]
+    min_gap_days: 14
     max_concurrent_matches:
       home: 3
 

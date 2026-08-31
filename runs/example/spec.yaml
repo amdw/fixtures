@@ -362,6 +362,10 @@ club_constraints:
         overrides:
           '2025-11-13': 3
   harrow:
+    # Harrow's two teams share a venue and a player pool, so the club asks for a
+    # clear fortnight between any two of its matches -- a per-club override of the
+    # spec-wide min_gap_days (7).
+    min_gap_days: 14
     home_dates:
     - '2025-09-11'
     - '2025-09-18'

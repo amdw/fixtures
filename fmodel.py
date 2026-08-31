@@ -274,6 +274,12 @@ class Parameters:
     home_dates: Mapping[ClubT, list[date]]
     unavailable_away_dates: Mapping[ClubT, list[date]]
     min_gap_days: int = 7
+    # Per-club overrides of min_gap_days: a club listed here uses its value for the
+    # minimum gap between any two matches involving one of its teams, in place of
+    # the spec-wide min_gap_days. A club not present here uses min_gap_days as
+    # before. (This is about the every-team window; the per-group
+    # avoid_coscheduling_teams constraints are separate and always additive.)
+    club_min_gap_days: Mapping[ClubT, int] = dataclasses.field(default_factory=dict)
     max_concurrent_matches: Mapping[ClubT, MaxConcurrentMatches] = dataclasses.field(
         default_factory=dict
     )
@@ -358,6 +364,12 @@ class Parameters:
         if limit is not None and limit >= self._teams_per_club[club]:
             return None
         return limit
+
+    def min_gap_days_for(self, team: Team) -> int:
+        """The minimum gap in days between any two matches involving `team`: its
+        club's club_min_gap_days override if it has one, otherwise the spec-wide
+        min_gap_days."""
+        return self.club_min_gap_days.get(team.club, self.min_gap_days)
 
     def home_dates_for(self, team: Team) -> list[date]:
         """The candidate home dates for `team`: its own override if it has one
@@ -454,9 +466,12 @@ class _FixtureVars:
         """Each fixture's vars over all its candidate dates (exactly one is true)."""
         return self._by_fixture.values()
 
-    def per_team_dates(self) -> Iterable[Mapping[date, list[cp_model.IntVar]]]:
-        """Per team, its vars grouped by date (for the min-gap window limit)."""
-        return self._by_team_date.values()
+    def per_team_dates(
+        self,
+    ) -> Iterable[tuple[Team, Mapping[date, list[cp_model.IntVar]]]]:
+        """Per team, the team paired with its vars grouped by date (for the
+        min-gap window limit, whose length can vary by the team's club)."""
+        return self._by_team_date.items()
 
     def by_club_date(
         self, scope: ConcurrencyScope
@@ -608,12 +623,14 @@ def _build_model(params: Parameters) -> tuple[cp_model.CpModel, _FixtureVars]:
         # Each fixture must be scheduled exactly once
         model.add(cp_model.LinearExpr.Sum(scheduled_vars) == 1)
 
-    for team_date_vars in fixture_vars.per_team_dates():
+    for team, team_date_vars in fixture_vars.per_team_dates():
         # Each team can play at most one match in each window. date_windows groups
         # dates up to and including window_days apart, so pass min_gap_days - 1: a
         # gap of exactly min_gap_days (e.g. two matches a week apart when
-        # min_gap_days=7) must be allowed, not treated as a violation.
-        for window in date_windows(team_date_vars.keys(), params.min_gap_days - 1):
+        # min_gap_days=7) must be allowed, not treated as a violation. The gap can
+        # be overridden per club (club_min_gap_days), so resolve it per team.
+        gap = params.min_gap_days_for(team)
+        for window in date_windows(team_date_vars.keys(), gap - 1):
             window_vars = [v for d in window for v in team_date_vars[d]]
             model.add(cp_model.LinearExpr.Sum(window_vars) <= 1)
 
