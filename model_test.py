@@ -761,6 +761,110 @@ class TestLatestInternalMatchDate(unittest.TestCase):
         self.assertTrue(internal_dates)
 
 
+class TestClubLatestMatchDate(unittest.TestCase):
+    """Test cases for the per-club club_latest_match_date cutoff.
+
+    Division 1 here has 3 teams (A1, A2, B1). Club A hosts 4 mutually-conflicting
+    fixtures (A1 v A2, A2 v A1, A1 v B1, A2 v B1 -- any two share a team), so club
+    A's home_dates below has slack (6 dates) beyond that minimum of 4, leaving room
+    for a cutoff to remove some and still solve.
+    """
+
+    def _params(self, **kwargs: Any) -> fmodel.Parameters:
+        teams = [
+            fmodel.Team(division=1, club="A", index=1),
+            fmodel.Team(division=1, club="A", index=2),
+            fmodel.Team(division=1, club="B", index=1),
+        ]
+        home_dates = {
+            "A": [
+                date(2025, 1, 1),
+                date(2025, 1, 8),
+                date(2025, 2, 1),
+                date(2025, 2, 8),
+                date(2025, 3, 1),
+                date(2025, 3, 8),
+            ],
+            "B": [date(2025, 5, 1), date(2025, 6, 1)],
+        }
+        return fmodel.Parameters(
+            teams=teams,
+            home_dates=home_dates,
+            unavailable_away_dates={"A": [], "B": []},
+            max_concurrent_matches={"A": _home_limit(2), "B": _home_limit(1)},
+            min_gap_days=7,
+            **kwargs,
+        )
+
+    def test_cutoff_limits_the_clubs_home_dates(self) -> None:
+        """A cutoff on club A keeps every A-hosted fixture on or before it."""
+        params = self._params(club_latest_match_date={"A": date(2025, 2, 8)})
+        fixtures = list(fmodel.solve(params).fixtures)
+        a_hosted = [sf for sf in fixtures if sf.fixture.home_team.club == "A"]
+        self.assertEqual(len(a_hosted), 4)
+        for sf in a_hosted:
+            self.assertLessEqual(sf.date, date(2025, 2, 8))
+
+    def test_cutoff_also_blocks_the_club_playing_away(self) -> None:
+        """Club B's home dates are all after A's cutoff, so the B-hosted fixtures
+        against A teams (B1 v A1, B1 v A2) have no candidate date and are dropped;
+        the A-hosted fixtures still solve.
+        """
+        params = self._params(club_latest_match_date={"A": date(2025, 2, 8)})
+        fixtures = list(fmodel.solve(params).fixtures)
+        self.assertTrue(fixtures)
+        # B1 v A1 and B1 v A2 are the only B-hosted fixtures; both are dropped.
+        self.assertEqual(
+            [], [sf for sf in fixtures if sf.fixture.home_team.club == "B"]
+        )
+        self.assertEqual([], [sf for sf in fixtures if sf.date > date(2025, 2, 8)])
+
+    def test_other_clubs_unaffected(self) -> None:
+        """A cutoff on A doesn't constrain a fixture between two non-A teams."""
+        teams = [
+            fmodel.Team(division=1, club="A", index=1),
+            fmodel.Team(division=1, club="B", index=1),
+            fmodel.Team(division=1, club="C", index=1),
+        ]
+        params = fmodel.Parameters(
+            teams=teams,
+            home_dates={
+                "A": [date(2025, 1, 1), date(2025, 1, 15)],
+                "B": [date(2025, 6, 1)],
+                "C": [date(2025, 6, 8)],
+            },
+            unavailable_away_dates={"A": [], "B": [], "C": []},
+            min_gap_days=7,
+            club_latest_match_date={"A": date(2025, 2, 1)},
+        )
+        fixtures = list(fmodel.solve(params).fixtures)
+        bc = [
+            sf
+            for sf in fixtures
+            if {sf.fixture.home_team.club, sf.fixture.away_team.club} == {"B", "C"}
+        ]
+        self.assertEqual(len(bc), 2)
+        for sf in bc:
+            self.assertGreater(sf.date, date(2025, 2, 1))
+
+    def test_no_cutoff_by_default(self) -> None:
+        params = self._params()
+        fixtures = list(fmodel.solve(params).fixtures)
+        self.assertTrue(any(sf.date > date(2025, 4, 1) for sf in fixtures))
+
+    def test_fixed_fixture_after_cutoff_rejected(self) -> None:
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=1, club="A", index=2)
+        fixed = fmodel.ScheduledFixture(
+            fixture=fmodel.Fixture(home_team=a1, away_team=a2), date=date(2025, 3, 8)
+        )
+        params = self._params(
+            fixed_fixtures=[fixed], club_latest_match_date={"A": date(2025, 2, 8)}
+        )
+        with self.assertRaises(ValueError):
+            fmodel.solve(params)
+
+
 class TestEarliestMatchDate(unittest.TestCase):
     """Test cases for the earliest_match_date constraint.
 

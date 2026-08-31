@@ -75,7 +75,7 @@
     },
     "club_constraints": {
       "type": "object",
-      "description": "Every constraint that can vary by club -- home_dates, unavailable_away_dates, min_gap_days, max_concurrent_matches, home_dates_used, teams and avoid_coscheduling_teams -- keyed by that club's own ID, alongside an optional 'defaults' entry.",
+      "description": "Every constraint that can vary by club -- home_dates, unavailable_away_dates, min_gap_days, max_concurrent_matches, home_dates_used, latest_match_date, teams and avoid_coscheduling_teams -- keyed by that club's own ID, alongside an optional 'defaults' entry.",
       "additionalProperties": { "$ref": "#/$defs/club_constraints_entry" },
       "properties": {
         "defaults": {
@@ -268,6 +268,10 @@
               "description": "At most this many distinct home dates may host a match."
             }
           }
+        },
+        "latest_match_date": {
+          "$ref": "#/$defs/date",
+          "description": "Latest date any fixture involving one of this club's teams -- home or away -- may be scheduled. Useful when a club's venue or players stop being available partway through the common season window (e.g. a hall booking that ends earlier than most). Omit for no cutoff. Distinct from the spec-wide 'latest_internal_match_date', which only limits same-club derby fixtures; this limits every match the club plays. Any 'fixed_fixtures' entry involving the club must not be dated after it."
         },
         "teams": {
           "type": "object",
