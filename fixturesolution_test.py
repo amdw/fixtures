@@ -53,29 +53,37 @@ class TestSaveAndLoadSolution(unittest.TestCase):
             _sf(_ALBANY_1, _HACKNEY_1, date(2025, 9, 1)),
             _sf(_HACKNEY_2, _ALBANY_1, date(2025, 9, 15)),
         ]
-        fixturesolution.save_solution(fixtures, _TEAM_IDS, self.path)
+        fixturesolution.save_solution(
+            fmodel.SolveResult(fixtures), _TEAM_IDS, self.path
+        )
 
         loaded = fixturesolution.load_solution(
             self.path, [_ALBANY_1, _HACKNEY_1, _HACKNEY_2], _TEAM_IDS
         )
-        self.assertCountEqual(loaded, fixtures)
+        self.assertCountEqual(loaded.fixtures, fixtures)
+        self.assertEqual(loaded.model_stats, "")
+        self.assertEqual(loaded.solve_stats, "")
 
     def test_load_recovers_division_and_name_override(self) -> None:
         """Loading resolves each entry against the given teams, so fields not stored
         in the solution file itself (division, name_override) come back correctly."""
         fixturesolution.save_solution(
-            [_sf(_HACKNEY_2, _ALBANY_1, date(2025, 9, 15))], _TEAM_IDS, self.path
+            fmodel.SolveResult([_sf(_HACKNEY_2, _ALBANY_1, date(2025, 9, 15))]),
+            _TEAM_IDS,
+            self.path,
         )
 
         [loaded] = fixturesolution.load_solution(
             self.path, [_ALBANY_1, _HACKNEY_1, _HACKNEY_2], _TEAM_IDS
-        )
+        ).fixtures
         self.assertEqual(loaded.fixture.home_team, _HACKNEY_2)
         self.assertEqual(loaded.fixture.home_team.name_override, "Hackney Herons")
 
     def test_written_format_uses_team_ids(self) -> None:
         fixturesolution.save_solution(
-            [_sf(_ALBANY_1, _HACKNEY_1, date(2025, 9, 1))], _TEAM_IDS, self.path
+            fmodel.SolveResult([_sf(_ALBANY_1, _HACKNEY_1, date(2025, 9, 1))]),
+            _TEAM_IDS,
+            self.path,
         )
         contents = self.path.read_text()
         self.assertIn("home: albany-1", contents)
@@ -92,7 +100,9 @@ class TestSaveAndLoadSolution(unittest.TestCase):
             _sf(_ALBANY_1, _HACKNEY_1, shared_date),
             _sf(_HACKNEY_2, _ALBANY_1, shared_date),
         ]
-        fixturesolution.save_solution(fixtures, _TEAM_IDS, self.path)
+        fixturesolution.save_solution(
+            fmodel.SolveResult(fixtures), _TEAM_IDS, self.path
+        )
         contents = self.path.read_text()
         self.assertNotIn("&id", contents)
         self.assertNotIn("*id", contents)
@@ -101,7 +111,7 @@ class TestSaveAndLoadSolution(unittest.TestCase):
     def test_save_unknown_team(self) -> None:
         with self.assertRaisesRegex(fixturesolution.SolutionError, "albany"):
             fixturesolution.save_solution(
-                [_sf(_ALBANY_1, _HACKNEY_1, date(2025, 9, 1))],
+                fmodel.SolveResult([_sf(_ALBANY_1, _HACKNEY_1, date(2025, 9, 1))]),
                 {"hackney-1": ("hackney", 1)},
                 self.path,
             )
@@ -136,11 +146,60 @@ class TestSaveAndLoadSolution(unittest.TestCase):
             fixturesolution.load_solution(self.path, [_ALBANY_1, _HACKNEY_1], _TEAM_IDS)
 
     def test_empty_fixtures_list(self) -> None:
-        fixturesolution.save_solution([], _TEAM_IDS, self.path)
+        fixturesolution.save_solution(fmodel.SolveResult([]), _TEAM_IDS, self.path)
         loaded = fixturesolution.load_solution(
             self.path, [_ALBANY_1, _HACKNEY_1], _TEAM_IDS
         )
-        self.assertEqual(loaded, [])
+        self.assertEqual(loaded.fixtures, [])
+
+    def test_stats_round_trip(self) -> None:
+        model_stats = "satisfaction model '':\n#Variables: 42\n"
+        solve_stats = "CpSolverResponse summary:\nstatus: OPTIMAL\n"
+        fixturesolution.save_solution(
+            fmodel.SolveResult(
+                [_sf(_ALBANY_1, _HACKNEY_1, date(2025, 9, 1))],
+                model_stats=model_stats,
+                solve_stats=solve_stats,
+            ),
+            _TEAM_IDS,
+            self.path,
+        )
+
+        loaded = fixturesolution.load_solution(
+            self.path, [_ALBANY_1, _HACKNEY_1], _TEAM_IDS
+        )
+        self.assertEqual(loaded.model_stats, model_stats)
+        self.assertEqual(loaded.solve_stats, solve_stats)
+
+    def test_stats_written_as_literal_block_scalars(self) -> None:
+        """The multi-line stats blocks should be written as readable YAML literal
+        blocks (|), not one-liners with escaped \\n."""
+        fixturesolution.save_solution(
+            fmodel.SolveResult(
+                [_sf(_ALBANY_1, _HACKNEY_1, date(2025, 9, 1))],
+                model_stats="line one\nline two\n",
+                solve_stats="status: OPTIMAL\n",
+            ),
+            _TEAM_IDS,
+            self.path,
+        )
+        contents = self.path.read_text()
+        self.assertIn("model: |", contents)
+        self.assertIn("    line one\n", contents)
+        self.assertNotIn("\\n", contents)
+
+    def test_stats_key_omitted_when_no_stats_given(self) -> None:
+        fixturesolution.save_solution(
+            fmodel.SolveResult([_sf(_ALBANY_1, _HACKNEY_1, date(2025, 9, 1))]),
+            _TEAM_IDS,
+            self.path,
+        )
+        self.assertNotIn("stats:", self.path.read_text())
+
+    def test_stats_not_a_mapping(self) -> None:
+        self.path.write_text("fixtures: []\nstats: nope\n")
+        with self.assertRaisesRegex(fixturesolution.SolutionError, "stats"):
+            fixturesolution.load_solution(self.path, [_ALBANY_1, _HACKNEY_1], _TEAM_IDS)
 
 
 if __name__ == "__main__":

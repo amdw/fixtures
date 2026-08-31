@@ -32,7 +32,7 @@ def _sf(home: fmodel.Team, away: fmodel.Team, d: date) -> fmodel.ScheduledFixtur
 
 
 def _generate(
-    fixtures: Collection[fmodel.ScheduledFixture],
+    result: fmodel.SolveResult,
     teams: Collection[fmodel.Team],
     clubs: Mapping[str, fmodel.Club],
     output_dir: Path,
@@ -44,8 +44,8 @@ def _generate(
     division_schemes: Mapping[int, fmodel.FixtureScheme] | None = None,
 ) -> Path:
     """Assemble a minimal fixturespec.Spec from the loose pieces these tests work
-    with and render its HTML report, so the tests need not build a full
-    fmodel.Parameters just to exercise htmlreport.generate_report()."""
+    with and render `result` as its HTML report, so the tests need not build a
+    full fmodel.Parameters just to exercise htmlreport.generate_report()."""
     parameters = fmodel.Parameters(
         teams=list(teams),
         home_dates={},
@@ -60,7 +60,7 @@ def _generate(
         draft=draft,
         description=description,
     )
-    return htmlreport.generate_report(spec, fixtures, output_dir)
+    return htmlreport.generate_report(spec, result, output_dir)
 
 
 def _club(
@@ -137,7 +137,7 @@ class TestGenerateReport(unittest.TestCase):
         ]
 
         self.index_path = _generate(
-            self.fixtures, self.teams, self.clubs, self.output_dir
+            fmodel.SolveResult(self.fixtures), self.teams, self.clubs, self.output_dir
         )
 
     def test_returns_index_path(self) -> None:
@@ -221,7 +221,7 @@ class TestGenerateReport(unittest.TestCase):
     def test_single_round_division_scheme_shown_on_its_pages_only(self) -> None:
         out2 = Path(self._tmpdir.name) / "out-scheme"
         _generate(
-            self.fixtures,
+            fmodel.SolveResult(self.fixtures),
             self.teams,
             self.clubs,
             out2,
@@ -308,7 +308,7 @@ class TestGenerateReport(unittest.TestCase):
             (self.output_dir / name).write_text("date\n")
 
         content = _generate(
-            self.fixtures, self.teams, self.clubs, self.output_dir
+            fmodel.SolveResult(self.fixtures), self.teams, self.clubs, self.output_dir
         ).read_text()
 
         self.assertIn('href="all-matches.csv"', content)
@@ -322,13 +322,65 @@ class TestGenerateReport(unittest.TestCase):
         # setUp's _generate() writes HTML pages only, no CSV files.
         self.assertNotIn(".csv", self.index_path.read_text())
 
+    def test_run_index_shows_solver_diagnostics_when_stats_given(self) -> None:
+        content = _generate(
+            fmodel.SolveResult(
+                self.fixtures,
+                model_stats="satisfaction model '':\n#Variables: 42\n",
+                solve_stats="CpSolverResponse summary:\nstatus: OPTIMAL\n",
+            ),
+            self.teams,
+            self.clubs,
+            self.output_dir,
+        ).read_text()
+
+        self.assertIn(
+            '<details class="solver-diagnostics">\n'
+            "<summary>Solver diagnostics</summary>",
+            content,
+        )
+        self.assertIn("<h3>Model</h3>\n<pre>satisfaction model", content)
+        self.assertIn("<h3>Solve</h3>\n<pre>CpSolverResponse summary", content)
+        # Diagnostics sit below the run's navigation lists.
+        self.assertLess(
+            content.index("<h2>Clubs</h2>"),
+            content.index('<details class="solver-diagnostics">'),
+        )
+
+    def test_run_index_escapes_solver_diagnostics_text(self) -> None:
+        content = _generate(
+            fmodel.SolveResult(self.fixtures, model_stats="a <b> & c\n"),
+            self.teams,
+            self.clubs,
+            self.output_dir,
+        ).read_text()
+        self.assertIn("a &lt;b&gt; &amp; c", content)
+
+    def test_run_index_omits_a_missing_diagnostics_half(self) -> None:
+        content = _generate(
+            fmodel.SolveResult(self.fixtures, solve_stats="status: OPTIMAL\n"),
+            self.teams,
+            self.clubs,
+            self.output_dir,
+        ).read_text()
+        self.assertIn("<summary>Solver diagnostics</summary>", content)
+        self.assertIn("<h3>Solve</h3>", content)
+        self.assertNotIn("<h3>Model</h3>", content)
+
+    def test_run_index_has_no_solver_diagnostics_by_default(self) -> None:
+        self.assertNotIn(
+            '<details class="solver-diagnostics">', self.index_path.read_text()
+        )
+
     def test_club_page_links_per_club_and_per_team_csv_when_present(self) -> None:
         # generate_report links the per-club / per-team exports it finds already
         # written into the output dir (csvreport.generate_csv writes them).
         for name in ("club-harrow-dates.csv", "team-harrow-1.csv", "team-harrow-2.csv"):
             (self.output_dir / name).write_text("date\n")
 
-        _generate(self.fixtures, self.teams, self.clubs, self.output_dir)
+        _generate(
+            fmodel.SolveResult(self.fixtures), self.teams, self.clubs, self.output_dir
+        )
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
 
         # Per-club link sits under the consolidated table, ahead of the first team.
@@ -365,7 +417,9 @@ class TestGenerateReport(unittest.TestCase):
             fixtures.append(_sf(home, away, date(2025, 9, 1)))
 
         out2 = Path(self._tmpdir.name) / "out-div-sort"
-        content = _generate(fixtures, teams, clubs, out2).read_text()
+        content = _generate(
+            fmodel.SolveResult(fixtures), teams, clubs, out2
+        ).read_text()
 
         self.assertLess(
             content.index("division-1.html"), content.index("division-2.html")
@@ -378,7 +432,7 @@ class TestGenerateReport(unittest.TestCase):
         lonely_clubs = {"lonely-fc": _club("Lonely FC")}
         lonely = fmodel.Team(division=3, club="lonely-fc", index=1)
         out2 = Path(self._tmpdir.name) / "out2"
-        _generate([], [lonely], lonely_clubs, out2)
+        _generate(fmodel.SolveResult([]), [lonely], lonely_clubs, out2)
         content = (out2 / "club-lonely-fc.html").read_text()
         self.assertIn("No matches", content)
 
@@ -398,7 +452,7 @@ class TestGenerateReport(unittest.TestCase):
     def test_run_name_and_draft_shown_on_every_page(self) -> None:
         out2 = Path(self._tmpdir.name) / "out-named"
         index_path = _generate(
-            self.fixtures,
+            fmodel.SolveResult(self.fixtures),
             self.teams,
             self.clubs,
             out2,
@@ -419,7 +473,7 @@ class TestGenerateReport(unittest.TestCase):
     def test_description_shown_on_every_page(self) -> None:
         out2 = Path(self._tmpdir.name) / "out-described"
         index_path = _generate(
-            self.fixtures,
+            fmodel.SolveResult(self.fixtures),
             self.teams,
             self.clubs,
             out2,
@@ -454,7 +508,7 @@ class TestGenerateReport(unittest.TestCase):
     def test_head_title_carries_run_name_club_or_division_and_draft(self) -> None:
         out2 = Path(self._tmpdir.name) / "out-head-title"
         index_path = _generate(
-            self.fixtures,
+            fmodel.SolveResult(self.fixtures),
             self.teams,
             self.clubs,
             out2,
@@ -478,7 +532,11 @@ class TestGenerateReport(unittest.TestCase):
     def test_head_title_omits_draft_marker_for_non_draft_runs(self) -> None:
         out2 = Path(self._tmpdir.name) / "out-head-title-final"
         index_path = _generate(
-            self.fixtures, self.teams, self.clubs, out2, name="2025-26 Season"
+            fmodel.SolveResult(self.fixtures),
+            self.teams,
+            self.clubs,
+            out2,
+            name="2025-26 Season",
         )
         self.assertIn("<title>2025-26 Season</title>", index_path.read_text())
         self.assertIn(
@@ -489,7 +547,7 @@ class TestGenerateReport(unittest.TestCase):
     def test_nav_link_labels_stay_bare_despite_richer_head_titles(self) -> None:
         out2 = Path(self._tmpdir.name) / "out-nav-labels"
         index_path = _generate(
-            self.fixtures,
+            fmodel.SolveResult(self.fixtures),
             self.teams,
             self.clubs,
             out2,
@@ -526,7 +584,7 @@ class TestExcludedFixturesInReport(unittest.TestCase):
         self.excluded = [fmodel.Fixture(home_team=self.harrow2, away_team=self.ealing1)]
 
         self.index_path = _generate(
-            self.fixtures,
+            fmodel.SolveResult(self.fixtures),
             self.teams,
             self.clubs,
             self.output_dir,
@@ -568,7 +626,7 @@ class TestExcludedFixturesInReport(unittest.TestCase):
 
     def test_no_excluded_fixtures_by_default(self) -> None:
         out2 = Path(self._tmpdir.name) / "out-no-excluded"
-        _generate(self.fixtures, self.teams, self.clubs, out2)
+        _generate(fmodel.SolveResult(self.fixtures), self.teams, self.clubs, out2)
         content = (out2 / "all-matches.html").read_text()
         self.assertNotIn("TBC", content)
 
@@ -585,7 +643,13 @@ class TestExcludedFixturesInReport(unittest.TestCase):
         ]
 
         out2 = Path(self._tmpdir.name) / "out-div2"
-        _generate(self.fixtures, teams, clubs, out2, excluded_fixtures=excluded)
+        _generate(
+            fmodel.SolveResult(self.fixtures),
+            teams,
+            clubs,
+            out2,
+            excluded_fixtures=excluded,
+        )
         div2 = (out2 / "division-2.html").read_text()
         self.assertIn("TBC", div2)
         self.assertIn("Hendon 1", div2)

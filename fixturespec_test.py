@@ -1554,7 +1554,7 @@ club_constraints:
             "      away: albany-2\n"
         )
         spec = fixturespec.load_spec(path)
-        fixtures = list(fmodel.solve(spec.parameters))
+        fixtures = list(fmodel.solve(spec.parameters).fixtures)
         albany1 = next(
             t for t in spec.parameters.teams if t.club == "albany" and t.index == 1
         )
@@ -1599,7 +1599,7 @@ club_constraints:
             _THREE_TEAM_SPEC + "latest_internal_match_date: 2025-10-15\n"
         )
         spec = fixturespec.load_spec(path)
-        fixtures = list(fmodel.solve(spec.parameters))
+        fixtures = list(fmodel.solve(spec.parameters).fixtures)
         albany1 = next(
             t for t in spec.parameters.teams if t.club == "albany" and t.index == 1
         )
@@ -1619,7 +1619,7 @@ club_constraints:
         """A loaded spec's Parameters should be usable directly with fmodel.solve()."""
         path = self._write(_MINIMAL_SPEC)
         spec = fixturespec.load_spec(path)
-        fixtures = list(fmodel.solve(spec.parameters))
+        fixtures = list(fmodel.solve(spec.parameters).fixtures)
         self.assertEqual(len(fixtures), 2)  # Albany v Hackney and Hackney v Albany
 
 

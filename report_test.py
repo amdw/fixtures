@@ -108,6 +108,14 @@ class TestReport(unittest.TestCase):
         self.assertIn('href="club-albany-dates.csv"', club_page)
         self.assertIn('href="team-albany-1.csv"', club_page)
 
+    def test_run_index_shows_solver_diagnostics_from_solution(self) -> None:
+        report.report(self.spec_path, self.solution_path, self.output_dir)
+
+        index = (self.output_dir / "index.html").read_text()
+        self.assertIn("<summary>Solver diagnostics</summary>", index)
+        self.assertIn("satisfaction model", index)
+        self.assertIn("CpSolverResponse summary", index)
+
     def test_does_not_require_resolving(self) -> None:
         """Deleting nothing but the intermediate solving step should still work:
         report.py only reads solution.yaml, never calls fmodel.solve()."""
