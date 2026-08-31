@@ -19,7 +19,6 @@ import dataclasses
 import enum
 import functools
 import itertools
-import logging
 from collections.abc import Collection, Iterable, Mapping, MutableMapping
 from datetime import date
 from typing import Any
@@ -27,8 +26,6 @@ from typing import Any
 from ortools.sat.python import cp_model
 
 import berger
-
-logger = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -60,6 +57,25 @@ class Fixture:
 class ScheduledFixture:
     fixture: Fixture
     date: date
+
+
+@dataclasses.dataclass(frozen=True)
+class SolveResult:
+    """A solved schedule plus the OR-Tools model and solver summary text
+    (model.model_stats() and solver.response_stats()).
+
+    This is both what solve() returns and, via fixturesolution, exactly what a
+    solution.yaml round-trips to: save_solution() writes one out and
+    load_solution() reads one back, so the type is the single description of a
+    solution's on-disk contents. The stats are plain strings -- persisting and
+    rendering them (fixturesolution.save_solution into solution.yaml, the report's
+    "Solver diagnostics" section) needs no structure. They default to "" for a
+    solution file written before the text was recorded.
+    """
+
+    fixtures: list[ScheduledFixture]
+    model_stats: str = ""
+    solve_stats: str = ""
 
 
 ClubT = str
@@ -375,13 +391,81 @@ def date_windows(dates: Collection[date], window_days: int) -> list[frozenset[da
     return result
 
 
+class _FixtureVars:
+    """Every candidate (fixture, date) decision variable in the model, kept in the
+    several grouped forms the constraints read them back in.
+
+    _build_model calls register() once per candidate (fixture, date) as it creates
+    the variables; everything after that is read-only through the accessors. The
+    point is to keep the fan-out -- which groups a new variable belongs to -- in
+    one place, so _build_model and its constraint helpers read as constraints
+    rather than bookkeeping.
+    """
+
+    def __init__(self) -> None:
+        self._by_fixture_date: dict[tuple[Fixture, date], cp_model.IntVar] = {}
+        self._by_fixture: MutableMapping[Fixture, list[cp_model.IntVar]] = (
+            collections.defaultdict(list)
+        )
+        self._by_team_date: MutableMapping[
+            Team, MutableMapping[date, list[cp_model.IntVar]]
+        ] = collections.defaultdict(lambda: collections.defaultdict(list))
+        # One (club, date) -> vars map per ConcurrencyScope (see ConcurrencyScope
+        # for what each counts).
+        self._by_club_date: Mapping[
+            ConcurrencyScope, MutableMapping[tuple[ClubT, date], list[cp_model.IntVar]]
+        ] = {scope: collections.defaultdict(list) for scope in ConcurrencyScope}
+
+    def register(
+        self, fixture: Fixture, match_date: date, var: cp_model.IntVar
+    ) -> None:
+        """Record `var` as the decision variable for scheduling `fixture` on
+        `match_date`, adding it to each grouped view. Raises if that (fixture,
+        date) has already been registered (callers rely on the 1:1 mapping)."""
+        key = (fixture, match_date)
+        if key in self._by_fixture_date:
+            raise ValueError(
+                f"Duplicate variable for fixture {fixture.home_team.name} vs "
+                f"{fixture.away_team.name} on {match_date.isoformat()}"
+            )
+        home, away = fixture.home_team, fixture.away_team
+        self._by_fixture_date[key] = var
+        self._by_fixture[fixture].append(var)
+        self._by_team_date[home][match_date].append(var)
+        self._by_team_date[away][match_date].append(var)
+        self._by_club_date[ConcurrencyScope.HOME][home.club, match_date].append(var)
+        self._by_club_date[ConcurrencyScope.AWAY][away.club, match_date].append(var)
+        self._by_club_date[ConcurrencyScope.ANY][home.club, match_date].append(var)
+        if away.club != home.club:
+            self._by_club_date[ConcurrencyScope.ANY][away.club, match_date].append(var)
+
+    def fixture_date_vars(self) -> Mapping[tuple[Fixture, date], cp_model.IntVar]:
+        """The master map: the single bool var for each candidate (fixture, date)."""
+        return self._by_fixture_date
+
+    def per_fixture(self) -> Iterable[list[cp_model.IntVar]]:
+        """Each fixture's vars over all its candidate dates (exactly one is true)."""
+        return self._by_fixture.values()
+
+    def per_team_dates(self) -> Iterable[Mapping[date, list[cp_model.IntVar]]]:
+        """Per team, its vars grouped by date (for the min-gap window limit)."""
+        return self._by_team_date.values()
+
+    def by_club_date(
+        self, scope: ConcurrencyScope
+    ) -> Mapping[tuple[ClubT, date], list[cp_model.IntVar]]:
+        """Per (club, date), the vars counting towards `scope` (see ConcurrencyScope)."""
+        return self._by_club_date[scope]
+
+
 def _add_home_dates_used_constraints(
     model: cp_model.CpModel,
     home_dates_used: Mapping[ClubT, HomeDatesUsedBounds],
-    vars_by_club_home_date: Mapping[tuple[str, date], list[cp_model.IntVar]],
+    fixture_vars: _FixtureVars,
 ) -> None:
     """For each club in home_dates_used, bound the number of its home dates that
     end up hosting at least one match (below by `minimum`, above by `maximum`)."""
+    vars_by_club_home_date = fixture_vars.by_club_date(ConcurrencyScope.HOME)
     # Collect the set of home dates per club that appear in the variable map
     clubs_home_dates: MutableMapping[str, list[date]] = collections.defaultdict(list)
     for club, d in vars_by_club_home_date:
@@ -411,7 +495,7 @@ def _add_home_dates_used_constraints(
 def _add_avoid_coscheduling_constraints(
     model: cp_model.CpModel,
     constraints: Collection[AvoidCoschedulingConstraint],
-    vars_by_fixture_date: Mapping[tuple[Fixture, date], cp_model.IntVar],
+    fixture_vars: _FixtureVars,
 ) -> None:
     """For each AvoidCoschedulingConstraint, ensure at most one match involving any
     of its teams is scheduled within any window of within_days days. The constraint's
@@ -433,7 +517,7 @@ def _add_avoid_coscheduling_constraints(
         vars_by_date: MutableMapping[date, list[cp_model.IntVar]] = (
             collections.defaultdict(list)
         )
-        for (fixture, d), var in vars_by_fixture_date.items():
+        for (fixture, d), var in fixture_vars.fixture_date_vars().items():
             if (count_home and fixture.home_team in team_set) or (
                 count_away and fixture.away_team in team_set
             ):
@@ -448,9 +532,10 @@ def _add_avoid_coscheduling_constraints(
 def _add_fixed_fixtures_constraints(
     model: cp_model.CpModel,
     fixed_fixtures: Collection[ScheduledFixture],
-    vars_by_fixture_date: Mapping[tuple[Fixture, date], cp_model.IntVar],
+    fixture_vars: _FixtureVars,
 ) -> None:
     """Force each pre-specified fixture onto its given date."""
+    vars_by_fixture_date = fixture_vars.fixture_date_vars()
     for scheduled in fixed_fixtures:
         key = (scheduled.fixture, scheduled.date)
         var = vars_by_fixture_date.get(key)
@@ -469,28 +554,11 @@ def _add_fixed_fixtures_constraints(
         model.add(var == 1)
 
 
-def solve(params: Parameters) -> Collection[ScheduledFixture]:
+def _build_model(params: Parameters) -> tuple[cp_model.CpModel, _FixtureVars]:
+    """Build the CP-SAT model for params, returning it with the _FixtureVars the
+    schedule is read back off after solving."""
     model = cp_model.CpModel()
-
-    vars_by_fixture: MutableMapping[Fixture, list[cp_model.IntVar]] = (
-        collections.defaultdict(list)
-    )
-    vars_by_fixture_date: MutableMapping[tuple[Fixture, date], cp_model.IntVar] = {}
-    vars_by_team_date: MutableMapping[
-        Team, MutableMapping[date, list[cp_model.IntVar]]
-    ] = collections.defaultdict(lambda: collections.defaultdict(list))
-    vars_by_club_home_date: MutableMapping[tuple[str, date], list[cp_model.IntVar]] = (
-        collections.defaultdict(list)
-    )
-    vars_by_club_away_date: MutableMapping[tuple[str, date], list[cp_model.IntVar]] = (
-        collections.defaultdict(list)
-    )
-    # Every match either club's teams play on a date (an internal match, both teams
-    # the same club's, appears once): the ConcurrencyScope.ANY counterpart of the
-    # home/away maps above.
-    vars_by_club_any_date: MutableMapping[tuple[str, date], list[cp_model.IntVar]] = (
-        collections.defaultdict(list)
-    )
+    fixture_vars = _FixtureVars()
 
     excluded = set(params.excluded_fixtures)
     fixed_fixture_keys = {(sf.fixture, sf.date) for sf in params.fixed_fixtures}
@@ -520,74 +588,76 @@ def solve(params: Parameters) -> Collection[ScheduledFixture]:
                 var = model.new_bool_var(
                     f"{home_team.name}_vs_{away_team.name}_{match_date.isoformat()}"
                 )
-                key = (fixture, match_date)
-                if key in vars_by_fixture_date:
-                    raise ValueError(
-                        f"Duplicate variable for fixture {fixture.home_team.name} vs "
-                        f"{fixture.away_team.name} on {match_date.isoformat()}"
-                    )
-                vars_by_fixture[fixture].append(var)
-                vars_by_fixture_date[key] = var
-                vars_by_team_date[home_team][match_date].append(var)
-                vars_by_team_date[away_team][match_date].append(var)
-                vars_by_club_home_date[(home_team.club, match_date)].append(var)
-                vars_by_club_away_date[(away_team.club, match_date)].append(var)
-                vars_by_club_any_date[(home_team.club, match_date)].append(var)
-                if away_team.club != home_team.club:
-                    vars_by_club_any_date[(away_team.club, match_date)].append(var)
+                fixture_vars.register(fixture, match_date, var)
 
-    for fixture_vars in vars_by_fixture.values():
+    for scheduled_vars in fixture_vars.per_fixture():
         # Each fixture must be scheduled exactly once
-        model.add(cp_model.LinearExpr.Sum(fixture_vars) == 1)
+        model.add(cp_model.LinearExpr.Sum(scheduled_vars) == 1)
 
-    for team_vars_by_date in vars_by_team_date.values():
+    for team_date_vars in fixture_vars.per_team_dates():
         # Each team can play at most one match in each window. date_windows groups
         # dates up to and including window_days apart, so pass min_gap_days - 1: a
         # gap of exactly min_gap_days (e.g. two matches a week apart when
         # min_gap_days=7) must be allowed, not treated as a violation.
-        for window in date_windows(team_vars_by_date.keys(), params.min_gap_days - 1):
-            window_vars = [v for d in window for v in team_vars_by_date[d]]
+        for window in date_windows(team_date_vars.keys(), params.min_gap_days - 1):
+            window_vars = [v for d in window for v in team_date_vars[d]]
             model.add(cp_model.LinearExpr.Sum(window_vars) <= 1)
 
-    for scope, vars_by_club_date in (
-        (ConcurrencyScope.HOME, vars_by_club_home_date),
-        (ConcurrencyScope.AWAY, vars_by_club_away_date),
-        (ConcurrencyScope.ANY, vars_by_club_any_date),
-    ):
-        for (club, match_date), club_date_vars in vars_by_club_date.items():
+    for scope in ConcurrencyScope:
+        for (club, match_date), club_date_vars in fixture_vars.by_club_date(
+            scope
+        ).items():
             # Each club may play at most max_concurrent_matches matches of this
             # scope per date (None means unlimited: no constraint to add).
             max_matches = params.max_concurrent_matches_for(club, scope, match_date)
             if max_matches is not None:
                 model.add(cp_model.LinearExpr.Sum(club_date_vars) <= max_matches)
 
-    _add_home_dates_used_constraints(
-        model, params.home_dates_used, vars_by_club_home_date
-    )
+    _add_home_dates_used_constraints(model, params.home_dates_used, fixture_vars)
     _add_avoid_coscheduling_constraints(
-        model, params.avoid_coscheduling_teams, vars_by_fixture_date
+        model, params.avoid_coscheduling_teams, fixture_vars
     )
-    _add_fixed_fixtures_constraints(model, params.fixed_fixtures, vars_by_fixture_date)
+    _add_fixed_fixtures_constraints(model, params.fixed_fixtures, fixture_vars)
 
-    # Guarded by isEnabledFor, not just left to logger.info's own lazy %-formatting,
-    # since model_stats()/response_stats() themselves have a real (if modest) cost to
-    # compute -- not just to format -- and that argument is evaluated eagerly either way.
-    if logger.isEnabledFor(logging.INFO):
-        logger.info("Model stats:\n%s", model.model_stats())
+    return model, fixture_vars
+
+
+def _extract_fixtures(
+    solver: cp_model.CpSolver, fixture_vars: _FixtureVars
+) -> list[ScheduledFixture]:
+    """The scheduled fixtures of a solved model: every (fixture, date) whose
+    bool var the solver set to true."""
+    return [
+        ScheduledFixture(fixture=fixture, date=match_date)
+        for (fixture, match_date), var in fixture_vars.fixture_date_vars().items()
+        if solver.BooleanValue(var)
+    ]
+
+
+def solve(params: Parameters) -> SolveResult:
+    """Solve params, returning the scheduled fixtures together with the OR-Tools
+    model and solver summary text (see SolveResult). Raises ValueError if the
+    solver finds no feasible schedule.
+
+    The two stats blocks are always captured -- they're cheap next to solving
+    itself -- so callers can persist them next to the schedule
+    (fixturesolution.save_solution writes them into solution.yaml, and the report
+    shows them in its "Solver diagnostics" section).
+    """
+    model, fixture_vars = _build_model(params)
+    model_stats = model.model_stats()
 
     solver = cp_model.CpSolver()
     status = solver.Solve(model)
+    solve_stats = solver.response_stats()
 
-    if logger.isEnabledFor(logging.INFO):
-        logger.info("Solve stats:\n%s", solver.response_stats())
-
-    if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-        result = []
-        for (fixture, match_date), var in vars_by_fixture_date.items():
-            if solver.BooleanValue(var):
-                result.append(ScheduledFixture(fixture=fixture, date=match_date))
-        return result
-    else:
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         raise ValueError(
             f"No solution found (solver status: {solver.StatusName(status)})"
         )
+
+    return SolveResult(
+        fixtures=_extract_fixtures(solver, fixture_vars),
+        model_stats=model_stats,
+        solve_stats=solve_stats,
+    )

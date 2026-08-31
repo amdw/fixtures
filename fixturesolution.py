@@ -60,6 +60,17 @@ class _NoAliasDumper(yaml.SafeDumper):
         return True
 
 
+def _represent_str(dumper: yaml.SafeDumper, data: str) -> yaml.Node:
+    """Write any multi-line string (i.e. the stored stats blocks) as a literal
+    block scalar rather than PyYAML's default one-line double-quoted form with
+    escaped newlines, so the solution file stays readable and diffable."""
+    style = "|" if "\n" in data else None
+    return dumper.represent_scalar("tag:yaml.org,2002:str", data, style=style)
+
+
+_NoAliasDumper.add_representer(str, _represent_str)
+
+
 def _team_id(
     team: fmodel.Team, ids_by_club_index: Mapping[tuple[str, int], str]
 ) -> str:
@@ -73,15 +84,20 @@ def _team_id(
 
 
 def save_solution(
-    fixtures: Collection[fmodel.ScheduledFixture],
+    result: fmodel.SolveResult,
     team_ids: Mapping[str, tuple[str, int]],
     path: Path,
 ) -> None:
-    """Write a solved fixture list to path in the canonical solution YAML format.
+    """Write a solve result to path in the canonical solution YAML format.
 
     team_ids maps each team ID in the spec that was solved to its (club, index)
     pair (see fixturespec.load_team_ids()) -- used to translate fmodel.Team,
     which doesn't carry a spec team ID, back into one.
+
+    result.model_stats/result.solve_stats, when non-empty, are written under a
+    trailing "stats" key so the OR-Tools summaries travel with the schedule to
+    the report; empty strings leave the key out entirely. load_solution()
+    reverses this exactly, back into an fmodel.SolveResult.
     """
     ids_by_club_index = {
         club_index: team_id for team_id, club_index in team_ids.items()
@@ -92,12 +108,16 @@ def save_solution(
             "away": _team_id(sf.fixture.away_team, ids_by_club_index),
             "date": sf.date,
         }
-        for sf in fixtures
+        for sf in result.fixtures
     ]
     entries.sort(key=lambda e: (e["date"], e["home"], e["away"]))
-    path.write_text(
-        yaml.dump({"fixtures": entries}, Dumper=_NoAliasDumper, sort_keys=False)
-    )
+    document: dict[str, Any] = {"fixtures": entries}
+    if result.model_stats or result.solve_stats:
+        document["stats"] = {
+            "model": result.model_stats,
+            "solve": result.solve_stats,
+        }
+    path.write_text(yaml.dump(document, Dumper=_NoAliasDumper, sort_keys=False))
 
 
 _REQUIRED_FIXTURE_FIELDS = {"home", "away", "date"}
@@ -115,15 +135,35 @@ def _resolve_team(
     return teams_by_id[team_id]
 
 
+def _load_stats(data: dict[str, Any], path: Path) -> tuple[str, str]:
+    """Pull the optional model/solve summary text out of a loaded solution
+    document. A file with no 'stats' key (one written before it was recorded)
+    yields two empty strings."""
+    stats = data.get("stats")
+    if stats is None:
+        return "", ""
+    if not isinstance(stats, dict):
+        raise SolutionError(f"{path}: 'stats' must be a mapping")
+    model_stats = stats.get("model", "")
+    solve_stats = stats.get("solve", "")
+    if not isinstance(model_stats, str) or not isinstance(solve_stats, str):
+        raise SolutionError(f"{path}: 'stats.model' and 'stats.solve' must be strings")
+    return model_stats, solve_stats
+
+
 def load_solution(
     path: Path,
     teams: Collection[fmodel.Team],
     team_ids: Mapping[str, tuple[str, int]],
-) -> list[fmodel.ScheduledFixture]:
-    """Load a solution YAML file, resolving each entry's home/away team ID via
-    team_ids and teams (normally fixturespec.load_team_ids() and
-    spec.parameters.teams from the spec the solution was solved from) to recover
-    full Team objects (division, name_override, etc.).
+) -> fmodel.SolveResult:
+    """Load a solution YAML file back into an fmodel.SolveResult, resolving each
+    entry's home/away team ID via team_ids and teams (normally
+    fixturespec.load_team_ids() and spec.parameters.teams from the spec the
+    solution was solved from) to recover full Team objects (division,
+    name_override, etc.).
+
+    Any model/solver summary text stored under the file's 'stats' key comes back
+    on the result too (empty strings if the file predates it).
     """
     with path.open() as f:
         data = yaml.safe_load(f)
@@ -134,6 +174,8 @@ def load_solution(
     fixtures_spec = data["fixtures"]
     if not isinstance(fixtures_spec, list):
         raise SolutionError(f"{path}: 'fixtures' must be a list")
+
+    model_stats, solve_stats = _load_stats(data, path)
 
     teams_by_club_index = {(t.club, t.index): t for t in teams}
     teams_by_id = {
@@ -176,4 +218,6 @@ def load_solution(
                 date=fixture_date,
             )
         )
-    return result
+    return fmodel.SolveResult(
+        fixtures=result, model_stats=model_stats, solve_stats=solve_stats
+    )

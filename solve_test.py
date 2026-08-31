@@ -86,8 +86,29 @@ class TestSolve(unittest.TestCase):
             ],
             {"albany-1": ("albany", 1), "hackney-1": ("hackney", 1)},
         )
-        self.assertEqual(len(loaded), 2)  # Albany v Hackney and Hackney v Albany
+        # Albany v Hackney and Hackney v Albany
+        self.assertEqual(len(loaded.fixtures), 2)
         self.assertIn("home: albany-1", solution_path.read_text())
+
+    def test_records_solver_stats_in_solution_yaml(self) -> None:
+        output_dir = self.dir / "out"
+        solution_path = solve.solve(self.spec_path, output_dir)
+
+        contents = solution_path.read_text()
+        self.assertIn("stats:", contents)
+        self.assertIn("satisfaction model", contents)
+        self.assertIn("CpSolverResponse summary", contents)
+
+        loaded = fixturesolution.load_solution(
+            solution_path,
+            [
+                fmodel.Team(division=1, club="albany", index=1),
+                fmodel.Team(division=1, club="hackney", index=1),
+            ],
+            {"albany-1": ("albany", 1), "hackney-1": ("hackney", 1)},
+        )
+        self.assertIn("#Variables", loaded.model_stats)
+        self.assertIn("status:", loaded.solve_stats)
 
     def test_creates_output_dir(self) -> None:
         output_dir = self.dir / "nested" / "out"
@@ -118,7 +139,7 @@ class TestSolve(unittest.TestCase):
             ],
             {"albany-1": ("albany", 1), "hackney-1": ("hackney", 1)},
         )
-        for sf in loaded:
+        for sf in loaded.fixtures:
             self.assertGreaterEqual(sf.date, date(2025, 9, 2))
 
     def test_no_cutoff_by_default(self) -> None:

@@ -60,10 +60,10 @@ def solve(
         parameters = dataclasses.replace(
             parameters, earliest_match_date=earliest_match_date
         )
-    fixtures = fmodel.solve(parameters)
+    result = fmodel.solve(parameters)
     output_dir.mkdir(parents=True, exist_ok=True)
     solution_path = output_dir / "solution.yaml"
-    fixturesolution.save_solution(fixtures, team_ids, solution_path)
+    fixturesolution.save_solution(result, team_ids, solution_path)
     return solution_path
 
 

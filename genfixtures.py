@@ -229,7 +229,7 @@ def build_params() -> fmodel.Parameters:
 
 def main() -> None:
     random.seed(0)
-    fixtures = fmodel.solve(build_params())
+    fixtures = fmodel.solve(build_params()).fixtures
     print_fixtures(fixtures)
 
 

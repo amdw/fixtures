@@ -44,11 +44,11 @@ def report(spec_path: Path, solution_path: Path, output_dir: Path) -> Path:
     index.html."""
     spec = fixturespec.load_spec(spec_path)
     team_ids = fixturespec.load_team_ids(spec_path)
-    fixtures = fixturesolution.load_solution(
+    result = fixturesolution.load_solution(
         solution_path, spec.parameters.teams, team_ids
     )
-    csvreport.generate_csv(spec, fixtures, output_dir)
-    return htmlreport.generate_report(spec, fixtures, output_dir)
+    csvreport.generate_csv(spec, result.fixtures, output_dir)
+    return htmlreport.generate_report(spec, result, output_dir)
 
 
 def main() -> None:

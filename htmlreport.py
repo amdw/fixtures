@@ -64,6 +64,12 @@ _STYLE = """
     .anchor-link { margin-left: 0.4rem; font-size: 0.8em; text-decoration: none;
                     color: #888; }
     .anchor-link:hover { color: #0645ad; }
+    .solver-diagnostics { margin-top: 2rem; color: #333; }
+    .solver-diagnostics summary { cursor: pointer; font-weight: 600; }
+    .solver-diagnostics h3 { margin-bottom: 0.3rem; }
+    .solver-diagnostics pre { overflow-x: auto; background: #f6f6f6;
+                              border: 1px solid #ddd; border-radius: 4px;
+                              padding: 0.6rem 0.8rem; font-size: 0.85rem; }
 
     @media (max-width: 40rem) {
         body { margin: 1rem; }
@@ -377,6 +383,26 @@ def _nav(links: list[tuple[str, str]]) -> str:
     return f"<nav><ul>\n{items}</ul></nav>\n"
 
 
+def _solver_diagnostics(model_stats: str, solve_stats: str) -> str:
+    """A collapsed <details> block carrying the OR-Tools model and solver summary
+    text recorded when this schedule was solved (fmodel.solve captures it and
+    solve.py stores it in solution.yaml). Empty when neither was recorded -- e.g.
+    a solution file written before that text was kept."""
+    sections = "".join(
+        f"<h3>{heading}</h3>\n<pre>{html.escape(text)}</pre>\n"
+        for heading, text in (("Model", model_stats), ("Solve", solve_stats))
+        if text
+    )
+    if not sections:
+        return ""
+    return (
+        '<details class="solver-diagnostics">\n'
+        "<summary>Solver diagnostics</summary>\n"
+        f"{sections}"
+        "</details>\n"
+    )
+
+
 def _run_index_body(
     all_matches_links: list[tuple[str, str]],
     division_links: list[tuple[str, str]],
@@ -417,17 +443,20 @@ _MATCH_HEADERS_WITH_DIVISION = [
 
 def generate_report(
     spec: fixturespec.Spec,
-    fixtures: Collection[fmodel.ScheduledFixture],
+    result: fmodel.SolveResult,
     output_dir: Path,
 ) -> Path:
-    """Write a solved fixture list's report pages, plus the run's index.html
-    linking them, into output_dir.
+    """Write a solve result's report pages, plus the run's index.html linking
+    them, into output_dir.
 
     `spec` supplies everything about the season except the solved dates -- teams,
     clubs, the run name/draft/description banners, each division's fixture scheme,
     and any excluded_fixtures (withheld from scheduling entirely, to be arranged
     in a later run; these are appended to the bottom of every relevant table with
-    "TBC" in place of a date). `fixtures` is the solved schedule for that spec.
+    "TBC" in place of a date). `result` is the solved schedule for that spec,
+    plus (if recorded) the OR-Tools model/solver summary text, which is shown in a
+    collapsed "Solver diagnostics" section at the foot of the run index -- absent
+    when result.model_stats/solve_stats are empty.
 
     Wherever csvreport.generate_csv has already written its exports into
     output_dir, they get linked too: all-matches.csv / all-matches-by-team.csv
@@ -437,6 +466,7 @@ def generate_report(
 
     Returns the path to the run's index.html.
     """
+    fixtures = result.fixtures
     output_dir.mkdir(parents=True, exist_ok=True)
 
     teams = spec.parameters.teams
@@ -570,7 +600,8 @@ def generate_report(
     index_path.write_text(
         _page(
             "Fixtures",
-            _run_index_body(all_matches_links, division_links, club_links),
+            _run_index_body(all_matches_links, division_links, club_links)
+            + _solver_diagnostics(result.model_stats, result.solve_stats),
             name,
             draft,
             description,
