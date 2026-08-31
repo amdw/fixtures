@@ -78,30 +78,44 @@ divisions:
 
 club_constraints:
   defaults:
-    min_gap_days: 7
-    max_concurrent_matches:
-      home: 2
+    match_count_limits:
+      - override_key: weekly-gap
+        apply_per: each_team
+        time_window_days: 7
+        max: 1
+      - override_key: venue-capacity
+        venue_scope: home
+        max: 2
 
   albany:
     home_dates: [2025-09-01, 2025-09-15, 2025-09-29]
     unavailable_away_dates: [2025-12-25]
-    min_gap_days: 14
     latest_match_date: 2026-04-30
-    max_concurrent_matches:
-      home: 3
+    match_count_limits:
+      - override_key: weekly-gap
+        apply_per: each_team
+        time_window_days: 14
+        max: 1
+      - override_key: venue-capacity
+        venue_scope: home
+        max: 3
 
   hackney:
     home_dates: [2025-09-08, 2025-09-22]
-    max_concurrent_matches:
-      home:
-        default: 2
+    match_count_limits:
+      - override_key: venue-capacity
+        venue_scope: home
+        max: 2
         overrides:
           2025-09-08: 3
-      away: null
-      any:
-        default: null
+      - max: null
+        venue_scope: all
         overrides:
           2025-09-22: 1
+      - teams: [hackney-1, hackney-5]
+        time_window_days: 7
+        max: 1
+        venue_scope: away
     home_dates_used:
       min: 1
       max: 2
@@ -109,10 +123,6 @@ club_constraints:
       hackney-5:
         unavailable_home_dates: [2025-09-08]
         unavailable_away_dates: [2025-09-22]
-    avoid_coscheduling_teams:
-      - teams: [hackney-1, hackney-5]
-        min_gap_days: 7
-        applies_to: away
 
 fixed_fixtures:
   - home: albany-1

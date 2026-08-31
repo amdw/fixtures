@@ -17,6 +17,7 @@
 import hashlib
 import tempfile
 import unittest
+from collections.abc import Collection
 from datetime import date
 from pathlib import Path
 
@@ -24,14 +25,24 @@ import fixturespec
 import fmodel
 
 
-def _mcm(**scopes: fmodel.ConcurrencyLimit) -> fmodel.MaxConcurrentMatches:
-    """Terse fmodel.MaxConcurrentMatches builder for tests: keyword args are
-    ConcurrencyScope names, e.g. _mcm(home=fmodel.ConcurrencyLimit(2))."""
-    return fmodel.MaxConcurrentMatches(
-        by_scope={
-            fmodel.ConcurrencyScope(name): limit for name, limit in scopes.items()
-        }
-    )
+def _find_limit(
+    limits: Collection[fmodel.MatchCountLimit],
+    *,
+    club: str,
+    venue_scope: fmodel.VenueScope,
+    apply_per: fmodel.ApplyPer,
+) -> fmodel.MatchCountLimit:
+    """The one resolved MatchCountLimit for `club` with the given venue_scope /
+    apply_per (fails the calling assertion if there isn't exactly one)."""
+    matches = [
+        limit
+        for limit in limits
+        if all(t.club == club for t in limit.teams)
+        and limit.venue_scope is venue_scope
+        and limit.apply_per is apply_per
+    ]
+    assert len(matches) == 1, f"expected exactly one, got {matches}"
+    return matches[0]
 
 
 # Clubs/teams/divisions boilerplate, minus 'club_constraints', for tests that need to
@@ -85,7 +96,7 @@ club_constraints:
 
 _MINIMAL_SPEC = (
     _MINIMAL_SPEC_NO_CONCURRENCY
-    + "  defaults:\n    max_concurrent_matches:\n      home: 1\n"
+    + "  defaults:\n    match_count_limits:\n      - override_key: venue-capacity\n        venue_scope: home\n        max: 1\n"
 )
 
 # A three-team spec (two Albany teams plus Hackney) for exclude_fixtures tests, which
@@ -122,9 +133,6 @@ divisions:
     teams: [albany-1, albany-2, hackney-1]
 
 club_constraints:
-  defaults:
-    max_concurrent_matches:
-      home: 2
   albany:
     home_dates: [2025-09-01, 2025-10-01, 2025-11-01, 2025-12-01]
   hackney:
@@ -177,17 +185,16 @@ class TestLoadSpec(unittest.TestCase):
         )
         # hackney has no unavailable_away_dates entry, should default to empty
         self.assertEqual(spec.parameters.unavailable_away_dates["hackney"], [])
-        self.assertEqual(spec.parameters.min_gap_days, 7)
-        # Neither club has its own entry, so both inherit _MINIMAL_SPEC's
-        # club_constraints.defaults.max_concurrent_matches (home: 1).
-        self.assertEqual(
-            spec.parameters.max_concurrent_matches["albany"],
-            _mcm(home=fmodel.ConcurrencyLimit(1)),
-        )
-        self.assertEqual(
-            spec.parameters.max_concurrent_matches["hackney"],
-            _mcm(home=fmodel.ConcurrencyLimit(1)),
-        )
+        # Neither club has its own match_count_limits, so both inherit
+        # _MINIMAL_SPEC's club_constraints.defaults entry (home limit 1).
+        for club in ("albany", "hackney"):
+            limit = _find_limit(
+                spec.parameters.match_count_limits,
+                club=club,
+                venue_scope=fmodel.VenueScope.HOME,
+                apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
+            )
+            self.assertEqual(limit.max, 1)
         self.assertEqual(spec.name, "")
         self.assertFalse(spec.draft)
 
@@ -235,20 +242,16 @@ class TestLoadSpec(unittest.TestCase):
         team = next(t for t in spec.parameters.teams if t.club == "hackney")
         self.assertEqual(team.name_override, "Hackney Herons")
 
-    def test_default_min_gap_days_from_club_constraints_defaults(self) -> None:
-        path = self._write(_MINIMAL_SPEC + "    min_gap_days: 10\n")
+    def test_match_count_limits_empty_when_none_configured(self) -> None:
+        path = self._write(_MINIMAL_SPEC_NO_CONCURRENCY)
         spec = fixturespec.load_spec(path)
-        self.assertEqual(spec.parameters.min_gap_days, 10)
+        self.assertEqual(spec.parameters.match_count_limits, ())
 
-    def test_min_gap_days_defaults_to_seven_when_unset(self) -> None:
-        path = self._write(_MINIMAL_SPEC)
-        spec = fixturespec.load_spec(path)
-        self.assertEqual(spec.parameters.min_gap_days, 7)
-
-    def test_top_level_min_gap_days_rejected(self) -> None:
+    def test_unknown_top_level_key_rejected(self) -> None:
         path = self._write(_MINIMAL_SPEC + "\nmin_gap_days: 10\n")
         with self.assertRaisesRegex(
-            fixturespec.SpecError, "top-level 'min_gap_days' is no longer supported"
+            fixturespec.SpecError,
+            r"top-level key\(s\) \['min_gap_days'\] not supported",
         ):
             fixturespec.load_spec(path)
 
@@ -322,7 +325,8 @@ class TestLoadSpec(unittest.TestCase):
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_matches:\n      home: 1\n"
+            "    match_count_limits:\n"
+            "      - override_key: venue-capacity\n        venue_scope: home\n        max: 1\n"
             "  albany:\n"
             "    home_dates: [2025-09-01]\n"
             "  albany:\n"
@@ -337,163 +341,279 @@ class TestLoadSpec(unittest.TestCase):
     # duplicate YAML key, which PyYAML resolves by silently letting the later one
     # clobber the earlier one.
 
-    def test_max_concurrent_matches_home_shorthand_int(self) -> None:
+    def test_match_count_limits_override_key_replaces_default(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_matches:\n"
-            "      home: 1\n"
+            "    match_count_limits:\n"
+            "      - override_key: venue-capacity\n"
+            "        venue_scope: home\n"
+            "        max: 1\n"
             "  albany:\n"
-            "    max_concurrent_matches:\n"
-            "      home: 3\n"
+            "    match_count_limits:\n"
+            "      - override_key: venue-capacity\n"
+            "        venue_scope: home\n"
+            "        max: 3\n"
         )
         spec = fixturespec.load_spec(path)
-        self.assertEqual(
-            spec.parameters.max_concurrent_matches["albany"],
-            _mcm(home=fmodel.ConcurrencyLimit(3)),
+        albany = _find_limit(
+            spec.parameters.match_count_limits,
+            club="albany",
+            venue_scope=fmodel.VenueScope.HOME,
+            apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
-        # hackney wasn't given its own entry, so it inherits club_constraints.defaults
-        self.assertEqual(
-            spec.parameters.max_concurrent_matches["hackney"],
-            _mcm(home=fmodel.ConcurrencyLimit(1)),
+        self.assertEqual(albany.max, 3)
+        # hackney has no entry of its own, so it keeps the default home cap 1.
+        hackney = _find_limit(
+            spec.parameters.match_count_limits,
+            club="hackney",
+            venue_scope=fmodel.VenueScope.HOME,
+            apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
+        self.assertEqual(hackney.max, 1)
 
-    def test_max_concurrent_matches_default_and_overrides(self) -> None:
+    def test_match_count_limits_overrides_parsed(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
-            "    max_concurrent_matches:\n"
-            "      home:\n"
-            "        default: 2\n"
+            "    match_count_limits:\n"
+            "      - venue_scope: home\n"
+            "        max: 2\n"
             "        overrides:\n"
             "          2025-09-01: 3\n"
         )
         spec = fixturespec.load_spec(path)
-        self.assertEqual(
-            spec.parameters.max_concurrent_matches["albany"],
-            _mcm(home=fmodel.ConcurrencyLimit(2, {date(2025, 9, 1): 3})),
+        albany = _find_limit(
+            spec.parameters.match_count_limits,
+            club="albany",
+            venue_scope=fmodel.VenueScope.HOME,
+            apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
+        self.assertEqual(albany.max, 2)
+        self.assertEqual(albany.overrides, {date(2025, 9, 1): 3})
 
-    def test_max_concurrent_matches_null_shorthand(self) -> None:
+    def test_match_count_limits_override_null_lifts_the_cap_that_day(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
-            "    max_concurrent_matches:\n"
-            "      home: null\n"
-        )
-        spec = fixturespec.load_spec(path)
-        self.assertEqual(
-            spec.parameters.max_concurrent_matches["albany"],
-            _mcm(home=fmodel.ConcurrencyLimit(None)),
-        )
-
-    def test_max_concurrent_matches_null_default_with_override(self) -> None:
-        path = self._write(
-            _BOILERPLATE + "club_constraints:\n"
-            "  albany:\n"
-            "    max_concurrent_matches:\n"
-            "      home:\n"
-            "        default: null\n"
+            "    match_count_limits:\n"
+            "      - venue_scope: home\n"
+            "        max: null\n"
             "        overrides:\n"
             "          2025-09-01: 3\n"
         )
         spec = fixturespec.load_spec(path)
-        self.assertEqual(
-            spec.parameters.max_concurrent_matches["albany"],
-            _mcm(home=fmodel.ConcurrencyLimit(None, {date(2025, 9, 1): 3})),
+        albany = _find_limit(
+            spec.parameters.match_count_limits,
+            club="albany",
+            venue_scope=fmodel.VenueScope.HOME,
+            apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
+        self.assertIsNone(albany.max)
+        self.assertEqual(albany.overrides, {date(2025, 9, 1): 3})
 
-    def test_max_concurrent_matches_missing_default(self) -> None:
+    def test_match_count_limits_null_max_cancels_default_via_override_key(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    match_count_limits:\n"
+            "      - override_key: venue-capacity\n"
+            "        venue_scope: home\n"
+            "        max: 1\n"
             "  albany:\n"
-            "    max_concurrent_matches:\n"
-            "      home:\n"
-            "        overrides:\n"
-            "          2025-09-01: 3\n"
+            "    match_count_limits:\n"
+            "      - override_key: venue-capacity\n"
+            "        venue_scope: home\n"
+            "        max: null\n"
         )
-        with self.assertRaisesRegex(fixturespec.SpecError, "default"):
+        spec = fixturespec.load_spec(path)
+        albany_home = [
+            limit
+            for limit in spec.parameters.match_count_limits
+            if all(t.club == "albany" for t in limit.teams)
+            and limit.venue_scope is fmodel.VenueScope.HOME
+        ]
+        self.assertEqual(albany_home, [])
+        # hackney still gets the default.
+        self.assertEqual(
+            _find_limit(
+                spec.parameters.match_count_limits,
+                club="hackney",
+                venue_scope=fmodel.VenueScope.HOME,
+                apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
+            ).max,
+            1,
+        )
+
+    def test_match_count_limits_unknown_override_key_rejected(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    match_count_limits:\n"
+            "      - override_key: venue-capacity\n"
+            "        venue_scope: home\n"
+            "        max: 1\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - override_key: typo\n"
+            "        venue_scope: home\n"
+            "        max: 2\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "override_key"):
             fixturespec.load_spec(path)
 
-    def test_max_concurrent_matches_away_and_any_scopes(self) -> None:
-        path = self._write(
-            _BOILERPLATE + "club_constraints:\n"
-            "  albany:\n"
-            "    max_concurrent_matches:\n"
-            "      away: 2\n"
-            "      any:\n"
-            "        default: null\n"
-            "        overrides:\n"
-            "          2025-09-01: 1\n"
-        )
-        spec = fixturespec.load_spec(path)
-        self.assertEqual(
-            spec.parameters.max_concurrent_matches["albany"],
-            _mcm(
-                away=fmodel.ConcurrencyLimit(2),
-                any=fmodel.ConcurrencyLimit(None, {date(2025, 9, 1): 1}),
-            ),
-        )
-
-    def test_max_concurrent_matches_defaults_merge_per_scope(self) -> None:
-        # defaults set only 'home'; albany sets only 'any'. albany should end up
-        # with both (its own 'any', the inherited default 'home'); hackney, with no
-        # entry of its own, gets just the default 'home'.
+    def test_match_count_limits_defaults_require_override_key(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_matches:\n"
-            "      home: 1\n"
-            "  albany:\n"
-            "    max_concurrent_matches:\n"
-            "      any: 1\n"
+            "    match_count_limits:\n"
+            "      - venue_scope: home\n"
+            "        max: 1\n"
         )
-        spec = fixturespec.load_spec(path)
-        self.assertEqual(
-            spec.parameters.max_concurrent_matches["albany"],
-            _mcm(
-                home=fmodel.ConcurrencyLimit(1),
-                any=fmodel.ConcurrencyLimit(1),
-            ),
-        )
-        self.assertEqual(
-            spec.parameters.max_concurrent_matches["hackney"],
-            _mcm(home=fmodel.ConcurrencyLimit(1)),
-        )
-
-    def test_max_concurrent_matches_club_scope_overrides_default_scope(self) -> None:
-        path = self._write(
-            _BOILERPLATE + "club_constraints:\n"
-            "  defaults:\n"
-            "    max_concurrent_matches:\n"
-            "      home: 1\n"
-            "  albany:\n"
-            "    max_concurrent_matches:\n"
-            "      home: 3\n"
-        )
-        spec = fixturespec.load_spec(path)
-        self.assertEqual(
-            spec.parameters.max_concurrent_matches["albany"],
-            _mcm(home=fmodel.ConcurrencyLimit(3)),
-        )
-
-    def test_max_concurrent_matches_unknown_scope_rejected(self) -> None:
-        path = self._write(
-            _BOILERPLATE + "club_constraints:\n"
-            "  albany:\n"
-            "    max_concurrent_matches:\n"
-            "      sideways: 1\n"
-        )
-        with self.assertRaisesRegex(fixturespec.SpecError, "sideways"):
+        with self.assertRaisesRegex(fixturespec.SpecError, "override_key"):
             fixturespec.load_spec(path)
 
-    def test_max_concurrent_matches_empty_mapping_rejected(self) -> None:
+    def test_match_count_limits_defaults_duplicate_override_key_rejected(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    match_count_limits:\n"
+            "      - override_key: cap\n"
+            "        venue_scope: home\n"
+            "        max: 1\n"
+            "      - override_key: cap\n"
+            "        venue_scope: away\n"
+            "        max: 1\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "override_key"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_override_key_with_teams_rejected(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    match_count_limits:\n"
+            "      - override_key: cap\n"
+            "        venue_scope: home\n"
+            "        max: 1\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - override_key: cap\n"
+            "        teams: [albany-1]\n"
+            "        max: 1\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "override_key"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_overrides_require_one_day_window(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
-            "    max_concurrent_matches: {}\n"
+            "    match_count_limits:\n"
+            "      - venue_scope: home\n"
+            "        max: 2\n"
+            "        time_window_days: 7\n"
+            "        overrides:\n"
+            "          2025-09-01: 3\n"
         )
-        with self.assertRaisesRegex(fixturespec.SpecError, "at least one"):
+        with self.assertRaisesRegex(fixturespec.SpecError, "overrides"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_missing_max_field_rejected(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - venue_scope: home\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "max"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_defaults_additive_when_no_override_key(self) -> None:
+        # A club entry without an override_key is additive, even if a default
+        # covers the same venue_scope.
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    match_count_limits:\n"
+            "      - override_key: venue-capacity\n"
+            "        venue_scope: home\n"
+            "        max: 2\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - venue_scope: all\n"
+            "        max: 1\n"
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(
+            _find_limit(
+                spec.parameters.match_count_limits,
+                club="albany",
+                venue_scope=fmodel.VenueScope.HOME,
+                apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
+            ).max,
+            2,
+        )
+        self.assertEqual(
+            _find_limit(
+                spec.parameters.match_count_limits,
+                club="albany",
+                venue_scope=fmodel.VenueScope.ALL,
+                apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
+            ).max,
+            1,
+        )
+
+    def test_match_count_limits_defaults_reject_teams_field(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    match_count_limits:\n"
+            "      - override_key: k\n"
+            "        teams: [albany-1]\n"
+            "        max: 1\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "teams is not allowed"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_apply_per_each_team_parsed(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - apply_per: each_team\n"
+            "        time_window_days: 7\n"
+            "        max: 1\n"
+        )
+        spec = fixturespec.load_spec(path)
+        limit = _find_limit(
+            spec.parameters.match_count_limits,
+            club="albany",
+            venue_scope=fmodel.VenueScope.ALL,
+            apply_per=fmodel.ApplyPer.EACH_TEAM,
+        )
+        self.assertEqual((limit.time_window_days, limit.max), (7, 1))
+
+    def test_match_count_limits_unknown_venue_scope_rejected(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - venue_scope: sideways\n"
+            "        max: 1\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "venue_scope"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_unknown_apply_per_rejected(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - apply_per: sometimes\n"
+            "        max: 1\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "apply_per"):
             fixturespec.load_spec(path)
 
     def test_club_constraints_unknown_club(self) -> None:
@@ -507,27 +627,27 @@ class TestLoadSpec(unittest.TestCase):
         with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
             fixturespec.load_spec(path)
 
-    def test_max_concurrent_matches_absent_for_a_club_is_allowed(self) -> None:
-        # No defaults, and only albany has an entry: hackney simply has no
-        # concurrency limits (nothing is required).
+    def test_match_count_limits_absent_for_a_club_is_allowed(self) -> None:
+        # No defaults, and only albany has an entry: hackney simply has no limits.
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
-            "    max_concurrent_matches:\n"
-            "      home: 1\n"
+            "    match_count_limits:\n"
+            "      - venue_scope: home\n"
+            "        max: 1\n"
         )
         spec = fixturespec.load_spec(path)
-        self.assertEqual(
-            spec.parameters.max_concurrent_matches,
-            {"albany": _mcm(home=fmodel.ConcurrencyLimit(1))},
-        )
+        clubs = {
+            t.club for limit in spec.parameters.match_count_limits for t in limit.teams
+        }
+        self.assertEqual(clubs, {"albany"})
 
-    def test_max_concurrent_matches_omitted_everywhere_is_allowed(self) -> None:
-        # No club_constraints.defaults and no per-club max_concurrent_matches:
-        # concurrency limits are entirely optional.
+    def test_match_count_limits_omitted_everywhere_is_allowed(self) -> None:
+        # No club_constraints.defaults and no per-club match_count_limits: limits
+        # are entirely optional.
         path = self._write(_MINIMAL_SPEC_NO_CONCURRENCY)
         spec = fixturespec.load_spec(path)
-        self.assertEqual(spec.parameters.max_concurrent_matches, {})
+        self.assertEqual(spec.parameters.match_count_limits, ())
 
     def test_club_constraints_defaults_unsupported_field(self) -> None:
         path = self._write(
@@ -723,7 +843,7 @@ divisions:
     # to load successfully (the failure-path tests don't get this far).
     _SCHEME_SPEC_TAIL = (
         "club_constraints:\n"
-        "  defaults:\n    max_concurrent_matches:\n      home: 1\n"
+        "  defaults:\n    match_count_limits:\n      - override_key: venue-capacity\n        venue_scope: home\n        max: 1\n"
         "  albany:\n    home_dates: [2025-09-01, 2025-09-08, 2025-09-15]\n"
     )
 
@@ -809,8 +929,10 @@ divisions:
     teams: [albany-1, albany-2, albany-3]
 club_constraints:
   defaults:
-    max_concurrent_matches:
-      home: 1
+    match_count_limits:
+      - override_key: venue-capacity
+        venue_scope: home
+        max: 1
   albany:
     home_dates: [2025-09-01, 2025-09-08, 2025-09-15]
 """)
@@ -926,7 +1048,8 @@ club_constraints:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_matches:\n      home: 1\n"
+            "    match_count_limits:\n"
+            "      - override_key: venue-capacity\n        venue_scope: home\n        max: 1\n"
             "  albany:\n"
             "    home_dates_used:\n"
             "      max: 1\n"
@@ -949,7 +1072,8 @@ club_constraints:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_matches:\n      home: 1\n"
+            "    match_count_limits:\n"
+            "      - override_key: venue-capacity\n        venue_scope: home\n        max: 1\n"
             "  albany:\n"
             "    home_dates_used:\n"
             "      min: 3\n"
@@ -969,7 +1093,8 @@ club_constraints:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_matches:\n      home: 1\n"
+            "    match_count_limits:\n"
+            "      - override_key: venue-capacity\n        venue_scope: home\n        max: 1\n"
             "  unknown-club:\n"
             "    home_dates_used:\n"
             "      max: 1\n"
@@ -981,7 +1106,8 @@ club_constraints:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_matches:\n      home: 1\n"
+            "    match_count_limits:\n"
+            "      - override_key: venue-capacity\n        venue_scope: home\n        max: 1\n"
             "  albany:\n"
             "    home_dates_used:\n"
             "      max: not-an-int\n"
@@ -993,7 +1119,8 @@ club_constraints:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_matches:\n      home: 1\n"
+            "    match_count_limits:\n"
+            "      - override_key: venue-capacity\n        venue_scope: home\n        max: 1\n"
             "  albany:\n"
             "    home_dates_used: 1\n"
         )
@@ -1004,7 +1131,8 @@ club_constraints:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_matches:\n      home: 1\n"
+            "    match_count_limits:\n"
+            "      - override_key: venue-capacity\n        venue_scope: home\n        max: 1\n"
             "  albany:\n"
             "    home_dates_used: {}\n"
         )
@@ -1015,7 +1143,8 @@ club_constraints:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_matches:\n      home: 1\n"
+            "    match_count_limits:\n"
+            "      - override_key: venue-capacity\n        venue_scope: home\n        max: 1\n"
             "  albany:\n"
             "    home_dates_used:\n"
             "      minimum: 2\n"
@@ -1027,7 +1156,8 @@ club_constraints:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_matches:\n      home: 1\n"
+            "    match_count_limits:\n"
+            "      - override_key: venue-capacity\n        venue_scope: home\n        max: 1\n"
             "  albany:\n"
             "    home_dates_used:\n"
             "      min: 0\n"
@@ -1039,7 +1169,8 @@ club_constraints:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  defaults:\n"
-            "    max_concurrent_matches:\n      home: 1\n"
+            "    match_count_limits:\n"
+            "      - override_key: venue-capacity\n        venue_scope: home\n        max: 1\n"
             "  albany:\n"
             "    home_dates_used:\n"
             "      min: 5\n"
@@ -1048,30 +1179,68 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "exceeds"):
             fixturespec.load_spec(path)
 
-    def test_club_min_gap_days_parsed(self) -> None:
-        """A per-club min_gap_days lands in Parameters.club_min_gap_days, keyed by
-        club, and only for the clubs that set one."""
-        path = self._write(_MINIMAL_SPEC_NO_CONCURRENCY + "    min_gap_days: 3\n")
+    def test_per_club_gap_via_override_key(self) -> None:
+        """A per-club weekly gap is an apply_per: each_team match_count_limits entry
+        with override_key: weekly-gap; it replaces the spec-wide default for that
+        club only."""
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  defaults:\n"
+            "    match_count_limits:\n"
+            "      - override_key: weekly-gap\n"
+            "        apply_per: each_team\n"
+            "        time_window_days: 7\n"
+            "        max: 1\n"
+            "  albany:\n"
+            "    home_dates: [2025-09-01]\n"
+            "    match_count_limits:\n"
+            "      - override_key: weekly-gap\n"
+            "        apply_per: each_team\n"
+            "        time_window_days: 14\n"
+            "        max: 1\n"
+            "  hackney:\n"
+            "    home_dates: [2025-09-15]\n"
+        )
         spec = fixturespec.load_spec(path)
-        self.assertEqual(spec.parameters.club_min_gap_days, {"hackney": 3})
-        # The spec-wide default is untouched.
-        self.assertEqual(spec.parameters.min_gap_days, 7)
+        self.assertEqual(
+            _find_limit(
+                spec.parameters.match_count_limits,
+                club="albany",
+                venue_scope=fmodel.VenueScope.ALL,
+                apply_per=fmodel.ApplyPer.EACH_TEAM,
+            ).time_window_days,
+            14,
+        )
+        self.assertEqual(
+            _find_limit(
+                spec.parameters.match_count_limits,
+                club="hackney",
+                venue_scope=fmodel.VenueScope.ALL,
+                apply_per=fmodel.ApplyPer.EACH_TEAM,
+            ).time_window_days,
+            7,
+        )
 
-    def test_club_min_gap_days_absent(self) -> None:
-        path = self._write(_MINIMAL_SPEC)
-        spec = fixturespec.load_spec(path)
-        self.assertEqual(spec.parameters.club_min_gap_days, {})
-
-    def test_club_min_gap_days_negative_rejected(self) -> None:
-        path = self._write(_MINIMAL_SPEC_NO_CONCURRENCY + "    min_gap_days: -1\n")
-        with self.assertRaisesRegex(fixturespec.SpecError, "min_gap_days"):
+    def test_match_count_limits_negative_max_rejected(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - venue_scope: home\n"
+            "        max: -1\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "max"):
             fixturespec.load_spec(path)
 
-    def test_defaults_min_gap_days_negative_rejected(self) -> None:
-        path = self._write(_MINIMAL_SPEC + "    min_gap_days: -1\n")
-        with self.assertRaisesRegex(
-            fixturespec.SpecError, r"defaults\.min_gap_days must be >= 0"
-        ):
+    def test_match_count_limits_null_max_without_overrides_rejected(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - venue_scope: home\n"
+            "        max: null\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "max"):
             fixturespec.load_spec(path)
 
     def test_club_latest_match_date_parsed(self) -> None:
@@ -1327,9 +1496,9 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "home dates"):
             fixturespec.load_spec(path)
 
-    def _with_albany_avoid_coscheduling(self, block: str) -> str:
+    def _with_albany_match_count_limits(self, block: str) -> str:
         """_THREE_TEAM_SPEC (which has two Albany teams) with the given
-        'avoid_coscheduling_teams:' block (already indented as it should appear)
+        'match_count_limits:' block (already indented as it should appear)
         nested under club_constraints.albany, alongside its home_dates."""
         return _THREE_TEAM_SPEC.replace(
             "  albany:\n    home_dates: [2025-09-01, 2025-10-01, 2025-11-01, 2025-12-01]\n",
@@ -1337,15 +1506,17 @@ club_constraints:
             + block,
         )
 
-    def test_avoid_coscheduling_teams_absent(self) -> None:
+    def test_match_count_limits_absent(self) -> None:
         path = self._write(_THREE_TEAM_SPEC)
         spec = fixturespec.load_spec(path)
-        self.assertEqual(spec.parameters.avoid_coscheduling_teams, ())
+        self.assertEqual(spec.parameters.match_count_limits, ())
 
-    def test_avoid_coscheduling_teams_parsed(self) -> None:
+    def test_match_count_limits_parsed(self) -> None:
         path = self._write(
-            self._with_albany_avoid_coscheduling(
-                "    avoid_coscheduling_teams:\n      - teams: [albany-1, albany-2]\n"
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
+                "      - teams: [albany-1, albany-2]\n"
+                "        max: 1\n"
             )
         )
         spec = fixturespec.load_spec(path)
@@ -1356,141 +1527,194 @@ club_constraints:
             t for t in spec.parameters.teams if t.club == "albany" and t.index == 2
         )
         self.assertEqual(
-            list(spec.parameters.avoid_coscheduling_teams),
+            list(spec.parameters.match_count_limits),
             [
-                fmodel.AvoidCoschedulingConstraint(
-                    teams=[albany_1, albany_2], min_gap_days=1
+                fmodel.MatchCountLimit(
+                    teams=[albany_1, albany_2], max=1, time_window_days=1
                 )
             ],
         )
 
-    def test_avoid_coscheduling_teams_min_gap_days_parsed(self) -> None:
+    def test_match_count_limits_teams_defaults_to_all_of_club(self) -> None:
         path = self._write(
-            self._with_albany_avoid_coscheduling(
-                "    avoid_coscheduling_teams:\n"
-                "      - teams: [albany-1, albany-2]\n"
-                "        min_gap_days: 3\n"
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n      - max: 3\n        time_window_days: 7\n"
             )
         )
         spec = fixturespec.load_spec(path)
-        constraints = list(spec.parameters.avoid_coscheduling_teams)
-        self.assertEqual(constraints[0].min_gap_days, 3)
+        albany_1 = next(
+            t for t in spec.parameters.teams if t.club == "albany" and t.index == 1
+        )
+        albany_2 = next(
+            t for t in spec.parameters.teams if t.club == "albany" and t.index == 2
+        )
+        constraints = list(spec.parameters.match_count_limits)
+        self.assertEqual(list(constraints[0].teams), [albany_1, albany_2])
+        self.assertEqual(constraints[0].max, 3)
+        self.assertEqual(constraints[0].time_window_days, 7)
 
-    def test_avoid_coscheduling_teams_applies_to_defaults_to_both(self) -> None:
+    def test_match_count_limits_time_window_days_parsed(self) -> None:
         path = self._write(
-            self._with_albany_avoid_coscheduling(
-                "    avoid_coscheduling_teams:\n      - teams: [albany-1, albany-2]\n"
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
+                "      - teams: [albany-1, albany-2]\n"
+                "        max: 1\n"
+                "        time_window_days: 3\n"
             )
         )
         spec = fixturespec.load_spec(path)
-        constraints = list(spec.parameters.avoid_coscheduling_teams)
-        self.assertEqual(constraints[0].applies_to, fmodel.CoschedulingScope.BOTH)
+        constraints = list(spec.parameters.match_count_limits)
+        self.assertEqual(constraints[0].time_window_days, 3)
 
-    def test_avoid_coscheduling_teams_applies_to_parsed(self) -> None:
+    def test_match_count_limits_time_window_days_defaults_to_one(self) -> None:
         path = self._write(
-            self._with_albany_avoid_coscheduling(
-                "    avoid_coscheduling_teams:\n"
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
                 "      - teams: [albany-1, albany-2]\n"
-                "        applies_to: away\n"
+                "        max: 1\n"
             )
         )
         spec = fixturespec.load_spec(path)
-        constraints = list(spec.parameters.avoid_coscheduling_teams)
-        self.assertEqual(constraints[0].applies_to, fmodel.CoschedulingScope.AWAY)
+        constraints = list(spec.parameters.match_count_limits)
+        self.assertEqual(constraints[0].time_window_days, 1)
 
-    def test_avoid_coscheduling_teams_invalid_applies_to_rejected(self) -> None:
+    def test_match_count_limits_venue_scope_defaults_to_all(self) -> None:
         path = self._write(
-            self._with_albany_avoid_coscheduling(
-                "    avoid_coscheduling_teams:\n"
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
                 "      - teams: [albany-1, albany-2]\n"
-                "        applies_to: sometimes\n"
+                "        max: 1\n"
             )
         )
-        with self.assertRaisesRegex(fixturespec.SpecError, "applies_to"):
+        spec = fixturespec.load_spec(path)
+        constraints = list(spec.parameters.match_count_limits)
+        self.assertEqual(constraints[0].venue_scope, fmodel.VenueScope.ALL)
+
+    def test_match_count_limits_venue_scope_parsed(self) -> None:
+        path = self._write(
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
+                "      - teams: [albany-1, albany-2]\n"
+                "        max: 1\n"
+                "        venue_scope: away\n"
+            )
+        )
+        spec = fixturespec.load_spec(path)
+        constraints = list(spec.parameters.match_count_limits)
+        self.assertEqual(constraints[0].venue_scope, fmodel.VenueScope.AWAY)
+
+    def test_match_count_limits_invalid_venue_scope_rejected(self) -> None:
+        path = self._write(
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
+                "      - teams: [albany-1, albany-2]\n"
+                "        max: 1\n"
+                "        venue_scope: sometimes\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "venue_scope"):
             fixturespec.load_spec(path)
 
-    def test_avoid_coscheduling_teams_not_a_list(self) -> None:
+    def test_match_count_limits_missing_max_field(self) -> None:
         path = self._write(
-            self._with_albany_avoid_coscheduling("    avoid_coscheduling_teams: {}\n")
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n      - teams: [albany-1, albany-2]\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "max"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_max_below_one_rejected(self) -> None:
+        path = self._write(
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
+                "      - teams: [albany-1, albany-2]\n"
+                "        max: 0\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "max"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_time_window_days_below_one_rejected(self) -> None:
+        path = self._write(
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
+                "      - teams: [albany-1, albany-2]\n"
+                "        max: 1\n"
+                "        time_window_days: 0\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "time_window_days"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_not_a_list(self) -> None:
+        path = self._write(
+            self._with_albany_match_count_limits("    match_count_limits: {}\n")
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "list"):
             fixturespec.load_spec(path)
 
-    def test_avoid_coscheduling_teams_entry_not_a_mapping(self) -> None:
+    def test_match_count_limits_entry_not_a_mapping(self) -> None:
         path = self._write(
-            self._with_albany_avoid_coscheduling(
-                "    avoid_coscheduling_teams:\n      - just-a-string\n"
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n      - just-a-string\n"
             )
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "mapping"):
             fixturespec.load_spec(path)
 
-    def test_avoid_coscheduling_teams_missing_teams_field(self) -> None:
+    def test_match_count_limits_empty_teams_list(self) -> None:
         path = self._write(
-            self._with_albany_avoid_coscheduling(
-                "    avoid_coscheduling_teams:\n      - min_gap_days: 1\n"
-            )
-        )
-        with self.assertRaisesRegex(fixturespec.SpecError, "teams"):
-            fixturespec.load_spec(path)
-
-    def test_avoid_coscheduling_teams_empty_teams_list(self) -> None:
-        path = self._write(
-            self._with_albany_avoid_coscheduling(
-                "    avoid_coscheduling_teams:\n      - teams: []\n"
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n      - teams: []\n        max: 1\n"
             )
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "non-empty"):
             fixturespec.load_spec(path)
 
-    def test_avoid_coscheduling_teams_duplicate_team(self) -> None:
+    def test_match_count_limits_duplicate_team(self) -> None:
         path = self._write(
-            self._with_albany_avoid_coscheduling(
-                "    avoid_coscheduling_teams:\n      - teams: [albany-1, albany-1]\n"
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
+                "      - teams: [albany-1, albany-1]\n"
+                "        max: 1\n"
             )
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "duplicate"):
             fixturespec.load_spec(path)
 
-    def test_avoid_coscheduling_teams_unknown_team(self) -> None:
+    def test_match_count_limits_unknown_team(self) -> None:
         path = self._write(
-            self._with_albany_avoid_coscheduling(
-                "    avoid_coscheduling_teams:\n"
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
                 "      - teams: [albany-1, nonexistent]\n"
+                "        max: 1\n"
             )
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
             fixturespec.load_spec(path)
 
-    def test_avoid_coscheduling_teams_team_belongs_to_different_club(self) -> None:
+    def test_match_count_limits_team_belongs_to_different_club(self) -> None:
         path = self._write(
-            self._with_albany_avoid_coscheduling(
-                "    avoid_coscheduling_teams:\n      - teams: [albany-1, hackney-1]\n"
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
+                "      - teams: [albany-1, hackney-1]\n"
+                "        max: 1\n"
             )
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "hackney-1"):
             fixturespec.load_spec(path)
 
-    def test_avoid_coscheduling_teams_unsupported_field(self) -> None:
+    def test_match_count_limits_unsupported_field(self) -> None:
         path = self._write(
-            self._with_albany_avoid_coscheduling(
-                "    avoid_coscheduling_teams:\n"
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
                 "      - teams: [albany-1, albany-2]\n"
+                "        max: 1\n"
                 "        venue: elsewhere\n"
             )
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
-            fixturespec.load_spec(path)
-
-    def test_avoid_coscheduling_teams_negative_min_gap_days_rejected(self) -> None:
-        path = self._write(
-            self._with_albany_avoid_coscheduling(
-                "    avoid_coscheduling_teams:\n"
-                "      - teams: [albany-1, albany-2]\n"
-                "        min_gap_days: -1\n"
-            )
-        )
-        with self.assertRaisesRegex(fixturespec.SpecError, "min_gap_days"):
             fixturespec.load_spec(path)
 
     def test_exclude_fixtures_absent(self) -> None:

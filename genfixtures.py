@@ -153,13 +153,30 @@ _UNAVAILABLE_AWAY_DATES = {
     ),
 }
 
-_MAX_CONCURRENT_MATCHES = {
-    club: fmodel.MaxConcurrentMatches(
-        by_scope={fmodel.ConcurrencyScope.HOME: fmodel.ConcurrencyLimit(default=2)}
-    )
-    for club in _HOME_DATES
-}
 _MIN_MATCH_GAP_DAYS = 7
+
+_TEAMS_BY_CLUB: dict[str, list[fmodel.Team]] = collections.defaultdict(list)
+for _team in _TEAMS:
+    _TEAMS_BY_CLUB[_team.club].append(_team)
+
+# One match per team per week, plus at most two home matches a night per club --
+# expressed as match_count_limits, the sole match-count constraint mechanism.
+_MATCH_COUNT_LIMITS = [
+    fmodel.MatchCountLimit(
+        teams=club_teams,
+        max=1,
+        time_window_days=_MIN_MATCH_GAP_DAYS,
+        apply_per=fmodel.ApplyPer.EACH_TEAM,
+    )
+    for club_teams in _TEAMS_BY_CLUB.values()
+] + [
+    fmodel.MatchCountLimit(
+        teams=club_teams,
+        max=2,
+        venue_scope=fmodel.VenueScope.HOME,
+    )
+    for club_teams in _TEAMS_BY_CLUB.values()
+]
 
 
 def print_fixtures(fixtures: Collection[fmodel.ScheduledFixture]) -> None:
@@ -222,8 +239,7 @@ def build_params() -> fmodel.Parameters:
         teams=_TEAMS,
         home_dates=_HOME_DATES,
         unavailable_away_dates=_UNAVAILABLE_AWAY_DATES,
-        min_gap_days=_MIN_MATCH_GAP_DAYS,
-        max_concurrent_matches=_MAX_CONCURRENT_MATCHES,
+        match_count_limits=_MATCH_COUNT_LIMITS,
     )
 
 

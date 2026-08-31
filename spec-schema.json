@@ -75,20 +75,18 @@
     },
     "club_constraints": {
       "type": "object",
-      "description": "Every constraint that can vary by club -- home_dates, unavailable_away_dates, min_gap_days, max_concurrent_matches, home_dates_used, latest_match_date, teams and avoid_coscheduling_teams -- keyed by that club's own ID, alongside an optional 'defaults' entry.",
+      "description": "Every constraint that can vary by club -- home_dates, unavailable_away_dates, home_dates_used, latest_match_date, teams and match_count_limits -- keyed by that club's own ID, alongside an optional 'defaults' entry.",
       "additionalProperties": { "$ref": "#/$defs/club_constraints_entry" },
       "properties": {
         "defaults": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Spec-wide defaults for constraint types that support one, applied wherever a club does not set its own. That's max_concurrent_matches (merged per scope -- see its definition) and min_gap_days. All of it is optional.",
+          "description": "Spec-wide defaults, applied wherever a club does not set its own. Only 'match_count_limits' is supported here: a list applied to every club. Every entry carries a unique 'override_key'; a club's own match_count_limits entry that repeats one of those keys replaces that default for the club, and a club entry with no 'override_key' is additive.",
           "properties": {
-            "max_concurrent_matches": { "$ref": "#/$defs/max_concurrent_matches" },
-            "min_gap_days": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 7,
-              "description": "Spec-wide minimum number of days between any two matches involving the same team. 7 (the default when omitted) means a team cannot play twice within a week's spacing -- a gap of exactly 7 days is allowed, fewer is not. A club can override this with its own club_constraints.<club>.min_gap_days."
+            "match_count_limits": {
+              "type": "array",
+              "description": "Spec-wide match_count_limits applied to every club (see the per-club 'match_count_limits' for the mechanism). Entries here cannot name specific 'teams' -- they apply to every team of each club -- and each needs a unique 'override_key'.",
+              "items": { "$ref": "#/$defs/match_count_limit_default_entry" }
             }
           }
         }
@@ -181,51 +179,6 @@
         }
       }
     },
-    "concurrency_limit": {
-      "description": "A limit on how many matches of one scope (see max_concurrent_matches) a club may play on the same date. Either a plain integer, null (no limit imposed by this mechanism -- e.g. for a club whose concurrency is already bounded by another constraint, such as a full set of avoid_coscheduling_teams pairings across its teams, where restating that bound as a number here would be redundant and easy to leave stale), or a mapping giving a default plus per-date overrides. A value that's simply set high enough to never bind -- i.e. >= the club's number of teams -- needs no special-casing: the solver recognises this case itself and skips adding a constraint for it.",
-      "oneOf": [
-        { "type": "integer" },
-        { "type": "null" },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["default"],
-          "properties": {
-            "default": {
-              "description": "Applies to any date without its own entry in 'overrides'.",
-              "oneOf": [{ "type": "integer" }, { "type": "null" }]
-            },
-            "overrides": {
-              "type": "object",
-              "description": "Per-date overrides of 'default', keyed by date.",
-              "additionalProperties": {
-                "oneOf": [{ "type": "integer" }, { "type": "null" }]
-              }
-            }
-          }
-        }
-      ]
-    },
-    "max_concurrent_matches": {
-      "type": "object",
-      "additionalProperties": false,
-      "minProperties": 1,
-      "description": "Per-scope limits on how many matches a club's teams may play on the same date. Give any of 'home', 'away', 'any' (at least one). Each is a concurrency_limit (an integer, null, or a default plus per-date overrides). Under club_constraints.defaults it sets spec-wide defaults; a club's own entry is merged with those per scope (its value wins for the scopes it sets, the default applies to the rest). Every scope is optional -- a club, and the spec as a whole, may set no concurrency limits at all.",
-      "properties": {
-        "home": {
-          "description": "Counts only the club's home matches on a date.",
-          "$ref": "#/$defs/concurrency_limit"
-        },
-        "away": {
-          "description": "Counts only the club's away matches on a date.",
-          "$ref": "#/$defs/concurrency_limit"
-        },
-        "any": {
-          "description": "Counts every match the club's teams play on a date (an internal match, both teams the club's, counted once).",
-          "$ref": "#/$defs/concurrency_limit"
-        }
-      }
-    },
     "club_constraints_entry": {
       "type": "object",
       "additionalProperties": false,
@@ -245,12 +198,6 @@
           "items": { "$ref": "#/$defs/date" },
           "uniqueItems": true
         },
-        "min_gap_days": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "Overrides club_constraints.defaults.min_gap_days for this club: the minimum number of days between any two matches involving one of this club's teams. Omit to use the default. A gap of exactly this many days is allowed, fewer is not. Independent of the per-group 'avoid_coscheduling_teams' constraints, which are always additive."
-        },
-        "max_concurrent_matches": { "$ref": "#/$defs/max_concurrent_matches" },
         "home_dates_used": {
           "type": "object",
           "additionalProperties": false,
@@ -278,10 +225,10 @@
           "description": "Per-team exclusions, for clubs whose teams don't all share the same availability (e.g. different squads of players). Home dates are always specified at the club level above; per-team variations are supported only via exclusions here. A team not listed here just uses its club's dates as normal.",
           "additionalProperties": { "$ref": "#/$defs/club_team_constraints_entry" }
         },
-        "avoid_coscheduling_teams": {
+        "match_count_limits": {
           "type": "array",
-          "description": "Groups of this club's own teams that shouldn't be scheduled too close together (e.g. adjacent-division teams that draw from the same pool of players). Unlike 'teams' above, entries here are additive -- as many can be given as needed, e.g. one per adjacent pair of teams -- and there's no requirement that every team be covered.",
-          "items": { "$ref": "#/$defs/avoid_coscheduling_entry" }
+          "description": "The sole match-count constraint mechanism: each entry caps how many matches involving a set of this club's teams may fall within a rolling window of consecutive days. Covers a per-team weekly gap ('apply_per: each_team', 'max: 1', 'time_window_days: 7'), a venue's concurrent-match capacity ('apply_per: across_teams', 'venue_scope: home'), and keeping adjacent-division teams apart ('teams: [...]', 'max: 1'). Additive, with as many entries as needed; combined with any inherited from club_constraints.defaults -- an entry with an 'override_key' replaces the like-keyed default for this club instead.",
+          "items": { "$ref": "#/$defs/match_count_limit_entry" }
         }
       }
     },
@@ -303,29 +250,81 @@
         }
       }
     },
-    "avoid_coscheduling_entry": {
+    "match_count_limit_fields": {
+      "max": {
+        "oneOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }],
+        "description": "The most matches (of the kind selected by 'venue_scope') allowed within any window of 'time_window_days' consecutive days. The key is required, so an entry is never accidentally a no-op. null means no plain cap -- only useful with 'overrides', or (on a club entry with an 'override_key') to cancel a default. 'max: 1' forbids a second match in a window; a higher value caps density."
+      },
+      "apply_per": {
+        "type": "string",
+        "enum": ["across_teams", "each_team"],
+        "default": "across_teams",
+        "description": "'across_teams' (the default): the counted teams share one budget of 'max' per window (a venue capacity, or a keep-apart rule). 'each_team': 'max' is enforced separately for each team -- typically with 'teams' left as every team of the club and 'max: 1', i.e. a per-team gap."
+      },
+      "time_window_days": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 1,
+        "description": "Window length in consecutive calendar days. 1 (the default) limits matches on a single date; 7 limits matches in any seven-consecutive-day period -- two matches exactly a week apart (day N and day N+7) fall in separate windows, so are unrestricted relative to each other. Counts a run of days, not the gap between two endpoints."
+      },
+      "venue_scope": {
+        "type": "string",
+        "enum": ["home", "away", "all"],
+        "default": "all",
+        "description": "Which of the counted teams' matches the cap counts: 'home' only their home matches, 'away' only their away matches, or 'all' (the default) every match they play. E.g. 'away' counts only away fixtures, still allowing one team to play away on a night another is hosting."
+      },
+      "overrides": {
+        "type": "object",
+        "description": "Per-date replacements of 'max', keyed by date; each value an integer >= 1, or null to lift the cap that day. Only allowed when 'time_window_days' is 1 (so each window is a single date).",
+        "additionalProperties": {
+          "oneOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }]
+        }
+      },
+      "override_key": {
+        "type": "string",
+        "description": "Names a club_constraints.defaults.match_count_limits entry (via its own 'override_key'). On a club entry, replaces that default for the club. Required and unique on every defaults entry; on a club entry it can't be combined with 'teams'."
+      }
+    },
+    "match_count_limit_entry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["teams"],
+      "required": ["max"],
+      "description": "One per-club match_count_limits entry.",
       "properties": {
+        "max": { "$ref": "#/$defs/match_count_limit_fields/max" },
         "teams": {
           "type": "array",
-          "description": "Two or more of this club's own team IDs.",
+          "description": "This club's own team IDs whose matches are counted. Omit for every team of the club (a whole-club cap, or -- with 'apply_per: each_team' -- a per-team gap). One or more. Not allowed alongside 'override_key'.",
           "items": { "type": "string" },
-          "minItems": 2,
+          "minItems": 1,
           "uniqueItems": true
         },
-        "min_gap_days": {
-          "type": "integer",
-          "default": 1,
-          "minimum": 0,
-          "description": "Minimum number of days required between any two matches involving 'teams' (of the kind selected by 'applies_to'). The per-group counterpart of the spec-wide 'min_gap_days' (club_constraints.defaults.min_gap_days): a gap of exactly this many days is allowed, fewer is not. The default, 1 (0 behaves the same), means no two of them may share a date; 7 keeps them at least a week apart while still permitting matches exactly 7 days apart."
+        "apply_per": { "$ref": "#/$defs/match_count_limit_fields/apply_per" },
+        "time_window_days": {
+          "$ref": "#/$defs/match_count_limit_fields/time_window_days"
         },
-        "applies_to": {
-          "type": "string",
-          "enum": ["home", "away", "both"],
-          "default": "both",
-          "description": "Which of the listed teams' matches the limit counts: 'home' only their home matches, 'away' only their away matches, or 'both' (the default) every match they play. E.g. 'away' keeps these teams' away fixtures on separate dates while still allowing one to play away on a night another is hosting."
+        "venue_scope": { "$ref": "#/$defs/match_count_limit_fields/venue_scope" },
+        "overrides": { "$ref": "#/$defs/match_count_limit_fields/overrides" },
+        "override_key": {
+          "$ref": "#/$defs/match_count_limit_fields/override_key"
+        }
+      }
+    },
+    "match_count_limit_default_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max", "override_key"],
+      "description": "A club_constraints.defaults.match_count_limits entry: like a per-club match_count_limits entry but without 'teams' (defaults apply to every team of every club) and with a required, list-unique 'override_key'.",
+      "properties": {
+        "max": { "$ref": "#/$defs/match_count_limit_fields/max" },
+        "apply_per": { "$ref": "#/$defs/match_count_limit_fields/apply_per" },
+        "time_window_days": {
+          "$ref": "#/$defs/match_count_limit_fields/time_window_days"
+        },
+        "venue_scope": { "$ref": "#/$defs/match_count_limit_fields/venue_scope" },
+        "overrides": { "$ref": "#/$defs/match_count_limit_fields/overrides" },
+        "override_key": {
+          "$ref": "#/$defs/match_count_limit_fields/override_key"
         }
       }
     },

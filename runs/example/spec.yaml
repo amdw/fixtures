@@ -189,9 +189,16 @@ divisions:
       - potters-bar-1
 club_constraints:
   defaults:
-    min_gap_days: 7
-    max_concurrent_matches:
-      home: 2
+    match_count_limits:
+      # Each team plays at most one match in any 7-day window.
+      - override_key: weekly-gap
+        apply_per: each_team
+        time_window_days: 7
+        max: 1
+      # Each club hosts at most two home matches a night (shared venue).
+      - override_key: venue-capacity
+        venue_scope: home
+        max: 2
   albany:
     home_dates:
       - "2025-09-01"
@@ -356,13 +363,21 @@ club_constraints:
       - "2026-04-23"
       - "2026-04-30"
       - "2026-05-28"
-    max_concurrent_matches:
-      home:
-        default: 2
+    match_count_limits:
+      # Replaces the spec-wide two-home-matches-a-night default: the venue can
+      # take a third on 2025-11-13 only.
+      - override_key: venue-capacity
+        venue_scope: home
+        max: 2
         overrides:
           "2025-11-13": 3
   harrow:
-    min_gap_days: 14
+    match_count_limits:
+      # Replaces the spec-wide per-team weekly gap
+      - override_key: weekly-gap
+        apply_per: each_team
+        time_window_days: 14
+        max: 1
     home_dates:
       - "2025-09-11"
       - "2025-09-18"
