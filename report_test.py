@@ -116,6 +116,18 @@ class TestReport(unittest.TestCase):
         self.assertIn("satisfaction model", index)
         self.assertIn("CpSolverResponse summary", index)
 
+    def test_matching_spec_checksum_produces_no_warning(self) -> None:
+        with self.assertNoLogs(report.logger, level="WARNING"):
+            report.report(self.spec_path, self.solution_path, self.output_dir)
+
+    def test_mismatched_spec_checksum_warns(self) -> None:
+        self.spec_path.write_text(_SPEC + "\n# edited after solving\n")
+
+        with self.assertLogs(report.logger, level="WARNING") as cm:
+            report.report(self.spec_path, self.solution_path, self.output_dir)
+
+        self.assertIn("checksum mismatch", "\n".join(cm.output).lower())
+
     def test_does_not_require_resolving(self) -> None:
         """Deleting nothing but the intermediate solving step should still work:
         report.py only reads solution.yaml, never calls fmodel.solve()."""

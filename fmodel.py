@@ -71,11 +71,18 @@ class SolveResult:
     rendering them (fixturesolution.save_solution into solution.yaml, the report's
     "Solver diagnostics" section) needs no structure. They default to "" for a
     solution file written before the text was recorded.
+
+    spec_checksum, when set, is a self-describing digest ("sha256:<hex>") of the
+    spec file this schedule was solved from -- see fixturespec.spec_checksum().
+    solve() copies it straight off Parameters.spec_checksum, which
+    fixturespec.load_spec() fills in; a solution file written before checksums
+    were recorded loads as "". The report verifies it against the spec it's given.
     """
 
     fixtures: list[ScheduledFixture]
     model_stats: str = ""
     solve_stats: str = ""
+    spec_checksum: str = ""
 
 
 ClubT = str
@@ -314,6 +321,11 @@ class Parameters:
     division_schemes: Mapping[int, FixtureScheme] = dataclasses.field(
         default_factory=dict
     )
+    # Pure provenance metadata: a self-describing digest ("sha256:<hex>") of the
+    # spec file these parameters were loaded from, set by fixturespec.load_spec()
+    # (see fixturespec.spec_checksum()). It has no effect on solving; solve() just
+    # copies it onto its SolveResult so it can be written into solution.yaml.
+    spec_checksum: str = ""
 
     def __post_init__(self) -> None:
         _check_no_duplicate_teams(self.teams)
@@ -691,4 +703,5 @@ def solve(params: Parameters) -> SolveResult:
         fixtures=_extract_fixtures(solver, fixture_vars),
         model_stats=model_stats,
         solve_stats=solve_stats,
+        spec_checksum=params.spec_checksum,
     )

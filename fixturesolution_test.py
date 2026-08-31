@@ -201,6 +201,48 @@ class TestSaveAndLoadSolution(unittest.TestCase):
         with self.assertRaisesRegex(fixturesolution.SolutionError, "stats"):
             fixturesolution.load_solution(self.path, [_ALBANY_1, _HACKNEY_1], _TEAM_IDS)
 
+    def test_spec_checksum_round_trip(self) -> None:
+        checksum = "sha256:" + "0" * 64
+        fixturesolution.save_solution(
+            fmodel.SolveResult(
+                [_sf(_ALBANY_1, _HACKNEY_1, date(2025, 9, 1))],
+                spec_checksum=checksum,
+            ),
+            _TEAM_IDS,
+            self.path,
+        )
+        contents = self.path.read_text()
+        self.assertIn(f"spec_checksum: {checksum}", contents)
+        # written after the fixtures
+        self.assertGreater(contents.index("spec_checksum"), contents.index("fixtures"))
+
+        loaded = fixturesolution.load_solution(
+            self.path, [_ALBANY_1, _HACKNEY_1], _TEAM_IDS
+        )
+        self.assertEqual(loaded.spec_checksum, checksum)
+
+    def test_spec_checksum_key_omitted_when_not_given(self) -> None:
+        fixturesolution.save_solution(
+            fmodel.SolveResult([_sf(_ALBANY_1, _HACKNEY_1, date(2025, 9, 1))]),
+            _TEAM_IDS,
+            self.path,
+        )
+        self.assertNotIn("spec_checksum", self.path.read_text())
+
+    def test_spec_checksum_absent_loads_as_empty_string(self) -> None:
+        self.path.write_text(
+            "fixtures:\n  - home: albany-1\n    away: hackney-1\n    date: 2025-09-01\n"
+        )
+        loaded = fixturesolution.load_solution(
+            self.path, [_ALBANY_1, _HACKNEY_1], _TEAM_IDS
+        )
+        self.assertEqual(loaded.spec_checksum, "")
+
+    def test_spec_checksum_not_a_string(self) -> None:
+        self.path.write_text("fixtures: []\nspec_checksum: [1, 2]\n")
+        with self.assertRaisesRegex(fixturesolution.SolutionError, "spec_checksum"):
+            fixturesolution.load_solution(self.path, [_ALBANY_1, _HACKNEY_1], _TEAM_IDS)
+
 
 if __name__ == "__main__":
     unittest.main()

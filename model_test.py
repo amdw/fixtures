@@ -15,6 +15,7 @@
 """Test cases for fixtures model constraints."""
 
 import collections
+import dataclasses
 import random
 import unittest
 from datetime import date, timedelta
@@ -272,6 +273,13 @@ class TestSolveStats(unittest.TestCase):
         self.assertIn("#Variables", result.model_stats)
         self.assertIn("CpSolverResponse summary", result.solve_stats)
         self.assertIn("status:", result.solve_stats)
+
+    def test_copies_spec_checksum_from_parameters_to_result(self) -> None:
+        random.seed(42)
+        params = dataclasses.replace(
+            genfixtures.build_params(), spec_checksum="sha256:" + "ab" * 32
+        )
+        self.assertEqual(fmodel.solve(params).spec_checksum, "sha256:" + "ab" * 32)
 
     def test_raises_when_infeasible(self) -> None:
         # Two teams of one club, only a single shared home date: both the A1 v A2

@@ -21,6 +21,7 @@ of the expected YAML structure; README.md covers how to use it.
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import itertools
 import logging
 from collections.abc import Mapping
@@ -972,6 +973,25 @@ def _load_yaml_data(path: Path) -> dict[str, Any]:
     return data
 
 
+_CHECKSUM_ALGORITHM = "sha256"
+
+
+def spec_checksum(spec_path: str | Path) -> str:
+    """Return a self-describing checksum ("sha256:<hex>") of the raw bytes of the
+    spec file at spec_path.
+
+    load_spec() records this on the Parameters it returns, so it travels through
+    fmodel.solve() onto the SolveResult and into solution.yaml: a solution then
+    carries a tamper-evident fingerprint of the exact spec it was solved from,
+    and report.py recomputes it from the spec it's handed and warns on a
+    mismatch. Being a hash of the file's bytes, it changes if the spec is merely
+    reformatted -- so a mismatch means "re-check this pairing", not necessarily
+    "the schedule is wrong".
+    """
+    digest = hashlib.new(_CHECKSUM_ALGORITHM, Path(spec_path).read_bytes()).hexdigest()
+    return f"{_CHECKSUM_ALGORITHM}:{digest}"
+
+
 def load_team_ids(spec_path: str | Path) -> dict[str, tuple[str, int]]:
     """Map each team ID in a spec to its (club, index) pair.
 
@@ -1086,6 +1106,7 @@ def load_spec(spec_path: str | Path) -> Spec:
         home_dates=home_dates,
         unavailable_away_dates=unavailable_away_dates,
         division_schemes=divisions.schemes,
+        spec_checksum=spec_checksum(path),
         **kwargs,
     )
     name = _require_str(data.get("name", ""), f"{path}: 'name'")
