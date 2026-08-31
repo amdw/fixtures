@@ -61,7 +61,6 @@ A minimal spec needs `clubs`, `teams`, `divisions` and `club_constraints`:
 
 ```yaml
 name: "2025-26 Season"           # optional; shown as a subtitle on every report page
-min_gap_days: 7                  # optional, defaults shown here
 
 clubs:
   albany:                        # club ID: stable, referenced from teams/club_constraints/etc.
@@ -91,12 +90,15 @@ divisions:                       # each team's division: the only place it's giv
     teams: [albany-1, hackney-1]
 
 club_constraints:
+  defaults:
+    min_gap_days: 7                # optional spec-wide default (7 if omitted)
   albany:
     home_dates: [2025-09-01, 2025-09-15, 2025-09-29]
     max_concurrent_matches: { home: 2 }
   hackney:
     home_dates: [2025-09-08, 2025-09-22]
     max_concurrent_matches: { home: 2 }
+    min_gap_days: 14              # optional per-club override of the default
 ```
 
 That's only a fraction of what the format supports -- per-club/per-team date

@@ -1409,6 +1409,55 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
             fmodel.solve(params)
 
 
+class TestClubMinGapDays(unittest.TestCase):
+    """Per-club overrides of the spec-wide min_gap_days (Parameters.club_min_gap_days
+    / min_gap_days_for): a club listed there uses its own gap for the every-team
+    window, other clubs keep min_gap_days."""
+
+    def _params(
+        self, club_min_gap_days: dict[str, int] | None = None
+    ) -> fmodel.Parameters:
+        """Two teams per club, each club's pair sharing a division so they play a
+        double round against each other. Each club has exactly two home dates
+        three days apart -- inside the default 7-day gap, so without an override
+        the return leg has nowhere to go."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=1, club="A", index=2)
+        b1 = fmodel.Team(division=2, club="B", index=1)
+        b2 = fmodel.Team(division=2, club="B", index=2)
+        return fmodel.Parameters(
+            teams=[a1, a2, b1, b2],
+            home_dates={
+                "A": [date(2025, 1, 6), date(2025, 1, 9)],
+                "B": [date(2025, 2, 3), date(2025, 2, 6)],
+            },
+            unavailable_away_dates={"A": [], "B": []},
+            min_gap_days=7,
+            club_min_gap_days=club_min_gap_days or {},
+        )
+
+    def test_without_override_global_gap_applies(self) -> None:
+        with self.assertRaises(ValueError):
+            fmodel.solve(self._params())
+
+    def test_override_lets_that_club_use_a_closer_gap(self) -> None:
+        """A gap of 2 for club A only: A's two fixtures fill A's two dates three
+        days apart, while B (no override) is still stuck on the 7-day gap, so the
+        solve as a whole stays infeasible -- the override is per club."""
+        with self.assertRaises(ValueError):
+            fmodel.solve(self._params(club_min_gap_days={"A": 2}))
+
+    def test_override_for_every_constrained_club_makes_it_feasible(self) -> None:
+        fixtures = list(
+            fmodel.solve(self._params(club_min_gap_days={"A": 2, "B": 2})).fixtures
+        )
+        by_club_dates = collections.defaultdict(set)
+        for sf in fixtures:
+            by_club_dates[sf.fixture.home_team.club].add(sf.date)
+        self.assertEqual(by_club_dates["A"], {date(2025, 1, 6), date(2025, 1, 9)})
+        self.assertEqual(by_club_dates["B"], {date(2025, 2, 3), date(2025, 2, 6)})
+
+
 class TestMaxConcurrentMatchesUnlimited(unittest.TestCase):
     """Test cases for ConcurrencyLimit(default=None) / overrides=None: no
     limit imposed by this mechanism, as opposed to a finite one.

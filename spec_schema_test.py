@@ -39,7 +39,6 @@ _FULL_EXAMPLE = """
 name: "2025-26 Season"
 draft: false
 description: "Final schedule; refer to ECF LMS for authoritative dates."
-min_gap_days: 7
 latest_internal_match_date: 2025-12-31
 avoid_dates: [2025-12-25, 2026-01-01]
 
@@ -79,12 +78,14 @@ divisions:
 
 club_constraints:
   defaults:
+    min_gap_days: 7
     max_concurrent_matches:
       home: 2
 
   albany:
     home_dates: [2025-09-01, 2025-09-15, 2025-09-29]
     unavailable_away_dates: [2025-12-25]
+    min_gap_days: 14
     max_concurrent_matches:
       home: 3
 
