@@ -40,7 +40,6 @@ name: "2025-26 Season"
 draft: false
 description: "Final schedule; refer to ECF LMS for authoritative dates."
 latest_internal_match_date: 2025-12-31
-avoid_dates: [2025-12-25, 2026-01-01]
 
 clubs:
   albany:
@@ -86,6 +85,11 @@ club_constraints:
       - override_key: venue-capacity
         venue_scope: home
         max: 2
+      - override_key: no-play-dates
+        max: 0
+        date_ranges:
+          - start_date: 2025-12-22
+            end_date: 2026-01-04
 
   albany:
     home_dates: [2025-09-01, 2025-09-15, 2025-09-29]
@@ -116,6 +120,13 @@ club_constraints:
         time_window_days: 7
         max: 1
         venue_scope: away
+      - teams: [hackney-1, hackney-5]
+        max: 1
+        date_ranges:
+          - start_date: 2025-10-20
+            end_date: 2025-10-26
+          - start_date: 2026-02-16
+            end_date: 2026-02-22
     home_dates_used:
       min: 1
       max: 2

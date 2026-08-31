@@ -364,6 +364,7 @@ _MATCH_COUNT_LIMIT_FIELD_KEYS = {
     "venue_scope",
     "apply_per",
     "date_max_overrides",
+    "date_ranges",
     "override_key",
 }
 
@@ -380,7 +381,6 @@ _TOP_LEVEL_KEYS = {
     "draft",
     "description",
     "latest_internal_match_date",
-    "avoid_dates",
     "clubs",
     "teams",
     "divisions",
@@ -400,6 +400,8 @@ class _ParsedMatchCountLimit:
     entry is purely additive. Every defaults entry has an `override_key`. `max` is
     None only for an entry that exists solely to carry `date_max_overrides`, or to
     cancel an inherited default (a club entry with an override_key and nothing else).
+    `date_ranges`, when non-empty, restricts the rule to those explicit inclusive
+    calendar ranges instead of every rolling `time_window_days` window.
     """
 
     team_ids: tuple[str, ...] | None
@@ -408,6 +410,7 @@ class _ParsedMatchCountLimit:
     venue_scope: fmodel.VenueScope
     apply_per: fmodel.ApplyPer
     date_max_overrides: Mapping[date, int | None]
+    date_ranges: tuple[fmodel.DateRange, ...]
     override_key: str | None
 
 
@@ -648,6 +651,36 @@ def _parse_match_count_date_max_overrides(
     return date_max_overrides
 
 
+def _parse_match_count_date_ranges(
+    value: Any, context: str
+) -> tuple[fmodel.DateRange, ...]:
+    """Parse a match_count_limits entry's optional 'date_ranges': a non-empty list
+    of {start_date, end_date} mappings, each an inclusive fmodel.DateRange (which
+    enforces start on or before end)."""
+    if not isinstance(value, list) or not value:
+        raise SpecError(f"{context} must be a non-empty list")
+    ranges: list[fmodel.DateRange] = []
+    for i, item in enumerate(value):
+        item_context = f"{context}[{i}]"
+        if not isinstance(item, dict):
+            raise SpecError(f"{item_context} must be a mapping")
+        unsupported = item.keys() - {"start_date", "end_date"}
+        if unsupported:
+            raise SpecError(
+                f"{item_context}.{sorted(unsupported)} not supported (only "
+                "['end_date', 'start_date'] are)"
+            )
+        if "start_date" not in item or "end_date" not in item:
+            raise SpecError(f"{item_context} needs both 'start_date' and 'end_date'")
+        start = _parse_date(item["start_date"], f"{item_context}.start_date")
+        end = _parse_date(item["end_date"], f"{item_context}.end_date")
+        try:
+            ranges.append(fmodel.DateRange(start=start, end=end))
+        except ValueError as e:
+            raise SpecError(f"{item_context}: {e}") from e
+    return tuple(ranges)
+
+
 def _parse_match_count_limits(
     entries_spec: Any,
     club_id: str | None,
@@ -658,9 +691,10 @@ def _parse_match_count_limits(
     None) the club_constraints.defaults list applied to every club.
 
     Each entry:
-      - 'max' (required key): an integer >= 1, or null. null on its own is only
-        allowed for a club entry carrying an 'override_key' (it cancels that
-        default); otherwise null needs 'date_max_overrides' to carry the actual caps.
+      - 'max' (required key): an integer >= 1 (or >= 0 when 'date_ranges' is set),
+        or null. null on its own is only allowed for a club entry carrying an
+        'override_key' (it cancels that default); otherwise null needs
+        'date_max_overrides' to carry the actual caps.
       - 'teams' (optional): IDs of this club's teams whose matches are counted.
         Omitted => every team of the club. Not allowed under 'defaults', nor
         alongside 'override_key' (an override replaces a spec-wide, all-teams
@@ -674,9 +708,17 @@ def _parse_match_count_limits(
       - 'venue_scope' (optional, default 'all'): 'home', 'away' or 'all'.
       - 'date_max_overrides' (optional): per-date replacements of 'max'. Only allowed
         when 'time_window_days' is 1.
+      - 'date_ranges' (optional): a non-empty list of {start_date, end_date}
+        inclusive ranges. When given, the rule applies to exactly those ranges
+        instead of every rolling 'time_window_days' window. Allowed on both club
+        and 'defaults' entries; not combinable with 'time_window_days' or
+        'date_max_overrides', nor (on a club entry) with 'override_key'. 'max'
+        must then be a non-negative integer (0 bars every counted match in the
+        range -- a whole-club, all-teams 'defaults' entry with max 0 is how a
+        spec-wide "nobody plays these dates" block is expressed).
       - 'override_key': required for a 'defaults' entry (and unique within that
         list); optional for a club entry, where it names the default this one
-        replaces for the club.
+        replaces for the club wholesale.
     """
     if entries_spec is None:
         return []
@@ -702,8 +744,12 @@ def _parse_match_count_limits(
         if "max" not in entry:
             raise SpecError(f"{entry_context} missing required field 'max'")
         max_ = _require_int_or_none(entry["max"], f"{entry_context}.max")
-        if max_ is not None and max_ < 1:
-            raise SpecError(f"{entry_context}.max must be >= 1 or null")
+        # 'date_ranges' permits max: 0 (a full blackout of the listed periods);
+        # every other form needs max >= 1 or null.
+        has_date_ranges = "date_ranges" in entry
+        min_max = 0 if has_date_ranges else 1
+        if max_ is not None and max_ < min_max:
+            raise SpecError(f"{entry_context}.max must be >= {min_max} or null")
 
         override_key: str | None = None
         if "override_key" in entry:
@@ -805,7 +851,39 @@ def _parse_match_count_limits(
                 entry["date_max_overrides"], f"{entry_context}.date_max_overrides"
             )
 
-        if max_ is None and not date_max_overrides and override_key is None:
+        date_ranges: tuple[fmodel.DateRange, ...] = ()
+        if has_date_ranges:
+            if not is_defaults and override_key is not None:
+                raise SpecError(
+                    f"{entry_context}: a club entry can't combine 'date_ranges' "
+                    "with 'override_key' (an override_key names a rolling default "
+                    "to replace wholesale; on a defaults entry it is the entry's "
+                    "own key and 'date_ranges' is fine)"
+                )
+            if "time_window_days" in entry:
+                raise SpecError(
+                    f"{entry_context}: 'date_ranges' and 'time_window_days' can't "
+                    "be combined ('date_ranges' replaces the rolling window)"
+                )
+            if date_max_overrides:
+                raise SpecError(
+                    f"{entry_context}: 'date_ranges' and 'date_max_overrides' "
+                    "can't be combined"
+                )
+            if max_ is None:
+                raise SpecError(
+                    f"{entry_context}.date_ranges needs an integer 'max' (>= 0)"
+                )
+            date_ranges = _parse_match_count_date_ranges(
+                entry["date_ranges"], f"{entry_context}.date_ranges"
+            )
+
+        if (
+            max_ is None
+            and not date_max_overrides
+            and not date_ranges
+            and override_key is None
+        ):
             raise SpecError(
                 f"{entry_context}.max: null needs 'date_max_overrides' to carry the "
                 "actual per-date caps (or an 'override_key' to cancel a default)"
@@ -819,6 +897,7 @@ def _parse_match_count_limits(
                 venue_scope=venue_scope,
                 apply_per=apply_per,
                 date_max_overrides=date_max_overrides,
+                date_ranges=date_ranges,
                 override_key=override_key,
             )
         )
@@ -886,6 +965,7 @@ def _resolve_match_count_limits(
                     venue_scope=pl.venue_scope,
                     apply_per=pl.apply_per,
                     date_max_overrides=pl.date_max_overrides,
+                    date_ranges=pl.date_ranges,
                 )
             )
     return resolved
@@ -1150,14 +1230,9 @@ def load_spec(spec_path: str | Path) -> Spec:
         for team_id in divisions.ordered_team_ids
     }
 
-    avoid_dates = _parse_date_list(data.get("avoid_dates"), f"{path}: 'avoid_dates'")
-
     club_constraints = _parse_club_constraints(data, clubs, teams, path)
     home_dates = club_constraints.home_dates
-    unavailable_away_dates = {
-        club_id: sorted(set(dates) | set(avoid_dates))
-        for club_id, dates in club_constraints.unavailable_away_dates.items()
-    }
+    unavailable_away_dates = club_constraints.unavailable_away_dates
     team_home_dates = club_constraints.team_home_dates
     team_unavailable_away_dates = club_constraints.team_unavailable_away_dates
 
