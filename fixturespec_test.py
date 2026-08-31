@@ -234,10 +234,22 @@ class TestLoadSpec(unittest.TestCase):
         team = next(t for t in spec.parameters.teams if t.club == "hackney")
         self.assertEqual(team.name_override, "Hackney Herons")
 
-    def test_overridden_constraints(self) -> None:
-        path = self._write(_MINIMAL_SPEC + "\nmin_gap_days: 10\n")
+    def test_default_min_gap_days_from_club_constraints_defaults(self) -> None:
+        path = self._write(_MINIMAL_SPEC + "    min_gap_days: 10\n")
         spec = fixturespec.load_spec(path)
         self.assertEqual(spec.parameters.min_gap_days, 10)
+
+    def test_min_gap_days_defaults_to_seven_when_unset(self) -> None:
+        path = self._write(_MINIMAL_SPEC)
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.parameters.min_gap_days, 7)
+
+    def test_top_level_min_gap_days_rejected(self) -> None:
+        path = self._write(_MINIMAL_SPEC + "\nmin_gap_days: 10\n")
+        with self.assertRaisesRegex(
+            fixturespec.SpecError, "top-level 'min_gap_days' is no longer supported"
+        ):
+            fixturespec.load_spec(path)
 
     def test_latest_internal_match_date_absent(self) -> None:
         path = self._write(_MINIMAL_SPEC)
@@ -288,7 +300,7 @@ class TestLoadSpec(unittest.TestCase):
             fixturespec.load_spec(path)
 
     def test_duplicate_top_level_key_rejected(self) -> None:
-        path = self._write(_MINIMAL_SPEC + "\nmin_gap_days: 7\nmin_gap_days: 10\n")
+        path = self._write(_MINIMAL_SPEC + '\nname: "one"\nname: "two"\n')
         with self.assertRaisesRegex(fixturespec.SpecError, "duplicate key"):
             fixturespec.load_spec(path)
 
@@ -1039,6 +1051,13 @@ club_constraints:
     def test_club_min_gap_days_negative_rejected(self) -> None:
         path = self._write(_MINIMAL_SPEC_NO_CONCURRENCY + "    min_gap_days: -1\n")
         with self.assertRaisesRegex(fixturespec.SpecError, "min_gap_days"):
+            fixturespec.load_spec(path)
+
+    def test_defaults_min_gap_days_negative_rejected(self) -> None:
+        path = self._write(_MINIMAL_SPEC + "    min_gap_days: -1\n")
+        with self.assertRaisesRegex(
+            fixturespec.SpecError, r"defaults\.min_gap_days must be >= 0"
+        ):
             fixturespec.load_spec(path)
 
     def test_fixed_fixture(self) -> None:

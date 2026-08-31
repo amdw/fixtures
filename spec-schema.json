@@ -22,11 +22,6 @@
       "default": "",
       "description": "Free-text note shown in a paragraph on every HTML report page (e.g. 'Final schedule; refer to ECF LMS for authoritative dates.'). Defaults to no note shown."
     },
-    "min_gap_days": {
-      "type": "integer",
-      "default": 7,
-      "description": "Minimum number of days required between any two matches involving the same team. A value of 7 (the default) means a team cannot play twice within the same calendar week's spacing -- exactly 7 days apart is allowed, fewer is not. Can be overridden for an individual club via club_constraints.<club>.min_gap_days."
-    },
     "latest_internal_match_date": {
       "$ref": "#/$defs/date",
       "description": "Latest date allowed for a fixture between two teams of the same club (e.g. Hendon 1 v Hendon 2) -- useful for requiring 'derby' matches to be settled earlier in the season than the rest of the fixture list. Has no effect on fixtures between teams from different clubs. If omitted, no such cutoff is applied. Any 'fixed_fixtures' entry between two teams of the same club must not be dated after it."
@@ -86,9 +81,15 @@
         "defaults": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Spec-wide defaults for constraint types that support one, merged with each club's own entry. Today that's just max_concurrent_matches, merged per scope (see its definition). All of it is optional -- there is no requirement that any club have a concurrency limit.",
+          "description": "Spec-wide defaults for constraint types that support one, applied wherever a club does not set its own. That's max_concurrent_matches (merged per scope -- see its definition) and min_gap_days. All of it is optional.",
           "properties": {
-            "max_concurrent_matches": { "$ref": "#/$defs/max_concurrent_matches" }
+            "max_concurrent_matches": { "$ref": "#/$defs/max_concurrent_matches" },
+            "min_gap_days": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 7,
+              "description": "Spec-wide minimum number of days between any two matches involving the same team. 7 (the default when omitted) means a team cannot play twice within a week's spacing -- a gap of exactly 7 days is allowed, fewer is not. A club can override this with its own club_constraints.<club>.min_gap_days."
+            }
           }
         }
       }
@@ -247,7 +248,7 @@
         "min_gap_days": {
           "type": "integer",
           "minimum": 0,
-          "description": "Overrides the top-level 'min_gap_days' for this club: the minimum number of days between any two matches involving one of this club's teams. Omit to use the top-level value. A gap of exactly this many days is allowed, fewer is not. Independent of the per-group 'avoid_coscheduling_teams' constraints, which are always additive."
+          "description": "Overrides club_constraints.defaults.min_gap_days for this club: the minimum number of days between any two matches involving one of this club's teams. Omit to use the default. A gap of exactly this many days is allowed, fewer is not. Independent of the per-group 'avoid_coscheduling_teams' constraints, which are always additive."
         },
         "max_concurrent_matches": { "$ref": "#/$defs/max_concurrent_matches" },
         "home_dates_used": {
@@ -314,7 +315,7 @@
           "type": "integer",
           "default": 1,
           "minimum": 0,
-          "description": "Minimum number of days required between any two matches involving 'teams' (of the kind selected by 'applies_to'). The per-group counterpart of the top-level 'min_gap_days': a gap of exactly this many days is allowed, fewer is not. The default, 1 (0 behaves the same), means no two of them may share a date; 7 keeps them at least a week apart while still permitting matches exactly 7 days apart."
+          "description": "Minimum number of days required between any two matches involving 'teams' (of the kind selected by 'applies_to'). The per-group counterpart of the spec-wide 'min_gap_days' (club_constraints.defaults.min_gap_days): a gap of exactly this many days is allowed, fewer is not. The default, 1 (0 behaves the same), means no two of them may share a date; 7 keeps them at least a week apart while still permitting matches exactly 7 days apart."
         },
         "applies_to": {
           "type": "string",

@@ -434,13 +434,17 @@ _HOME_DATES_USED_FIELD_KEYS = {"min", "max"}
 # types (home_dates, unavailable_away_dates, home_dates_used, teams,
 # avoid_coscheduling_teams) have no meaningful spec-wide default, so aren't accepted
 # under 'defaults'.
-_CLUB_CONSTRAINT_DEFAULTS_KEYS = {"max_concurrent_matches"}
+_CLUB_CONSTRAINT_DEFAULTS_KEYS = {"max_concurrent_matches", "min_gap_days"}
 
 
 @dataclasses.dataclass(frozen=True)
 class _ClubConstraints:
     home_dates: dict[str, list[date]]
     unavailable_away_dates: dict[str, list[date]]
+    # club_constraints.defaults.min_gap_days -- the spec-wide default gap; None if
+    # unset (fmodel.Parameters then supplies its own default). Distinct from
+    # club_min_gap_days below, which holds the per-club overrides.
+    default_min_gap_days: int | None
     club_min_gap_days: dict[str, int]
     max_concurrent_matches: dict[str, fmodel.MaxConcurrentMatches]
     home_dates_used: dict[str, fmodel.HomeDatesUsedBounds]
@@ -460,11 +464,13 @@ def _parse_club_constraints(
     avoid_coscheduling_teams, keyed directly by club ID.
 
     An optional 'defaults' entry (a sibling of the club entries) supplies spec-wide
-    defaults for constraint types that support one (currently just
-    max_concurrent_matches). Its max_concurrent_matches is merged with a club's own
-    entry per scope: a club that sets only 'any' still inherits the default 'home'
-    limit, and its own value wins for any scope it does set. Every scope is optional
-    -- a club (and the spec as a whole) may have no concurrency limits at all.
+    defaults for constraint types that support one (max_concurrent_matches and
+    min_gap_days). Its max_concurrent_matches is merged with a club's own entry per
+    scope: a club that sets only 'any' still inherits the default 'home' limit, and
+    its own value wins for any scope it does set. Every scope is optional -- a club
+    (and the spec as a whole) may have no concurrency limits at all. Its
+    min_gap_days is the spec-wide minimum gap between two matches involving the same
+    team; club_constraints.<club>.min_gap_days overrides it for that club.
 
     A club's optional 'teams' entry holds per-team exclusions, for clubs whose teams
     don't all share the same availability. Home dates are always specified at the club
@@ -497,6 +503,17 @@ def _parse_club_constraints(
             defaults_spec["max_concurrent_matches"],
             f"{path}: {section_name}.defaults.max_concurrent_matches",
         )
+
+    default_min_gap_days: int | None = None
+    if "min_gap_days" in defaults_spec:
+        default_min_gap_days = _require_int(
+            defaults_spec["min_gap_days"],
+            f"{path}: {section_name}.defaults.min_gap_days",
+        )
+        if default_min_gap_days < 0:
+            raise SpecError(
+                f"{path}: {section_name}.defaults.min_gap_days must be >= 0"
+            )
 
     unknown_clubs = section_spec.keys() - clubs.keys() - {"defaults"}
     if unknown_clubs:
@@ -587,6 +604,7 @@ def _parse_club_constraints(
     return _ClubConstraints(
         home_dates=home_dates,
         unavailable_away_dates=unavailable_away_dates,
+        default_min_gap_days=default_min_gap_days,
         club_min_gap_days=club_min_gap_days,
         max_concurrent_matches=max_concurrent_matches,
         home_dates_used=home_dates_used,
@@ -1004,9 +1022,16 @@ def load_spec(spec_path: str | Path) -> Spec:
     team_home_dates = club_constraints.team_home_dates
     team_unavailable_away_dates = club_constraints.team_unavailable_away_dates
 
-    kwargs: dict[str, Any] = {}
     if "min_gap_days" in data:
-        kwargs["min_gap_days"] = data["min_gap_days"]
+        raise SpecError(
+            f"{path}: top-level 'min_gap_days' is no longer supported; put the "
+            "spec-wide default under club_constraints.defaults.min_gap_days (and "
+            "any per-club override under club_constraints.<club>.min_gap_days)"
+        )
+
+    kwargs: dict[str, Any] = {}
+    if club_constraints.default_min_gap_days is not None:
+        kwargs["min_gap_days"] = club_constraints.default_min_gap_days
     if club_constraints.club_min_gap_days:
         kwargs["club_min_gap_days"] = club_constraints.club_min_gap_days
     if club_constraints.max_concurrent_matches:
