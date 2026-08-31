@@ -99,54 +99,6 @@ class Club:
     home_time_limit: str  # chess time control, e.g. "75+15" for 75 min + 15 sec/move
 
 
-class ConcurrencyScope(enum.Enum):
-    """Which of a club's matches on a date a MaxConcurrentMatches limit counts:
-    HOME only its home matches, AWAY only its away matches, ANY every match its
-    teams play (an internal match -- both teams the club's -- counted once).
-
-    Parallel to CoschedulingScope but kept separate: that one's third value is
-    BOTH ("home") and it names a different feature.
-    """
-
-    HOME = "home"
-    AWAY = "away"
-    ANY = "any"
-
-
-@dataclasses.dataclass(frozen=True)
-class ConcurrencyLimit:
-    """A match-count limit for one ConcurrencyScope: a default, overridable for
-    specific dates. A value of None (for the default or an override) means no limit
-    is imposed by this mechanism -- e.g. for a club whose concurrency is already
-    bounded by another constraint (such as avoid_coscheduling_teams), where adding
-    an explicit number here would just be a redundant, easy-to-forget-to-update
-    restatement of that bound.
-    """
-
-    default: int | None
-    overrides: Mapping[date, int | None] = dataclasses.field(default_factory=dict)
-
-    def for_date(self, d: date) -> int | None:
-        return self.overrides.get(d, self.default)
-
-
-@dataclasses.dataclass(frozen=True)
-class MaxConcurrentMatches:
-    """A club's per-scope limits on how many matches its teams may play on the same
-    date. Each ConcurrencyScope present in `by_scope` has its own ConcurrencyLimit;
-    a scope with no entry imposes no limit. See ConcurrencyScope for what each
-    scope counts.
-    """
-
-    by_scope: Mapping[ConcurrencyScope, ConcurrencyLimit] = dataclasses.field(
-        default_factory=dict
-    )
-
-    def for_date(self, scope: ConcurrencyScope, d: date) -> int | None:
-        limit = self.by_scope.get(scope)
-        return None if limit is None else limit.for_date(d)
-
-
 @dataclasses.dataclass(frozen=True)
 class HomeDatesUsedBounds:
     """Bounds on how many distinct dates a club actually hosts home matches on in
@@ -219,35 +171,73 @@ class Division:
         return [Fixture(home_team=home, away_team=away) for home, away in pairs]
 
 
-class CoschedulingScope(enum.Enum):
-    """Which of an AvoidCoschedulingConstraint's teams' matches are counted towards
-    its limit: only their home matches, only their away matches, or both."""
+class VenueScope(enum.Enum):
+    """Which of a MatchCountLimit's teams' matches are counted towards its cap:
+    only their home matches, only their away matches, or all of them."""
 
     HOME = "home"
     AWAY = "away"
-    BOTH = "both"
+    ALL = "all"
+
+
+class ApplyPer(enum.Enum):
+    """How a MatchCountLimit's `max` applies to its `teams`. ACROSS_TEAMS: one
+    shared budget for the whole set (a venue capacity, or a keep-these-teams-apart
+    rule). EACH_TEAM: the cap is enforced separately for every team in the set (a
+    per-team gap -- `teams` is then typically every team of a club and `max` is 1).
+    """
+
+    EACH_TEAM = "each_team"
+    ACROSS_TEAMS = "across_teams"
 
 
 @dataclasses.dataclass(frozen=True)
-class AvoidCoschedulingConstraint:
-    """Any two matches involving `teams` must be scheduled at least `min_gap_days`
-    days apart -- i.e. a separation of exactly `min_gap_days` days is allowed, and
-    only shorter gaps are forbidden. This is the per-group counterpart of
-    Parameters.min_gap_days (which applies to every team); min_gap_days=1 (the
-    default) and min_gap_days=0 both mean simply that no two of them may share a
-    date. Typically used for a club's own teams that draw from the same pool of
-    players (e.g. adjacent-division teams), but not restricted to that.
+class MatchCountLimit:
+    """At most `max` matches involving `teams` may fall within any window of
+    `time_window_days` consecutive calendar days. This is the sole match-count
+    constraint mechanism -- a per-team gap ("each team plays at most once a week"),
+    a venue's concurrent-match capacity ("at most two home matches a night"), and a
+    keep-these-teams-apart rule are all expressed as instances of it.
 
-    `applies_to` narrows which of those teams' matches count: CoschedulingScope.HOME
-    only their home matches, CoschedulingScope.AWAY only their away matches,
-    CoschedulingScope.BOTH (the default) every match they play. So an AWAY constraint
-    keeps the teams' away fixtures on separate dates while still allowing one to play
-    away on a night another is hosting.
+    `time_window_days` counts a run of consecutive days, not a gap between two
+    endpoints: `time_window_days=1` (the default) limits matches on a single date;
+    `time_window_days=7` limits matches in any seven-consecutive-day period, so two
+    matches exactly a week apart (day N and day N+7) never share a window and are
+    unrestricted relative to each other.
+
+    `apply_per` (see ApplyPer) decides whether `max` is one shared budget for the
+    whole `teams` set (ACROSS_TEAMS, the default) or enforced separately per team
+    (EACH_TEAM).
+
+    `venue_scope` narrows which of those teams' matches count: VenueScope.HOME only
+    their home matches, VenueScope.AWAY only their away matches, VenueScope.ALL (the
+    default) every match they play. So an AWAY cap counts only the teams' away
+    fixtures, still allowing one to play away on a night another is hosting.
+
+    `max` may be None, meaning no cap from the plain value -- only useful alongside
+    `overrides`, which replace `max` on specific dates (an int, or None to lift the
+    cap that day). Overrides are only meaningful, and only permitted, when
+    `time_window_days` is 1, so each window is a single date.
     """
 
     teams: Collection[Team]
-    min_gap_days: int = 1
-    applies_to: CoschedulingScope = CoschedulingScope.BOTH
+    max: int | None
+    time_window_days: int = 1
+    venue_scope: VenueScope = VenueScope.ALL
+    apply_per: ApplyPer = ApplyPer.ACROSS_TEAMS
+    overrides: Mapping[date, int | None] = dataclasses.field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.overrides and self.time_window_days != 1:
+            raise ValueError("MatchCountLimit.overrides requires time_window_days == 1")
+
+    def max_for_window(self, window: Collection[date]) -> int | None:
+        """The effective cap for one window: an `overrides` entry when the window
+        is a single overridden date, otherwise `max`."""
+        if self.overrides and len(window) == 1:
+            (d,) = tuple(window)
+            return self.overrides.get(d, self.max)
+        return self.max
 
 
 def _check_no_duplicate_teams(teams: Collection[Team]) -> None:
@@ -280,16 +270,6 @@ class Parameters:
     teams: Collection[Team]
     home_dates: Mapping[ClubT, list[date]]
     unavailable_away_dates: Mapping[ClubT, list[date]]
-    min_gap_days: int = 7
-    # Per-club overrides of min_gap_days: a club listed here uses its value for the
-    # minimum gap between any two matches involving one of its teams, in place of
-    # the spec-wide min_gap_days. A club not present here uses min_gap_days as
-    # before. (This is about the every-team window; the per-group
-    # avoid_coscheduling_teams constraints are separate and always additive.)
-    club_min_gap_days: Mapping[ClubT, int] = dataclasses.field(default_factory=dict)
-    max_concurrent_matches: Mapping[ClubT, MaxConcurrentMatches] = dataclasses.field(
-        default_factory=dict
-    )
     home_dates_used: Mapping[ClubT, HomeDatesUsedBounds] = dataclasses.field(
         default_factory=dict
     )
@@ -320,7 +300,7 @@ class Parameters:
     team_unavailable_away_dates: Mapping[Team, list[date]] = dataclasses.field(
         default_factory=dict
     )
-    avoid_coscheduling_teams: Collection[AvoidCoschedulingConstraint] = ()
+    match_count_limits: Collection[MatchCountLimit] = ()
     # Fixture generation scheme per division number (see FixtureScheme); a division
     # with no entry here uses FixtureScheme.DOUBLE_ROUND. This is the only
     # per-division input -- the `divisions` view below, including each SINGLE_ROUND
@@ -363,34 +343,6 @@ class Parameters:
             )
             for number, division_teams in by_number.items()
         )
-
-    @functools.cached_property
-    def _teams_per_club(self) -> Mapping[ClubT, int]:
-        return collections.Counter(team.club for team in self.teams)
-
-    def max_concurrent_matches_for(
-        self, club: ClubT, scope: ConcurrencyScope, d: date
-    ) -> int | None:
-        """The most matches of `scope` (see ConcurrencyScope) `club` may play on
-        date `d`, or None if unlimited.
-
-        A configured limit that is >= the club's own number of teams is reported as
-        unlimited too: the club can never play more simultaneous matches (of any
-        scope) than it has teams, so such a limit could never actually bind.
-        """
-        entry = self.max_concurrent_matches.get(club)
-        if entry is None:
-            return None
-        limit = entry.for_date(scope, d)
-        if limit is not None and limit >= self._teams_per_club[club]:
-            return None
-        return limit
-
-    def min_gap_days_for(self, team: Team) -> int:
-        """The minimum gap in days between any two matches involving `team`: its
-        club's club_min_gap_days override if it has one, otherwise the spec-wide
-        min_gap_days."""
-        return self.club_min_gap_days.get(team.club, self.min_gap_days)
 
     def home_dates_for(self, team: Team) -> list[date]:
         """The candidate home dates for `team`: its own override if it has one
@@ -455,11 +407,11 @@ class _FixtureVars:
         self._by_team_date: MutableMapping[
             Team, MutableMapping[date, list[cp_model.IntVar]]
         ] = collections.defaultdict(lambda: collections.defaultdict(list))
-        # One (club, date) -> vars map per ConcurrencyScope (see ConcurrencyScope
-        # for what each counts).
-        self._by_club_date: Mapping[
-            ConcurrencyScope, MutableMapping[tuple[ClubT, date], list[cp_model.IntVar]]
-        ] = {scope: collections.defaultdict(list) for scope in ConcurrencyScope}
+        # (club, date) -> vars for that club's home matches on that date (for the
+        # home_dates_used bound).
+        self._by_club_home_date: MutableMapping[
+            tuple[ClubT, date], list[cp_model.IntVar]
+        ] = collections.defaultdict(list)
 
     def register(
         self, fixture: Fixture, match_date: date, var: cp_model.IntVar
@@ -478,11 +430,7 @@ class _FixtureVars:
         self._by_fixture[fixture].append(var)
         self._by_team_date[home][match_date].append(var)
         self._by_team_date[away][match_date].append(var)
-        self._by_club_date[ConcurrencyScope.HOME][home.club, match_date].append(var)
-        self._by_club_date[ConcurrencyScope.AWAY][away.club, match_date].append(var)
-        self._by_club_date[ConcurrencyScope.ANY][home.club, match_date].append(var)
-        if away.club != home.club:
-            self._by_club_date[ConcurrencyScope.ANY][away.club, match_date].append(var)
+        self._by_club_home_date[home.club, match_date].append(var)
 
     def fixture_date_vars(self) -> Mapping[tuple[Fixture, date], cp_model.IntVar]:
         """The master map: the single bool var for each candidate (fixture, date)."""
@@ -492,18 +440,11 @@ class _FixtureVars:
         """Each fixture's vars over all its candidate dates (exactly one is true)."""
         return self._by_fixture.values()
 
-    def per_team_dates(
+    def by_club_home_date(
         self,
-    ) -> Iterable[tuple[Team, Mapping[date, list[cp_model.IntVar]]]]:
-        """Per team, the team paired with its vars grouped by date (for the
-        min-gap window limit, whose length can vary by the team's club)."""
-        return self._by_team_date.items()
-
-    def by_club_date(
-        self, scope: ConcurrencyScope
     ) -> Mapping[tuple[ClubT, date], list[cp_model.IntVar]]:
-        """Per (club, date), the vars counting towards `scope` (see ConcurrencyScope)."""
-        return self._by_club_date[scope]
+        """Per (club, date), the vars for that club's home matches on that date."""
+        return self._by_club_home_date
 
 
 def _add_home_dates_used_constraints(
@@ -513,7 +454,7 @@ def _add_home_dates_used_constraints(
 ) -> None:
     """For each club in home_dates_used, bound the number of its home dates that
     end up hosting at least one match (below by `minimum`, above by `maximum`)."""
-    vars_by_club_home_date = fixture_vars.by_club_date(ConcurrencyScope.HOME)
+    vars_by_club_home_date = fixture_vars.by_club_home_date()
     # Collect the set of home dates per club that appear in the variable map
     clubs_home_dates: MutableMapping[str, list[date]] = collections.defaultdict(list)
     for club, d in vars_by_club_home_date:
@@ -540,48 +481,54 @@ def _add_home_dates_used_constraints(
             model.add(total_used >= bounds.minimum)
 
 
-def _add_avoid_coscheduling_constraints(
+def _add_match_count_limit_constraints(
     model: cp_model.CpModel,
-    constraints: Collection[AvoidCoschedulingConstraint],
+    limits: Collection[MatchCountLimit],
     fixture_vars: _FixtureVars,
 ) -> None:
-    """For each AvoidCoschedulingConstraint, ensure any two matches involving its
-    teams are scheduled at least min_gap_days days apart (a gap of exactly
-    min_gap_days days is allowed; only shorter gaps are forbidden). The constraint's
-    `applies_to` scope limits which of those teams' matches are counted -- home only,
-    away only, or (by default) both.
+    """Apply every MatchCountLimit: no window of `time_window_days` consecutive days
+    may hold more than the rule's effective cap (see max_for_window) matches from
+    the counted set. `venue_scope` selects which of the teams' matches count (home
+    only, away only, or all); `apply_per` decides whether `max` is a shared budget
+    for the whole group or enforced separately per team.
     """
-    for constraint in constraints:
-        team_set = set(constraint.teams)
-        count_home = constraint.applies_to in (
-            CoschedulingScope.HOME,
-            CoschedulingScope.BOTH,
-        )
-        count_away = constraint.applies_to in (
-            CoschedulingScope.AWAY,
-            CoschedulingScope.BOTH,
-        )
-        # Each (fixture, date) maps to a single variable, visited once here, so a
-        # match between two teams both in `constraint.teams` is counted once.
-        vars_by_date: MutableMapping[date, list[cp_model.IntVar]] = (
-            collections.defaultdict(list)
-        )
-        for (fixture, d), var in fixture_vars.fixture_date_vars().items():
-            if (count_home and fixture.home_team in team_set) or (
-                count_away and fixture.away_team in team_set
-            ):
-                vars_by_date[d].append(var)
+    fixture_date_vars = fixture_vars.fixture_date_vars()
+    for rule in limits:
+        count_home = rule.venue_scope in (VenueScope.HOME, VenueScope.ALL)
+        count_away = rule.venue_scope in (VenueScope.AWAY, VenueScope.ALL)
+        each_team = rule.apply_per is ApplyPer.EACH_TEAM
+        groups = [{team} for team in rule.teams] if each_team else [set(rule.teams)]
+        for team_set in groups:
+            # Each (fixture, date) maps to a single variable, visited once here, so
+            # a match between two teams both in `team_set` is counted once.
+            vars_by_date: MutableMapping[date, list[cp_model.IntVar]] = (
+                collections.defaultdict(list)
+            )
+            for (fixture, d), var in fixture_date_vars.items():
+                if (count_home and fixture.home_team in team_set) or (
+                    count_away and fixture.away_team in team_set
+                ):
+                    vars_by_date[d].append(var)
 
-        # date_windows groups dates up to and including its window arg apart, so
-        # pass min_gap_days - 1: a separation of exactly min_gap_days (e.g. two
-        # matches a week apart when min_gap_days=7) must be allowed, not treated as
-        # a violation -- the same convention as the per-team min_gap_days constraint
-        # in _build_model. min_gap_days <= 1 still forbids sharing a date (each
-        # date's own singleton window collects every counted match on it).
-        for window in date_windows(vars_by_date.keys(), constraint.min_gap_days - 1):
-            window_vars = [v for d in window for v in vars_by_date[d]]
-            if len(window_vars) > 1:
-                model.add(cp_model.LinearExpr.Sum(window_vars) <= 1)
+            # date_windows groups dates spanning up to its window arg in days, so
+            # pass time_window_days - 1: a window is then any run of
+            # time_window_days consecutive calendar days, and two dates exactly
+            # time_window_days apart (e.g. a week apart when time_window_days=7)
+            # fall in separate windows. time_window_days=1 gives one window per
+            # date.
+            for window in date_windows(vars_by_date.keys(), rule.time_window_days - 1):
+                cap = rule.max_for_window(window)
+                if cap is None:
+                    continue
+                # A shared-budget cap that is >= the group size can never bind: the
+                # teams can't play more simultaneous matches than there are of them
+                # (this is how a stated venue capacity above a club's team count
+                # stays a no-op).
+                if not each_team and cap >= len(team_set):
+                    continue
+                window_vars = [v for d in window for v in vars_by_date[d]]
+                if len(window_vars) > cap:
+                    model.add(cp_model.LinearExpr.Sum(window_vars) <= cap)
 
 
 def _add_fixed_fixtures_constraints(
@@ -656,31 +603,8 @@ def _build_model(params: Parameters) -> tuple[cp_model.CpModel, _FixtureVars]:
         # Each fixture must be scheduled exactly once
         model.add(cp_model.LinearExpr.Sum(scheduled_vars) == 1)
 
-    for team, team_date_vars in fixture_vars.per_team_dates():
-        # Each team can play at most one match in each window. date_windows groups
-        # dates up to and including window_days apart, so pass min_gap_days - 1: a
-        # gap of exactly min_gap_days (e.g. two matches a week apart when
-        # min_gap_days=7) must be allowed, not treated as a violation. The gap can
-        # be overridden per club (club_min_gap_days), so resolve it per team.
-        gap = params.min_gap_days_for(team)
-        for window in date_windows(team_date_vars.keys(), gap - 1):
-            window_vars = [v for d in window for v in team_date_vars[d]]
-            model.add(cp_model.LinearExpr.Sum(window_vars) <= 1)
-
-    for scope in ConcurrencyScope:
-        for (club, match_date), club_date_vars in fixture_vars.by_club_date(
-            scope
-        ).items():
-            # Each club may play at most max_concurrent_matches matches of this
-            # scope per date (None means unlimited: no constraint to add).
-            max_matches = params.max_concurrent_matches_for(club, scope, match_date)
-            if max_matches is not None:
-                model.add(cp_model.LinearExpr.Sum(club_date_vars) <= max_matches)
-
     _add_home_dates_used_constraints(model, params.home_dates_used, fixture_vars)
-    _add_avoid_coscheduling_constraints(
-        model, params.avoid_coscheduling_teams, fixture_vars
-    )
+    _add_match_count_limit_constraints(model, params.match_count_limits, fixture_vars)
     _add_fixed_fixtures_constraints(model, params.fixed_fixtures, fixture_vars)
 
     return model, fixture_vars

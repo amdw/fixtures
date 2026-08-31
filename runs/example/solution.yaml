@@ -548,10 +548,10 @@ fixtures:
 - home: hendon-1
   away: hackney-1
   date: 2026-05-28
-spec_checksum: sha256:047ca7f38776496599e9ac9c8e63000e9720c7a029fa407f7cad6f8201e78eeb
+spec_checksum: sha256:687409765b48c9c643dd647803c104ec058112645fe106af848e06e10b73e4a7
 stats:
   model: |-
-    satisfaction model '': (model_fingerprint: 0x68b3d8a681956b57)
+    satisfaction model '': (model_fingerprint: 0x7a72f3dd866787a9)
     #Variables: 5'653 (5'470 primary variables)
       - 5'653 Booleans in [0,1]
     #kLinear3: 4
@@ -564,13 +564,13 @@ stats:
     integers: 2215
     booleans: 5639
     conflicts: 0
-    branches: 6016
-    propagations: 210404
-    integer_propagations: 60780
+    branches: 7600
+    propagations: 269012
+    integer_propagations: 84076
     restarts: 0
     lp_iterations: 0
-    walltime: 0.199018
-    usertime: 0.199018
-    deterministic_time: 0.354404
+    walltime: 0.204949
+    usertime: 0.204949
+    deterministic_time: 0.371173
     gap_integral: 0
     solution_fingerprint: 0x5ef51ce980a21f5d

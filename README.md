@@ -91,19 +91,35 @@ divisions:                       # each team's division: the only place it's giv
 
 club_constraints:
   defaults:
-    min_gap_days: 7                # optional spec-wide default (7 if omitted)
+    match_count_limits:              # spec-wide, applied to every club
+      - override_key: weekly-gap     # each team plays at most once a week
+        apply_per: each_team
+        time_window_days: 7
+        max: 1
+      - override_key: venue-capacity # at most two home matches a night
+        venue_scope: home
+        max: 2
   albany:
     home_dates: [2025-09-01, 2025-09-15, 2025-09-29]
-    max_concurrent_matches: { home: 2 }
   hackney:
     home_dates: [2025-09-08, 2025-09-22]
-    max_concurrent_matches: { home: 2 }
-    min_gap_days: 14              # optional per-club override of the default
+    match_count_limits:
+      - override_key: weekly-gap     # a fortnight between this club's matches
+        apply_per: each_team          # (replaces the like-keyed spec-wide default)
+        time_window_days: 14
+        max: 1
 ```
 
+`match_count_limits` is the one match-count constraint: each entry caps how many
+matches involving a set of teams may fall in any window of `time_window_days`
+consecutive days. It expresses a per-team gap (`apply_per: each_team`), a venue's
+concurrent-match capacity (`venue_scope: home`, with per-date `overrides`), and a
+keep-these-teams-apart rule (`teams: [...]`) alike. Every spec-wide default entry
+carries a unique `override_key`; a club entry repeating one replaces that default
+for the club, and a club entry with no `override_key` is additive.
+
 That's only a fraction of what the format supports -- per-club/per-team date
-exclusions, per-scope (home/away/any) concurrency limits with per-date
-overrides, pinned and withheld fixtures, and more. For the full field-by-field
+exclusions, pinned and withheld fixtures, and more. For the full field-by-field
 reference, see:
 
 - **[spec-schema.json](spec-schema.json)**, the JSON Schema every field is

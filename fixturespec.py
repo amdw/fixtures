@@ -311,75 +311,6 @@ def _parse_divisions(
     )
 
 
-def _parse_concurrency_limit_value(value: Any, context: str) -> fmodel.ConcurrencyLimit:
-    """One ConcurrencyScope's limit within a max_concurrent_matches entry: either a
-    plain integer, null (no limit from this mechanism -- see
-    fmodel.ConcurrencyLimit), or a mapping with 'default' (an integer or null) and
-    optionally 'overrides' (a date-keyed mapping of integer-or-null overrides of
-    that default).
-    """
-    if value is None or (isinstance(value, int) and not isinstance(value, bool)):
-        return fmodel.ConcurrencyLimit(default=value)
-    if isinstance(value, dict):
-        unsupported = value.keys() - {"default", "overrides"}
-        if unsupported:
-            raise SpecError(f"{context}: unsupported field(s) {sorted(unsupported)}")
-        if "default" not in value:
-            raise SpecError(f"{context} missing required field 'default'")
-        default = _require_int_or_none(value["default"], f"{context}.default")
-
-        overrides_spec = value.get("overrides")
-        overrides: dict[date, int | None] = {}
-        if overrides_spec is not None:
-            if not isinstance(overrides_spec, dict):
-                raise SpecError(f"{context}.overrides must be a mapping")
-            for date_key, count in overrides_spec.items():
-                override_date = _parse_date(date_key, f"{context}.overrides")
-                overrides[override_date] = _require_int_or_none(
-                    count, f"{context}.overrides[{date_key!r}]"
-                )
-        return fmodel.ConcurrencyLimit(default=default, overrides=overrides)
-    raise SpecError(
-        f"{context}: expected an integer, null (unlimited), or a mapping with "
-        f"'default' and optionally 'overrides', got {value!r}"
-    )
-
-
-_CONCURRENCY_SCOPES_BY_KEY = {s.value: s for s in fmodel.ConcurrencyScope}
-
-
-def _parse_max_concurrent_matches_by_scope(
-    value: Any, context: str
-) -> dict[fmodel.ConcurrencyScope, fmodel.ConcurrencyLimit]:
-    """A max_concurrent_matches entry: a mapping keyed by ConcurrencyScope value
-    ('home', 'away', 'any'), each value a per-scope limit (see
-    _parse_concurrency_limit_value). At least one scope must be given. Returns the
-    parsed limits keyed by scope, for merging with any club_constraints.defaults
-    entry by the caller.
-    """
-    if not isinstance(value, dict):
-        raise SpecError(
-            f"{context}: expected a mapping keyed by "
-            f"{sorted(_CONCURRENCY_SCOPES_BY_KEY)}, got {value!r}"
-        )
-    unsupported = value.keys() - _CONCURRENCY_SCOPES_BY_KEY.keys()
-    if unsupported:
-        raise SpecError(
-            f"{context}: unsupported scope(s) {sorted(unsupported)} "
-            f"(only {sorted(_CONCURRENCY_SCOPES_BY_KEY)} are)"
-        )
-    if not value:
-        raise SpecError(
-            f"{context}: needs at least one of {sorted(_CONCURRENCY_SCOPES_BY_KEY)}"
-        )
-    return {
-        _CONCURRENCY_SCOPES_BY_KEY[key]: _parse_concurrency_limit_value(
-            scope_value, f"{context}.{key}"
-        )
-        for key, scope_value in value.items()
-    }
-
-
 def _parse_home_dates_used_value(
     value: Any, context: str
 ) -> fmodel.HomeDatesUsedBounds:
@@ -418,42 +349,77 @@ def _parse_home_dates_used_value(
 _CLUB_CONSTRAINT_FIELD_KEYS = {
     "home_dates",
     "unavailable_away_dates",
-    "min_gap_days",
-    "max_concurrent_matches",
     "home_dates_used",
     "latest_match_date",
     "teams",
-    "avoid_coscheduling_teams",
+    "match_count_limits",
 }
 
 _TEAM_CONSTRAINT_FIELD_KEYS = {"unavailable_home_dates", "unavailable_away_dates"}
 
-_AVOID_COSCHEDULING_FIELD_KEYS = {"teams", "min_gap_days", "applies_to"}
+_MATCH_COUNT_LIMIT_FIELD_KEYS = {
+    "teams",
+    "max",
+    "time_window_days",
+    "venue_scope",
+    "apply_per",
+    "overrides",
+    "override_key",
+}
 
 _HOME_DATES_USED_FIELD_KEYS = {"min", "max"}
 
-# Constraint types with a notion of a default, overridable per club. Other constraint
-# types (home_dates, unavailable_away_dates, home_dates_used, teams,
-# avoid_coscheduling_teams) have no meaningful spec-wide default, so aren't accepted
-# under 'defaults'.
-_CLUB_CONSTRAINT_DEFAULTS_KEYS = {"max_concurrent_matches", "min_gap_days"}
+# match_count_limits is the one constraint type accepted under 'defaults' (a
+# spec-wide list applied to every club). The rest (home_dates,
+# unavailable_away_dates, home_dates_used, latest_match_date, teams) are inherently
+# per-club and have no meaningful spec-wide default.
+_CLUB_CONSTRAINT_DEFAULTS_KEYS = {"match_count_limits"}
+
+_TOP_LEVEL_KEYS = {
+    "name",
+    "draft",
+    "description",
+    "latest_internal_match_date",
+    "avoid_dates",
+    "clubs",
+    "teams",
+    "divisions",
+    "club_constraints",
+    "fixed_fixtures",
+    "exclude_fixtures",
+}
+
+
+@dataclasses.dataclass(frozen=True)
+class _ParsedMatchCountLimit:
+    """One match_count_limits entry, parsed but not yet resolved to concrete Teams.
+
+    `team_ids` is None when the entry omitted 'teams' (meaning "every team of the
+    club it applies to"). `override_key`, on a club entry, names the
+    club_constraints.defaults entry this one replaces for that club; None means the
+    entry is purely additive. Every defaults entry has an `override_key`. `max` is
+    None only for an entry that exists solely to carry `overrides`, or to cancel an
+    inherited default (a club entry with an override_key and nothing else).
+    """
+
+    team_ids: tuple[str, ...] | None
+    max: int | None
+    time_window_days: int
+    venue_scope: fmodel.VenueScope
+    apply_per: fmodel.ApplyPer
+    overrides: Mapping[date, int | None]
+    override_key: str | None
 
 
 @dataclasses.dataclass(frozen=True)
 class _ClubConstraints:
     home_dates: dict[str, list[date]]
     unavailable_away_dates: dict[str, list[date]]
-    # club_constraints.defaults.min_gap_days -- the spec-wide default gap; None if
-    # unset (fmodel.Parameters then supplies its own default). Distinct from
-    # club_min_gap_days below, which holds the per-club overrides.
-    default_min_gap_days: int | None
-    club_min_gap_days: dict[str, int]
     club_latest_match_date: dict[str, date]
-    max_concurrent_matches: dict[str, fmodel.MaxConcurrentMatches]
     home_dates_used: dict[str, fmodel.HomeDatesUsedBounds]
     team_home_dates: dict[fmodel.Team, list[date]]
     team_unavailable_away_dates: dict[fmodel.Team, list[date]]
-    avoid_coscheduling_teams: list[fmodel.AvoidCoschedulingConstraint]
+    match_count_limits: list[fmodel.MatchCountLimit]
 
 
 def _parse_club_constraints(
@@ -462,32 +428,26 @@ def _parse_club_constraints(
     teams: Mapping[str, fmodel.Team],
     path: Path,
 ) -> _ClubConstraints:
-    """Parse the 'club_constraints' section: per-club home_dates, unavailable_away_dates,
-    max_concurrent_matches, home_dates_used, latest_match_date, teams and
-    avoid_coscheduling_teams, keyed directly by club ID.
+    """Parse the 'club_constraints' section: per-club home_dates,
+    unavailable_away_dates, home_dates_used, latest_match_date, teams and
+    match_count_limits, keyed directly by club ID.
 
     A club's optional 'latest_match_date' entry is the last date on which any fixture
     involving one of that club's teams -- home or away -- may be scheduled (a
     fixed_fixtures entry involving the club after it is an error). It has no spec-wide
     default, so it isn't accepted under 'defaults'.
 
-    An optional 'defaults' entry (a sibling of the club entries) supplies spec-wide
-    defaults for constraint types that support one (max_concurrent_matches and
-    min_gap_days). Its max_concurrent_matches is merged with a club's own entry per
-    scope: a club that sets only 'any' still inherits the default 'home' limit, and
-    its own value wins for any scope it does set. Every scope is optional -- a club
-    (and the spec as a whole) may have no concurrency limits at all. Its
-    min_gap_days is the spec-wide minimum gap between two matches involving the same
-    team; club_constraints.<club>.min_gap_days overrides it for that club.
+    An optional 'defaults' entry (a sibling of the club entries) supplies a spec-wide
+    'match_count_limits' list applied to every club. Every defaults entry carries a
+    unique 'override_key'; a club's own match_count_limits entry that repeats one of
+    those keys replaces that default for the club, and any club entry without an
+    'override_key' is purely additive. See _parse_match_count_limits() and
+    _resolve_match_count_limits().
 
     A club's optional 'teams' entry holds per-team exclusions, for clubs whose teams
     don't all share the same availability. Home dates are always specified at the club
     level; per-team variations are supported only via exclusions -- see
     _parse_club_team_constraints().
-
-    A club's optional 'avoid_coscheduling_teams' entry lists groups of that club's own
-    teams that shouldn't be scheduled too close together (e.g. adjacent-division teams
-    drawing from the same pool of players) -- see _parse_avoid_coscheduling_teams().
     """
     section_name = "club_constraints"
     section_spec = data.get(section_name, {})
@@ -503,25 +463,12 @@ def _parse_club_constraints(
             f"{path}: {section_name}.defaults.{sorted(unsupported_defaults)} not "
             f"supported (only {sorted(_CLUB_CONSTRAINT_DEFAULTS_KEYS)} are)"
         )
-    default_concurrency_by_scope: dict[
-        fmodel.ConcurrencyScope, fmodel.ConcurrencyLimit
-    ] = {}
-    if "max_concurrent_matches" in defaults_spec:
-        default_concurrency_by_scope = _parse_max_concurrent_matches_by_scope(
-            defaults_spec["max_concurrent_matches"],
-            f"{path}: {section_name}.defaults.max_concurrent_matches",
-        )
-
-    default_min_gap_days: int | None = None
-    if "min_gap_days" in defaults_spec:
-        default_min_gap_days = _require_int(
-            defaults_spec["min_gap_days"],
-            f"{path}: {section_name}.defaults.min_gap_days",
-        )
-        if default_min_gap_days < 0:
-            raise SpecError(
-                f"{path}: {section_name}.defaults.min_gap_days must be >= 0"
-            )
+    default_limits = _parse_match_count_limits(
+        defaults_spec.get("match_count_limits"),
+        None,
+        teams,
+        f"{path}: {section_name}.defaults.match_count_limits",
+    )
 
     unknown_clubs = section_spec.keys() - clubs.keys() - {"defaults"}
     if unknown_clubs:
@@ -531,13 +478,11 @@ def _parse_club_constraints(
 
     home_dates: dict[str, list[date]] = {}
     unavailable_away_dates: dict[str, list[date]] = {}
-    club_min_gap_days: dict[str, int] = {}
     club_latest_match_date: dict[str, date] = {}
-    max_concurrent_matches: dict[str, fmodel.MaxConcurrentMatches] = {}
     home_dates_used: dict[str, fmodel.HomeDatesUsedBounds] = {}
     team_home_dates: dict[fmodel.Team, list[date]] = {}
     team_unavailable_away_dates: dict[fmodel.Team, list[date]] = {}
-    avoid_coscheduling_teams: list[fmodel.AvoidCoschedulingConstraint] = []
+    club_limits: dict[str, list[_ParsedMatchCountLimit]] = {}
 
     for club_id in clubs:
         club_spec = section_spec.get(club_id, {})
@@ -559,34 +504,10 @@ def _parse_club_constraints(
             f"{path}: {section_name}[{club_id!r}].unavailable_away_dates",
         )
 
-        if "min_gap_days" in club_spec:
-            club_gap = _require_int(
-                club_spec["min_gap_days"],
-                f"{path}: {section_name}[{club_id!r}].min_gap_days",
-            )
-            if club_gap < 0:
-                raise SpecError(
-                    f"{path}: {section_name}[{club_id!r}].min_gap_days must be >= 0"
-                )
-            club_min_gap_days[club_id] = club_gap
-
         if "latest_match_date" in club_spec:
             club_latest_match_date[club_id] = _parse_date(
                 club_spec["latest_match_date"],
                 f"{path}: {section_name}[{club_id!r}].latest_match_date",
-            )
-
-        club_concurrency_by_scope = dict(default_concurrency_by_scope)
-        if "max_concurrent_matches" in club_spec:
-            club_concurrency_by_scope.update(
-                _parse_max_concurrent_matches_by_scope(
-                    club_spec["max_concurrent_matches"],
-                    f"{path}: {section_name}[{club_id!r}].max_concurrent_matches",
-                )
-            )
-        if club_concurrency_by_scope:
-            max_concurrent_matches[club_id] = fmodel.MaxConcurrentMatches(
-                by_scope=club_concurrency_by_scope
             )
 
         if "home_dates_used" in club_spec:
@@ -607,26 +528,25 @@ def _parse_club_constraints(
         team_home_dates.update(club_team_home_dates)
         team_unavailable_away_dates.update(club_team_unavailable_away_dates)
 
-        avoid_coscheduling_teams.extend(
-            _parse_avoid_coscheduling_teams(
-                club_spec.get("avoid_coscheduling_teams"),
-                club_id,
-                teams,
-                f"{path}: {section_name}[{club_id!r}].avoid_coscheduling_teams",
-            )
+        club_limits[club_id] = _parse_match_count_limits(
+            club_spec.get("match_count_limits"),
+            club_id,
+            teams,
+            f"{path}: {section_name}[{club_id!r}].match_count_limits",
         )
+
+    match_count_limits = _resolve_match_count_limits(
+        default_limits, club_limits, clubs, teams, path
+    )
 
     return _ClubConstraints(
         home_dates=home_dates,
         unavailable_away_dates=unavailable_away_dates,
-        default_min_gap_days=default_min_gap_days,
-        club_min_gap_days=club_min_gap_days,
         club_latest_match_date=club_latest_match_date,
-        max_concurrent_matches=max_concurrent_matches,
         home_dates_used=home_dates_used,
         team_home_dates=team_home_dates,
         team_unavailable_away_dates=team_unavailable_away_dates,
-        avoid_coscheduling_teams=avoid_coscheduling_teams,
+        match_count_limits=match_count_limits,
     )
 
 
@@ -706,92 +626,267 @@ def _parse_club_team_constraints(
     return team_home_dates, team_unavailable_away_dates
 
 
-def _parse_avoid_coscheduling_teams(
+def _club_team_ids(club_id: str, teams: Mapping[str, fmodel.Team]) -> list[str]:
+    """The IDs of `club_id`'s teams, in `teams` iteration order."""
+    return [tid for tid, team in teams.items() if team.club == club_id]
+
+
+def _parse_match_count_overrides(value: Any, context: str) -> dict[date, int | None]:
+    """Parse a match_count_limits entry's optional 'overrides': a date-keyed mapping
+    of per-date limits (an integer >= 1, or null to lift the limit that day)."""
+    if not isinstance(value, dict):
+        raise SpecError(f"{context} must be a mapping keyed by date")
+    overrides: dict[date, int | None] = {}
+    for date_key, count in value.items():
+        override_date = _parse_date(date_key, context)
+        count = _require_int_or_none(count, f"{context}[{date_key!r}]")
+        if count is not None and count < 1:
+            raise SpecError(f"{context}[{date_key!r}] must be >= 1 or null")
+        overrides[override_date] = count
+    return overrides
+
+
+def _parse_match_count_limits(
     entries_spec: Any,
-    club_id: str,
+    club_id: str | None,
     teams: Mapping[str, fmodel.Team],
     context: str,
-) -> list[fmodel.AvoidCoschedulingConstraint]:
-    """Parse a club_constraints entry's optional 'avoid_coscheduling_teams' list.
+) -> list[_ParsedMatchCountLimit]:
+    """Parse a 'match_count_limits' list -- a club's own entry, or (when club_id is
+    None) the club_constraints.defaults list applied to every club.
 
-    Each entry names a group of that club's own teams (all of which must belong to
-    this club), an optional 'min_gap_days' minimum separation (default 1; 0 or 1
-    both just mean the same date), and an optional 'applies_to' scope ('home',
-    'away' or the default 'both'): the solver then keeps any two matches involving
-    those teams -- counting only the matches of the kind named by 'applies_to' -- at
-    least 'min_gap_days' days apart, so a gap of exactly that many days is allowed
-    and only shorter gaps are forbidden. This is the per-group counterpart of the
-    top-level 'min_gap_days'. E.g. two teams that share players shouldn't both be
-    fielded on the same date (min_gap_days: 1), or within a week of each other
-    (min_gap_days: 7 still permits matches exactly 7 days apart).
+    Each entry:
+      - 'max' (required key): an integer >= 1, or null. null on its own is only
+        allowed for a club entry carrying an 'override_key' (it cancels that
+        default); otherwise null needs 'overrides' to carry the actual caps.
+      - 'teams' (optional): IDs of this club's teams whose matches are counted.
+        Omitted => every team of the club. Not allowed under 'defaults', nor
+        alongside 'override_key' (an override replaces a spec-wide, all-teams
+        default).
+      - 'apply_per' (optional, default 'across_teams'): 'across_teams' => the listed
+        teams share one budget of 'max' per window; 'each_team' => 'max' is enforced
+        per team.
+      - 'time_window_days' (optional, default 1): window length in consecutive
+        calendar days. 7 limits matches in any 7-consecutive-day period -- two
+        matches exactly a week apart fall in separate windows.
+      - 'venue_scope' (optional, default 'all'): 'home', 'away' or 'all'.
+      - 'overrides' (optional): per-date replacements of 'max'. Only allowed when
+        'time_window_days' is 1.
+      - 'override_key': required for a 'defaults' entry (and unique within that
+        list); optional for a club entry, where it names the default this one
+        replaces for the club.
     """
     if entries_spec is None:
         return []
     if not isinstance(entries_spec, list):
         raise SpecError(f"{context} must be a list")
 
-    constraints: list[fmodel.AvoidCoschedulingConstraint] = []
+    is_defaults = club_id is None
+    club_team_ids = [] if is_defaults else _club_team_ids(club_id, teams)  # type: ignore[arg-type]
+
+    limits: list[_ParsedMatchCountLimit] = []
+    seen_default_keys: set[str] = set()
     for i, entry in enumerate(entries_spec):
         entry_context = f"{context}[{i}]"
         if not isinstance(entry, dict):
             raise SpecError(f"{entry_context} must be a mapping")
-        unsupported = entry.keys() - _AVOID_COSCHEDULING_FIELD_KEYS
+        unsupported = entry.keys() - _MATCH_COUNT_LIMIT_FIELD_KEYS
         if unsupported:
             raise SpecError(
                 f"{entry_context}.{sorted(unsupported)} not supported (only "
-                f"{sorted(_AVOID_COSCHEDULING_FIELD_KEYS)} are)"
+                f"{sorted(_MATCH_COUNT_LIMIT_FIELD_KEYS)} are)"
             )
-        if "teams" not in entry:
-            raise SpecError(f"{entry_context} missing required field 'teams'")
 
-        team_ids = entry["teams"]
-        if not isinstance(team_ids, list) or not team_ids:
-            raise SpecError(f"{entry_context}.teams must be a non-empty list")
+        if "max" not in entry:
+            raise SpecError(f"{entry_context} missing required field 'max'")
+        max_ = _require_int_or_none(entry["max"], f"{entry_context}.max")
+        if max_ is not None and max_ < 1:
+            raise SpecError(f"{entry_context}.max must be >= 1 or null")
 
-        entry_teams: list[fmodel.Team] = []
-        seen_team_ids: set[str] = set()
-        for team_id in team_ids:
-            if team_id in seen_team_ids:
-                raise SpecError(f"{entry_context}.teams: duplicate team {team_id!r}")
-            seen_team_ids.add(team_id)
-            if team_id not in teams:
-                raise SpecError(
-                    f"{entry_context}.teams references unknown team {team_id!r}"
-                )
-            team = teams[team_id]
-            if team.club != club_id:
-                raise SpecError(
-                    f"{entry_context}.teams: team {team_id!r} belongs to club "
-                    f"{team.club!r}, not {club_id!r}"
-                )
-            entry_teams.append(team)
-
-        min_gap_days = 1
-        if "min_gap_days" in entry:
-            min_gap_days = _require_int(
-                entry["min_gap_days"], f"{entry_context}.min_gap_days"
+        override_key: str | None = None
+        if "override_key" in entry:
+            override_key = _require_str(
+                entry["override_key"], f"{entry_context}.override_key"
             )
-            if min_gap_days < 0:
-                raise SpecError(f"{entry_context}.min_gap_days must be >= 0")
+        if is_defaults:
+            if override_key is None:
+                raise SpecError(
+                    f"{entry_context} missing required field 'override_key' "
+                    "(every club_constraints.defaults.match_count_limits entry "
+                    "needs one, so a club can address it)"
+                )
+            if override_key in seen_default_keys:
+                raise SpecError(
+                    f"{entry_context}.override_key {override_key!r} is used by an "
+                    "earlier defaults entry"
+                )
+            seen_default_keys.add(override_key)
 
-        applies_to = fmodel.CoschedulingScope.BOTH
-        if "applies_to" in entry:
+        team_ids: tuple[str, ...] | None = None
+        if "teams" in entry:
+            if is_defaults:
+                raise SpecError(
+                    f"{entry_context}.teams is not allowed under "
+                    "club_constraints.defaults (defaults apply to every club); "
+                    "give an explicit 'teams' list in the club's own "
+                    "match_count_limits instead"
+                )
+            if override_key is not None:
+                raise SpecError(
+                    f"{entry_context}: 'teams' and 'override_key' can't be combined "
+                    "(an override replaces a spec-wide, all-teams default)"
+                )
+            raw_ids = entry["teams"]
+            if not isinstance(raw_ids, list) or not raw_ids:
+                raise SpecError(f"{entry_context}.teams must be a non-empty list")
+            seen_team_ids: set[str] = set()
+            for team_id in raw_ids:
+                if team_id in seen_team_ids:
+                    raise SpecError(
+                        f"{entry_context}.teams: duplicate team {team_id!r}"
+                    )
+                seen_team_ids.add(team_id)
+                if team_id not in teams:
+                    raise SpecError(
+                        f"{entry_context}.teams references unknown team {team_id!r}"
+                    )
+                if teams[team_id].club != club_id:
+                    raise SpecError(
+                        f"{entry_context}.teams: team {team_id!r} belongs to club "
+                        f"{teams[team_id].club!r}, not {club_id!r}"
+                    )
+            team_ids = tuple(raw_ids)
+        elif not is_defaults and not club_team_ids:
+            raise SpecError(
+                f"{entry_context}: club {club_id!r} has no teams (specify "
+                "'teams' explicitly)"
+            )
+
+        apply_per = fmodel.ApplyPer.ACROSS_TEAMS
+        if "apply_per" in entry:
             try:
-                applies_to = fmodel.CoschedulingScope(entry["applies_to"])
+                apply_per = fmodel.ApplyPer(entry["apply_per"])
             except ValueError:
-                allowed = ", ".join(repr(s.value) for s in fmodel.CoschedulingScope)
+                allowed = ", ".join(repr(a.value) for a in fmodel.ApplyPer)
                 raise SpecError(
-                    f"{entry_context}.applies_to must be one of {allowed}, got "
-                    f"{entry['applies_to']!r}"
+                    f"{entry_context}.apply_per must be one of {allowed}, got "
+                    f"{entry['apply_per']!r}"
                 ) from None
 
-        constraints.append(
-            fmodel.AvoidCoschedulingConstraint(
-                teams=entry_teams, min_gap_days=min_gap_days, applies_to=applies_to
+        time_window_days = 1
+        if "time_window_days" in entry:
+            time_window_days = _require_int(
+                entry["time_window_days"], f"{entry_context}.time_window_days"
+            )
+            if time_window_days < 1:
+                raise SpecError(f"{entry_context}.time_window_days must be >= 1")
+
+        venue_scope = fmodel.VenueScope.ALL
+        if "venue_scope" in entry:
+            try:
+                venue_scope = fmodel.VenueScope(entry["venue_scope"])
+            except ValueError:
+                allowed = ", ".join(repr(s.value) for s in fmodel.VenueScope)
+                raise SpecError(
+                    f"{entry_context}.venue_scope must be one of {allowed}, got "
+                    f"{entry['venue_scope']!r}"
+                ) from None
+
+        overrides: dict[date, int | None] = {}
+        if "overrides" in entry:
+            if time_window_days != 1:
+                raise SpecError(
+                    f"{entry_context}.overrides is only allowed when "
+                    "time_window_days is 1"
+                )
+            overrides = _parse_match_count_overrides(
+                entry["overrides"], f"{entry_context}.overrides"
+            )
+
+        if max_ is None and not overrides and override_key is None:
+            raise SpecError(
+                f"{entry_context}.max: null needs 'overrides' to carry the actual "
+                "per-date caps (or an 'override_key' to cancel a default)"
+            )
+
+        limits.append(
+            _ParsedMatchCountLimit(
+                team_ids=team_ids,
+                max=max_,
+                time_window_days=time_window_days,
+                venue_scope=venue_scope,
+                apply_per=apply_per,
+                overrides=overrides,
+                override_key=override_key,
             )
         )
 
-    return constraints
+    return limits
+
+
+def _resolve_match_count_limits(
+    default_limits: list[_ParsedMatchCountLimit],
+    club_limits: Mapping[str, list[_ParsedMatchCountLimit]],
+    clubs: Mapping[str, fmodel.Club],
+    teams: Mapping[str, fmodel.Team],
+    path: Path,
+) -> list[fmodel.MatchCountLimit]:
+    """Combine the spec-wide default match_count_limits with each club's own, and
+    resolve every entry to a concrete fmodel.MatchCountLimit.
+
+    A club entry whose 'override_key' names a default entry replaces that default
+    for the club (an unknown key, or two club entries sharing one, is an error);
+    every other club entry is additive. Entries that carry neither a 'max' nor any
+    'overrides' (a pure cancel-the-default marker) and entries that resolve to no
+    teams are dropped.
+    """
+    default_keys = {pl.override_key for pl in default_limits}
+    resolved: list[fmodel.MatchCountLimit] = []
+    for club_id in clubs:
+        own = list(club_limits.get(club_id, []))
+        overridden: dict[str, _ParsedMatchCountLimit] = {}
+        for pl in own:
+            if pl.override_key is None:
+                continue
+            if pl.override_key not in default_keys:
+                raise SpecError(
+                    f"{path}: club_constraints[{club_id!r}].match_count_limits "
+                    f"override_key {pl.override_key!r} does not match any "
+                    "club_constraints.defaults.match_count_limits entry"
+                )
+            if pl.override_key in overridden:
+                raise SpecError(
+                    f"{path}: club_constraints[{club_id!r}].match_count_limits "
+                    f"has two entries with override_key {pl.override_key!r}"
+                )
+            overridden[pl.override_key] = pl
+
+        effective = [
+            pl for pl in default_limits if pl.override_key not in overridden
+        ] + own
+
+        club_team_objs = [teams[tid] for tid in _club_team_ids(club_id, teams)]
+        for pl in effective:
+            if pl.max is None and not pl.overrides:
+                continue
+            team_objs = (
+                club_team_objs
+                if pl.team_ids is None
+                else [teams[tid] for tid in pl.team_ids]
+            )
+            if not team_objs:
+                continue
+            resolved.append(
+                fmodel.MatchCountLimit(
+                    teams=team_objs,
+                    max=pl.max,
+                    time_window_days=pl.time_window_days,
+                    venue_scope=pl.venue_scope,
+                    apply_per=pl.apply_per,
+                    overrides=pl.overrides,
+                )
+            )
+    return resolved
 
 
 def _parse_fixed_fixtures(
@@ -1030,6 +1125,13 @@ def load_spec(spec_path: str | Path) -> Spec:
     path = Path(spec_path)
     data = _load_yaml_data(path)
 
+    unsupported = data.keys() - _TOP_LEVEL_KEYS
+    if unsupported:
+        raise SpecError(
+            f"{path}: top-level key(s) {sorted(unsupported)} not supported "
+            f"(only {sorted(_TOP_LEVEL_KEYS)} are)"
+        )
+
     clubs = _parse_clubs(data, path)
     team_shells = _parse_teams(data, clubs, path)
     divisions = _parse_divisions(data, team_shells, path)
@@ -1057,30 +1159,17 @@ def load_spec(spec_path: str | Path) -> Spec:
     team_home_dates = club_constraints.team_home_dates
     team_unavailable_away_dates = club_constraints.team_unavailable_away_dates
 
-    if "min_gap_days" in data:
-        raise SpecError(
-            f"{path}: top-level 'min_gap_days' is no longer supported; put the "
-            "spec-wide default under club_constraints.defaults.min_gap_days (and "
-            "any per-club override under club_constraints.<club>.min_gap_days)"
-        )
-
     kwargs: dict[str, Any] = {}
-    if club_constraints.default_min_gap_days is not None:
-        kwargs["min_gap_days"] = club_constraints.default_min_gap_days
-    if club_constraints.club_min_gap_days:
-        kwargs["club_min_gap_days"] = club_constraints.club_min_gap_days
     if club_constraints.club_latest_match_date:
         kwargs["club_latest_match_date"] = club_constraints.club_latest_match_date
-    if club_constraints.max_concurrent_matches:
-        kwargs["max_concurrent_matches"] = club_constraints.max_concurrent_matches
     if club_constraints.home_dates_used:
         kwargs["home_dates_used"] = club_constraints.home_dates_used
     if team_home_dates:
         kwargs["team_home_dates"] = team_home_dates
     if team_unavailable_away_dates:
         kwargs["team_unavailable_away_dates"] = team_unavailable_away_dates
-    if club_constraints.avoid_coscheduling_teams:
-        kwargs["avoid_coscheduling_teams"] = club_constraints.avoid_coscheduling_teams
+    if club_constraints.match_count_limits:
+        kwargs["match_count_limits"] = club_constraints.match_count_limits
 
     fixed_fixtures = _parse_fixed_fixtures(
         data, teams, home_dates, team_home_dates, path

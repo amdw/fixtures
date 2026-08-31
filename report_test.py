@@ -53,8 +53,10 @@ divisions:
 
 club_constraints:
   defaults:
-    max_concurrent_matches:
-      home: 1
+    match_count_limits:
+      - override_key: venue-capacity
+        venue_scope: home
+        max: 1
   albany:
     home_dates: [2025-09-01, 2025-09-29]
   hackney:
