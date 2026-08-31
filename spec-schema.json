@@ -305,11 +305,11 @@
           "minItems": 2,
           "uniqueItems": true
         },
-        "within_days": {
+        "min_gap_days": {
           "type": "integer",
-          "default": 0,
+          "default": 1,
           "minimum": 0,
-          "description": "The solver allows at most one match involving any of 'teams' -- home or away -- within any window of this many days. The default, 0, means no two of them may share a date at all; a higher value also keeps them some number of days apart."
+          "description": "Minimum number of days required between any two matches involving 'teams' (of the kind selected by 'applies_to'). The per-group counterpart of the top-level 'min_gap_days': a gap of exactly this many days is allowed, fewer is not. The default, 1 (0 behaves the same), means no two of them may share a date; 7 keeps them at least a week apart while still permitting matches exactly 7 days apart."
         },
         "applies_to": {
           "type": "string",

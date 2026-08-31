@@ -1086,15 +1086,16 @@ class TestTeamConstraints(unittest.TestCase):
 
 
 class TestAvoidCoschedulingTeams(unittest.TestCase):
-    """Test cases for AvoidCoschedulingConstraint: at most one match involving any of
-    a given set of teams may be scheduled within any window of within_days days.
+    """Test cases for AvoidCoschedulingConstraint: any two matches involving a given
+    set of teams must be scheduled at least min_gap_days days apart (a gap of exactly
+    min_gap_days days is allowed; only shorter gaps are forbidden).
     """
 
-    def test_within_days_defaults_to_zero(self) -> None:
+    def test_min_gap_days_defaults_to_one(self) -> None:
         a1 = fmodel.Team(division=1, club="A", index=1)
         a2 = fmodel.Team(division=2, club="A", index=2)
         self.assertEqual(
-            fmodel.AvoidCoschedulingConstraint(teams=[a1, a2]).within_days, 0
+            fmodel.AvoidCoschedulingConstraint(teams=[a1, a2]).min_gap_days, 1
         )
 
     def test_applies_to_defaults_to_both(self) -> None:
@@ -1194,12 +1195,12 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
         with self.assertRaises(ValueError):
             fmodel.solve(params)
 
-    def test_within_days_window_enforced(self) -> None:
-        """With within_days=3, A1 and A2's home matches must land on dates more than
-        3 days apart -- of A's three candidate dates (Jan 1, 3, 10), only pairings
-        involving Jan 10 satisfy that, so the solver must pick one of those. (X's two
-        home dates, for A1/A2's away legs, are also more than 3 days apart, so they
-        don't introduce a second conflict of their own.)"""
+    def test_min_gap_days_forbids_shorter_gaps(self) -> None:
+        """With min_gap_days=3, A1 and A2's home matches must land at least 3 days
+        apart -- of A's three candidate dates (Jan 1, 3, 10), the only forbidden
+        pairing is Jan 1 / Jan 3 (2 days), so the solver must pick a pairing that
+        involves Jan 10. (X's two home dates, for A1/A2's away legs, are far enough
+        apart not to introduce a second conflict of their own.)"""
         a1 = fmodel.Team(division=1, club="A", index=1)
         a2 = fmodel.Team(division=2, club="A", index=2)
         x1 = fmodel.Team(division=1, club="X", index=1)
@@ -1217,13 +1218,46 @@ class TestAvoidCoschedulingTeams(unittest.TestCase):
             },
             min_gap_days=7,
             avoid_coscheduling_teams=[
-                fmodel.AvoidCoschedulingConstraint(teams=[a1, a2], within_days=3)
+                fmodel.AvoidCoschedulingConstraint(teams=[a1, a2], min_gap_days=3)
             ],
         )
         fixtures = list(fmodel.solve(params).fixtures)
         a1_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a1)
         a2_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a2)
-        self.assertGreater(abs((a1_home_date - a2_home_date).days), 3)
+        self.assertGreaterEqual(abs((a1_home_date - a2_home_date).days), 3)
+
+    def test_min_gap_days_allows_exact_gap(self) -> None:
+        """min_gap_days=N is a minimum separation: a gap of exactly N days is legal,
+        only shorter gaps are forbidden. With min_gap_days=7 and A's only two home
+        dates exactly a week apart (Jan 1 and Jan 8), A1 and A2 must take one each --
+        the schedule stays feasible. An off-by-one that treated a 7-day gap as a
+        violation would make this infeasible."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=2, club="A", index=2)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        x2 = fmodel.Team(division=2, club="X", index=2)
+        params = fmodel.Parameters(
+            teams=[a1, a2, x1, x2],
+            home_dates={
+                "A": [date(2025, 1, 1), date(2025, 1, 8)],
+                "X": [date(2025, 3, 1), date(2025, 3, 15)],
+            },
+            unavailable_away_dates={"A": [], "X": []},
+            max_concurrent_matches={
+                "A": _home_limit(2),
+                "X": _home_limit(2),
+            },
+            min_gap_days=7,
+            avoid_coscheduling_teams=[
+                fmodel.AvoidCoschedulingConstraint(teams=[a1, a2], min_gap_days=7)
+            ],
+        )
+        fixtures = list(fmodel.solve(params).fixtures)
+        a1_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a1)
+        a2_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a2)
+        self.assertEqual(
+            {a1_home_date, a2_home_date}, {date(2025, 1, 1), date(2025, 1, 8)}
+        )
 
     def test_direct_fixture_between_constrained_teams_not_double_counted(self) -> None:
         """A single match between two constrained teams should count once towards

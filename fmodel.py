@@ -223,10 +223,13 @@ class CoschedulingScope(enum.Enum):
 
 @dataclasses.dataclass(frozen=True)
 class AvoidCoschedulingConstraint:
-    """At most one match involving any of `teams` may be scheduled within any window
-    of `within_days` days -- e.g. within_days=0 (the default) means no two of them
-    may share a date. Typically used for a club's own teams that draw from the same
-    pool of players (e.g. adjacent-division teams), but not restricted to that.
+    """Any two matches involving `teams` must be scheduled at least `min_gap_days`
+    days apart -- i.e. a separation of exactly `min_gap_days` days is allowed, and
+    only shorter gaps are forbidden. This is the per-group counterpart of
+    Parameters.min_gap_days (which applies to every team); min_gap_days=1 (the
+    default) and min_gap_days=0 both mean simply that no two of them may share a
+    date. Typically used for a club's own teams that draw from the same pool of
+    players (e.g. adjacent-division teams), but not restricted to that.
 
     `applies_to` narrows which of those teams' matches count: CoschedulingScope.HOME
     only their home matches, CoschedulingScope.AWAY only their away matches,
@@ -236,7 +239,7 @@ class AvoidCoschedulingConstraint:
     """
 
     teams: Collection[Team]
-    within_days: int = 0
+    min_gap_days: int = 1
     applies_to: CoschedulingScope = CoschedulingScope.BOTH
 
 
@@ -370,7 +373,11 @@ class Parameters:
 
 
 def date_windows(dates: Collection[date], window_days: int) -> list[frozenset[date]]:
-    """Given a list of dates and a window size, return the maximal subsets of dates which fall within the window size."""
+    """Given a list of dates and a window size, return the maximal subsets of dates
+    which fall within the window size. The bound is inclusive: two dates exactly
+    `window_days` apart share a window. Callers enforcing a minimum gap of N days
+    between events therefore pass `window_days = N - 1`, so that a gap of exactly N
+    lands outside every window."""
     all_windows: list[frozenset[date]] = []
     dates = sorted(dates)
     for i, d in enumerate(dates):
@@ -497,8 +504,9 @@ def _add_avoid_coscheduling_constraints(
     constraints: Collection[AvoidCoschedulingConstraint],
     fixture_vars: _FixtureVars,
 ) -> None:
-    """For each AvoidCoschedulingConstraint, ensure at most one match involving any
-    of its teams is scheduled within any window of within_days days. The constraint's
+    """For each AvoidCoschedulingConstraint, ensure any two matches involving its
+    teams are scheduled at least min_gap_days days apart (a gap of exactly
+    min_gap_days days is allowed; only shorter gaps are forbidden). The constraint's
     `applies_to` scope limits which of those teams' matches are counted -- home only,
     away only, or (by default) both.
     """
@@ -523,7 +531,13 @@ def _add_avoid_coscheduling_constraints(
             ):
                 vars_by_date[d].append(var)
 
-        for window in date_windows(vars_by_date.keys(), constraint.within_days):
+        # date_windows groups dates up to and including its window arg apart, so
+        # pass min_gap_days - 1: a separation of exactly min_gap_days (e.g. two
+        # matches a week apart when min_gap_days=7) must be allowed, not treated as
+        # a violation -- the same convention as the per-team min_gap_days constraint
+        # in _build_model. min_gap_days <= 1 still forbids sharing a date (each
+        # date's own singleton window collects every counted match on it).
+        for window in date_windows(vars_by_date.keys(), constraint.min_gap_days - 1):
             window_vars = [v for d in window for v in vars_by_date[d]]
             if len(window_vars) > 1:
                 model.add(cp_model.LinearExpr.Sum(window_vars) <= 1)

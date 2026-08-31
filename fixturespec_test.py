@@ -1284,22 +1284,22 @@ club_constraints:
             list(spec.parameters.avoid_coscheduling_teams),
             [
                 fmodel.AvoidCoschedulingConstraint(
-                    teams=[albany_1, albany_2], within_days=0
+                    teams=[albany_1, albany_2], min_gap_days=1
                 )
             ],
         )
 
-    def test_avoid_coscheduling_teams_within_days_parsed(self) -> None:
+    def test_avoid_coscheduling_teams_min_gap_days_parsed(self) -> None:
         path = self._write(
             self._with_albany_avoid_coscheduling(
                 "    avoid_coscheduling_teams:\n"
                 "      - teams: [albany-1, albany-2]\n"
-                "        within_days: 3\n"
+                "        min_gap_days: 3\n"
             )
         )
         spec = fixturespec.load_spec(path)
         constraints = list(spec.parameters.avoid_coscheduling_teams)
-        self.assertEqual(constraints[0].within_days, 3)
+        self.assertEqual(constraints[0].min_gap_days, 3)
 
     def test_avoid_coscheduling_teams_applies_to_defaults_to_both(self) -> None:
         path = self._write(
@@ -1353,7 +1353,7 @@ club_constraints:
     def test_avoid_coscheduling_teams_missing_teams_field(self) -> None:
         path = self._write(
             self._with_albany_avoid_coscheduling(
-                "    avoid_coscheduling_teams:\n      - within_days: 1\n"
+                "    avoid_coscheduling_teams:\n      - min_gap_days: 1\n"
             )
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "teams"):
@@ -1407,15 +1407,15 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
             fixturespec.load_spec(path)
 
-    def test_avoid_coscheduling_teams_negative_within_days_rejected(self) -> None:
+    def test_avoid_coscheduling_teams_negative_min_gap_days_rejected(self) -> None:
         path = self._write(
             self._with_albany_avoid_coscheduling(
                 "    avoid_coscheduling_teams:\n"
                 "      - teams: [albany-1, albany-2]\n"
-                "        within_days: -1\n"
+                "        min_gap_days: -1\n"
             )
         )
-        with self.assertRaisesRegex(fixturespec.SpecError, "within_days"):
+        with self.assertRaisesRegex(fixturespec.SpecError, "min_gap_days"):
             fixturespec.load_spec(path)
 
     def test_exclude_fixtures_absent(self) -> None:

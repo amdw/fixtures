@@ -425,7 +425,7 @@ _CLUB_CONSTRAINT_FIELD_KEYS = {
 
 _TEAM_CONSTRAINT_FIELD_KEYS = {"unavailable_home_dates", "unavailable_away_dates"}
 
-_AVOID_COSCHEDULING_FIELD_KEYS = {"teams", "within_days", "applies_to"}
+_AVOID_COSCHEDULING_FIELD_KEYS = {"teams", "min_gap_days", "applies_to"}
 
 _HOME_DATES_USED_FIELD_KEYS = {"min", "max"}
 
@@ -666,11 +666,15 @@ def _parse_avoid_coscheduling_teams(
     """Parse a club_constraints entry's optional 'avoid_coscheduling_teams' list.
 
     Each entry names a group of that club's own teams (all of which must belong to
-    this club), an optional 'within_days' window (default 0, i.e. the same date), and
-    an optional 'applies_to' scope ('home', 'away' or the default 'both'): the solver
-    then allows at most one match involving any of those teams -- counting only the
-    matches of the kind named by 'applies_to' -- within any window of that many days,
-    e.g. two teams that share players shouldn't both be fielded on the same date.
+    this club), an optional 'min_gap_days' minimum separation (default 1; 0 or 1
+    both just mean the same date), and an optional 'applies_to' scope ('home',
+    'away' or the default 'both'): the solver then keeps any two matches involving
+    those teams -- counting only the matches of the kind named by 'applies_to' -- at
+    least 'min_gap_days' days apart, so a gap of exactly that many days is allowed
+    and only shorter gaps are forbidden. This is the per-group counterpart of the
+    top-level 'min_gap_days'. E.g. two teams that share players shouldn't both be
+    fielded on the same date (min_gap_days: 1), or within a week of each other
+    (min_gap_days: 7 still permits matches exactly 7 days apart).
     """
     if entries_spec is None:
         return []
@@ -713,13 +717,13 @@ def _parse_avoid_coscheduling_teams(
                 )
             entry_teams.append(team)
 
-        within_days = 0
-        if "within_days" in entry:
-            within_days = _require_int(
-                entry["within_days"], f"{entry_context}.within_days"
+        min_gap_days = 1
+        if "min_gap_days" in entry:
+            min_gap_days = _require_int(
+                entry["min_gap_days"], f"{entry_context}.min_gap_days"
             )
-            if within_days < 0:
-                raise SpecError(f"{entry_context}.within_days must be >= 0")
+            if min_gap_days < 0:
+                raise SpecError(f"{entry_context}.min_gap_days must be >= 0")
 
         applies_to = fmodel.CoschedulingScope.BOTH
         if "applies_to" in entry:
@@ -734,7 +738,7 @@ def _parse_avoid_coscheduling_teams(
 
         constraints.append(
             fmodel.AvoidCoschedulingConstraint(
-                teams=entry_teams, within_days=within_days, applies_to=applies_to
+                teams=entry_teams, min_gap_days=min_gap_days, applies_to=applies_to
             )
         )
 
