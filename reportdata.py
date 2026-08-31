@@ -23,12 +23,32 @@ or produces any markup.
 from __future__ import annotations
 
 import dataclasses
+import re
 from collections.abc import Collection, Mapping
 from datetime import date
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import fmodel
+
+
+def slugify(value: str) -> str:
+    """Turn a name into a filesystem/URL-safe slug, e.g. 'Willesden & Brent' -> 'willesden-brent'."""
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "unnamed"
+
+
+def club_dates_csv_filename(club_id: str) -> str:
+    """Filename of a club's by-date CSV export (one row per match date), a sibling
+    of its ``club-<slug>.html`` page. The ``-dates`` suffix leaves room for other
+    per-club CSVs alongside it later."""
+    return f"club-{slugify(club_id)}-dates.csv"
+
+
+def team_csv_filename(team: fmodel.Team) -> str:
+    """Filename of a single team's CSV export -- the by-team CSV filtered to that
+    team -- linked from the team's section of its club page."""
+    return f"team-{slugify(team.club)}-{team.index}.csv"
 
 
 def team_name(team: fmodel.Team, clubs: Mapping[str, fmodel.Club]) -> str:

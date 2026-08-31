@@ -37,6 +37,40 @@ def _club(name: str) -> fmodel.Club:
     )
 
 
+class TestSlugify(unittest.TestCase):
+    def test_simple(self) -> None:
+        self.assertEqual(reportdata.slugify("Albany"), "albany")
+
+    def test_spaces_and_punctuation(self) -> None:
+        self.assertEqual(reportdata.slugify("Willesden & Brent"), "willesden-brent")
+
+    def test_leading_trailing_punctuation(self) -> None:
+        self.assertEqual(reportdata.slugify("  Kings Head!!"), "kings-head")
+
+    def test_empty(self) -> None:
+        self.assertEqual(reportdata.slugify("---"), "unnamed")
+
+
+class TestCsvFilenames(unittest.TestCase):
+    def test_club_dates_csv_filename_is_the_club_slug_with_a_dates_suffix(self) -> None:
+        self.assertEqual(
+            reportdata.club_dates_csv_filename("willesden-brent"),
+            "club-willesden-brent-dates.csv",
+        )
+
+    def test_team_csv_filename_is_club_slug_plus_index(self) -> None:
+        team = fmodel.Team(division=2, club="willesden-brent", index=3)
+        self.assertEqual(
+            reportdata.team_csv_filename(team), "team-willesden-brent-3.csv"
+        )
+
+    def test_team_csv_filename_ignores_name_override(self) -> None:
+        team = fmodel.Team(
+            division=1, club="hendon", index=2, name_override="Hendon Warriors"
+        )
+        self.assertEqual(reportdata.team_csv_filename(team), "team-hendon-2.csv")
+
+
 class ReportDataTest(unittest.TestCase):
     def setUp(self) -> None:
         super().setUp()

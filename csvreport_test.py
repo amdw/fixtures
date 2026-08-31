@@ -113,16 +113,27 @@ class CsvReportTest(unittest.TestCase):
         with (self.out / name).open(newline="") as f:
             return list(csv.DictReader(f))
 
-    def test_writes_both_files_and_returns_their_paths(self) -> None:
+    def test_writes_all_files_and_returns_their_paths(self) -> None:
         paths = _generate_csv(self.fixtures, self.teams, self.clubs, self.out)
         self.assertEqual(
-            paths,
+            [p.name for p in paths],
             [
-                self.out / "all-matches.csv",
-                self.out / "all-matches-by-team.csv",
+                "all-matches.csv",
+                "all-matches-by-team.csv",
+                # One per club, in club-name order.
+                "club-ealing-dates.csv",
+                "club-harrow-dates.csv",
+                "club-hendon-dates.csv",
+                # One per team, in (club, index) order.
+                "team-ealing-1.csv",
+                "team-harrow-1.csv",
+                "team-harrow-2.csv",
+                "team-hendon-1.csv",
+                "team-hendon-2.csv",
             ],
         )
         for p in paths:
+            self.assertEqual(p.parent, self.out)
             self.assertTrue(p.exists())
 
     def test_header_columns(self) -> None:
@@ -259,6 +270,91 @@ class CsvReportTest(unittest.TestCase):
         harrow1_rows = [r for r in team_rows if r["team"] == "Harrow 1"]
         self.assertEqual(harrow1_rows[-1]["date"], "")
         self.assertEqual(harrow1_rows[-1]["opponent"], "Harrow 2")
+
+    def test_per_team_file_is_the_by_team_rows_for_that_team(self) -> None:
+        _generate_csv(self.fixtures, self.teams, self.clubs, self.out)
+
+        def header(name: str) -> list[str]:
+            with (self.out / name).open(newline="") as f:
+                return next(csv.reader(f))
+
+        # Same columns as the whole-season by-team file.
+        self.assertEqual(header("team-harrow-1.csv"), header("all-matches-by-team.csv"))
+
+        team_rows = self._rows("team-harrow-1.csv")
+        self.assertEqual([r["team"] for r in team_rows], ["Harrow 1", "Harrow 1"])
+        self.assertEqual(
+            [(r["date"], r["opponent"], r["home_or_away"]) for r in team_rows],
+            [("2025-09-01", "Ealing 1", "home"), ("2025-09-08", "Ealing 1", "away")],
+        )
+        # It's exactly the all-matches-by-team.csv slice for this team.
+        by_team = [
+            r for r in self._rows("all-matches-by-team.csv") if r["team"] == "Harrow 1"
+        ]
+        self.assertEqual(team_rows, by_team)
+
+    def test_per_team_file_uses_name_override(self) -> None:
+        _generate_csv(self.fixtures, self.teams, self.clubs, self.out)
+        rows = self._rows("team-hendon-2.csv")
+        self.assertEqual([r["team"] for r in rows], ["Hendon Warriors"])
+        self.assertEqual(rows[0]["opponent"], "Hendon 1")
+
+    def test_per_club_file_one_row_per_date_listing_that_clubs_matches(self) -> None:
+        _generate_csv(self.fixtures, self.teams, self.clubs, self.out)
+
+        with (self.out / "club-harrow-dates.csv").open(newline="") as f:
+            self.assertEqual(next(csv.reader(f)), ["date", "matches"])
+
+        rows = self._rows("club-harrow-dates.csv")
+        self.assertEqual(
+            [(r["date"], r["matches"]) for r in rows],
+            [
+                ("2025-09-01", "Harrow 1 - Ealing 1"),
+                ("2025-09-08", "Ealing 1 - Harrow 1"),
+            ],
+        )
+        # Ealing's own file covers the same two matches (Ealing plays in both)...
+        self.assertEqual(len(self._rows("club-ealing-dates.csv")), 2)
+        # ...but Hendon's does not.
+        hendon = self._rows("club-hendon-dates.csv")
+        self.assertEqual([r["date"] for r in hendon], ["2025-09-03"])
+        self.assertEqual(hendon[0]["matches"], "Hendon 1 - Hendon Warriors")
+
+    def test_per_club_file_joins_same_day_matches_with_commas(self) -> None:
+        # Two Harrow teams both playing on 2025-09-01.
+        fixtures = [
+            _sf(self.harrow1, self.ealing1, date(2025, 9, 1)),
+            _sf(self.harrow2, self.hendon1, date(2025, 9, 1)),
+        ]
+        _generate_csv(fixtures, self.teams, self.clubs, self.out)
+
+        rows = self._rows("club-harrow-dates.csv")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["date"], "2025-09-01")
+        self.assertEqual(rows[0]["matches"], "Harrow 1 - Ealing 1, Harrow 2 - Hendon 1")
+
+    def test_per_club_and_per_team_list_excluded_fixtures_with_empty_date(self) -> None:
+        excluded = [fmodel.Fixture(home_team=self.harrow1, away_team=self.harrow2)]
+        _generate_csv(
+            self.fixtures,
+            self.teams,
+            self.clubs,
+            self.out,
+            excluded_fixtures=excluded,
+        )
+
+        # Per-club: a single trailing empty-date row gathering the withheld matches.
+        club_rows = self._rows("club-harrow-dates.csv")
+        self.assertEqual(club_rows[-1]["date"], "")
+        self.assertEqual(club_rows[-1]["matches"], "Harrow 1 - Harrow 2")
+        self.assertTrue(all(r["date"] for r in club_rows[:-1]))
+        # A club not involved in the withheld match gets no empty-date row.
+        self.assertTrue(all(r["date"] for r in self._rows("club-hendon-dates.csv")))
+
+        # Per-team: an empty-date row at the end, as in all-matches-by-team.csv.
+        team_rows = self._rows("team-harrow-1.csv")
+        self.assertEqual(team_rows[-1]["date"], "")
+        self.assertEqual(team_rows[-1]["opponent"], "Harrow 2")
 
     def test_empty_fixture_list_writes_header_only(self) -> None:
         _generate_csv([], [], self.clubs, self.out)
