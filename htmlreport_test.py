@@ -152,6 +152,36 @@ class TestGenerateReport(unittest.TestCase):
         # 4 fixtures -> 4 data rows (plus header row)
         self.assertEqual(content.count("<tr>"), 5)
 
+    def test_all_matches_page_shows_total_match_count(self) -> None:
+        content = (self.output_dir / "all-matches.html").read_text()
+        table_part = content.split("<h2>Venues</h2>")[0]
+        self.assertIn(
+            '<p class="match-count">Total matches: <strong>4</strong></p>', table_part
+        )
+
+    def test_division_page_shows_total_match_count(self) -> None:
+        # Division 1 has the 3 Harrow/Ealing fixtures.
+        content = (self.output_dir / "division-1.html").read_text()
+        self.assertIn(
+            '<p class="match-count">Total matches: <strong>3</strong></p>', content
+        )
+
+    def test_club_consolidated_table_shows_total_match_count(self) -> None:
+        harrow_page = (self.output_dir / "club-harrow.html").read_text()
+        consolidated = harrow_page.split("<h2")[0]
+        self.assertIn(
+            '<p class="match-count">Total matches: <strong>3</strong></p>', consolidated
+        )
+
+    def test_empty_table_has_no_match_count_line(self) -> None:
+        lonely_clubs = {"lonely-fc": _club("Lonely FC")}
+        lonely = fmodel.Team(division=3, club="lonely-fc", index=1)
+        out2 = Path(self._tmpdir.name) / "out-empty"
+        _generate(fmodel.SolveResult([]), [lonely], lonely_clubs, out2)
+        content = (out2 / "club-lonely-fc.html").read_text()
+        self.assertIn("No matches", content)
+        self.assertNotIn('<p class="match-count">', content)
+
     def test_match_annotated_with_venue_start_and_time_limit(self) -> None:
         content = (self.output_dir / "all-matches.html").read_text()
         self.assertIn("<th>Venue</th>", content)
