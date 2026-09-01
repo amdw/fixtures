@@ -649,12 +649,12 @@ def _build_run_tree(run_paths: Collection[Path]) -> _RunTreeNode:
 def _render_run_tree(
     node: _RunTreeNode, path_parts: tuple[str, ...], rel_runs_dir: Path
 ) -> str:
-    """Render node's children as a nested <ul>, most recent (reverse alphabetical)
-    first at each level; a name with no report of its own (just a grouping folder
-    for further runs, e.g. a season with several draft sub-folders) is rendered as
-    a plain label rather than a link."""
+    """Render node's children as a nested <ul>, sorted alphabetically by name at
+    each level; a name with no report of its own (just a grouping folder for
+    further runs, e.g. a season with several draft sub-folders) is rendered as a
+    plain label rather than a link."""
     items = []
-    for name in sorted(node.children, reverse=True):
+    for name in sorted(node.children):
         child = node.children[name]
         child_parts = (*path_parts, name)
         label = html.escape(name)
