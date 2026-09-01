@@ -57,7 +57,8 @@ _STYLE = """
     nav li { margin-bottom: 0.3rem; }
     nav ul ul { padding-left: 1.2rem; margin-top: 0.3rem; }
     .venue { margin-top: -0.5rem; margin-bottom: 1.5rem; color: #333; }
-    .date-summary { margin-top: -1.5rem; margin-bottom: 2rem; color: #333; }
+    .date-summary, .match-count { margin-top: -1.5rem; margin-bottom: 2rem;
+                                  color: #333; }
     .export-link { margin-top: -1rem; margin-bottom: 2rem; }
     ul.venues { padding-left: 1.2rem; }
     ul.venues li { margin-bottom: 0.3rem; }
@@ -157,8 +158,12 @@ def _table(headers: list[str], rows: list[list[str]]) -> str:
             "<tr>" + "".join(_table_cell(cell) for cell in row) + "</tr>\n"
             for row in rows
         )
+        count_html = (
+            f'<p class="match-count">Total matches: <strong>{len(rows)}</strong></p>\n'
+        )
     else:
         body_html = f'<tr><td colspan="{len(headers)}"><em>No matches</em></td></tr>\n'
+        count_html = ""
     return (
         '<div class="table-scroll">\n'
         "<table>\n"
@@ -166,6 +171,7 @@ def _table(headers: list[str], rows: list[list[str]]) -> str:
         f"<tbody>\n{body_html}</tbody>\n"
         "</table>\n"
         "</div>\n"
+        f"{count_html}"
     )
 
 
