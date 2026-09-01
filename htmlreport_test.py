@@ -719,9 +719,9 @@ class TestWriteRunsIndex(unittest.TestCase):
         self.assertIn("runs/2025-26-season/index.html", content)
         self.assertNotIn("incomplete-run", content)
 
-        # Most recent (reverse alphabetical) first
+        # Sorted alphabetically by name at each level
         self.assertLess(
-            content.index("2025-26-season"), content.index("2024-25-season")
+            content.index("2024-25-season"), content.index("2025-26-season")
         )
 
     def test_nested_run(self) -> None:
@@ -752,6 +752,18 @@ class TestWriteRunsIndex(unittest.TestCase):
 
         self.assertIn("runs/example/index.html", content)
         self.assertIn("runs/2026-27/draft1/index.html", content)
+
+    def test_siblings_sorted_alphabetically(self) -> None:
+        for name in ["draft2", "draft1", "draft10"]:
+            run_dir = self.runs_dir / "2026-27" / name
+            run_dir.mkdir(parents=True)
+            (run_dir / "all-matches.html").write_text("<html></html>")
+
+        htmlreport.write_runs_index(self.runs_dir, self.index_path)
+        content = self.index_path.read_text()
+
+        self.assertLess(content.index("draft1<"), content.index("draft10<"))
+        self.assertLess(content.index("draft10<"), content.index("draft2<"))
 
 
 class TestFindRunDirs(unittest.TestCase):
