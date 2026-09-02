@@ -1009,6 +1009,19 @@ club_constraints:
     # match_count_limits entry below - all double-headers (1+2, 1+3, 2+3) are
     # welcome, so no keep-apart entry is needed.
     #
+    # Bob Eames asked (2026-09-02) for as many double-headers as possible, to
+    # save time and costs, having noticed only 3 of draft1's 16 home dates
+    # were double-headers. Hackney's 3 teams have 7+7+5 = 19 home matches
+    # total (division 1/2 double_round, division 3 single_round), and the
+    # venue caps 2 concurrent matches, so the best achievable is 9
+    # double-headers + 1 single match = 10 dates (ceil(19/2), and achievable
+    # since no team's count of 7/7/5 exceeds the sum of the other two) -
+    # exactly Bob's own stated ideal. Try that first via home_dates_used
+    # below; like Hendon's equivalent limit, relax this if it makes the spec
+    # infeasible once other clubs' constraints are all in.
+    home_dates_used:
+      max: 10
+    #
     # Per the top-of-file note on the season end (14th May preferred, 30th
     # June allowed this season), dates from 2027-05-18 onwards are held in
     # reserve (commented out below) rather than used as normal home dates.
