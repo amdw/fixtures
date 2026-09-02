@@ -546,6 +546,13 @@ club_constraints:
     # before - home on the listed Thursday, or away anywhere in that week; the
     # Mon-Fri span of each newly-blocked week is added to
     # unavailable_away_dates and each newly-free week's span removed.
+    #
+    # Bug found in draft1 (John Kitchen, 2026-09-02): the away-block ranges
+    # jumped straight from "w/c 19 Apr - 3 May" to the 3/10 June free weeks,
+    # omitting the two non-free weeks in between (w/c 17 May, w/c 24 May) -
+    # this let draft1's solve schedule an away match on 2027-05-27, which
+    # clashed with Metropolitan's home London League fixture that day. Fixed
+    # by adding the missing range below.
     home_dates:
       - "2026-10-15"
       - "2026-10-29"
@@ -582,6 +589,7 @@ club_constraints:
           - { start_date: "2027-02-22", end_date: "2027-03-19" } # w/c 22 Feb - 15 Mar
           - { start_date: "2027-03-29", end_date: "2027-04-09" } # w/c 29 Mar + 5 Apr
           - { start_date: "2027-04-19", end_date: "2027-05-07" } # w/c 19 Apr - 3 May
+          - { start_date: "2027-05-17", end_date: "2027-05-28" } # w/c 17 + 24 May
   hammersmith:
     # Hammersmith play home matches on Thursdays, starting 19:00 with a 75+15
     # time control (confirmed by Adam, 2026-08-24/26) - Adam separately noted
