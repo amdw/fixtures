@@ -427,8 +427,14 @@ club_constraints:
     unavailable_away_dates:
       # Club-level date to avoid (Andy Hayler).
       - "2026-09-30"
+      # draft1 placed the away match at Albany on 2026-10-19; Andy Hayler
+      # asked (2026-09-02) to move it to another date.
+      - "2026-10-19"
       # Either side of the 2027-04-14 home date the club wants to avoid
-      # (see home_dates above).
+      # (see home_dates above). This also covers Andy Hayler's 2026-09-02
+      # request to block out the whole w/c 12 April week as a precaution -
+      # already fully blocked (no home_dates entry for 2027-04-14, and
+      # 04-12/04-13/04-15 below), so no further change was needed for that.
       - "2027-04-12"
       - "2027-04-13"
       - "2027-04-15"
