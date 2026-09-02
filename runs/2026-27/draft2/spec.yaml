@@ -1179,10 +1179,10 @@ club_constraints:
           - { start_date: "2026-11-02", end_date: "2026-12-07" }
   ealing:
     # Monday is Ealing's main night (confirmed by Leslie Pringle, 2026-08-26);
-    # no Monday dates are currently unavailable, so home_dates below is the
-    # full set of Mondays across the season window (2026-09-10 to
-    # 2027-05-13, matching the other clubs), minus the Christmas/New Year
-    # fortnight (already covered by the spec-wide 'no-play-dates' default).
+    # home_dates below is the full set of Mondays across the season window
+    # (2026-09-10 to 2027-05-13, matching the other clubs), minus the
+    # Christmas/New Year fortnight (already covered by the spec-wide
+    # 'no-play-dates' default) and minus the season-start dates below.
     #
     # Ealing run 2 teams (division 1 and division 3) out of the same venue
     # and are happy to play both on the same night, so the home limit is raised
@@ -1195,23 +1195,61 @@ club_constraints:
     # 2026-09-21, 2026-10-05 and 2026-10-12 (2026-08-28), then supplied the
     # full list in an update as of Sunday evening 2026-08-30, adding
     # 2026-10-26, 2026-11-02, 2027-02-08 and 2027-04-19 ("most of it clear"
-    # otherwise). All seven are Mondays already in home_dates below.
+    # otherwise). 2026-09-21 no longer applies - see the season-start note
+    # below - the other six are Mondays in home_dates below.
+    #
+    # Leslie Pringle (2026-09-02): the club "can't start until 5th October" -
+    # 2026-09-14/21/28 are dropped from home_dates below, and the whole club
+    # is blocked from playing away before then too (match_count_limits
+    # below). This supersedes Ealing 1 and Ealing 2's separately-stated
+    # "avoid 7th to 25th Sept" - already a subset of the new season start, so
+    # no extra per-team entry is needed for it.
     match_count_limits:
       - override_key: venue-capacity
         venue_scope: home
         max: 2
         date_max_overrides:
-          "2026-09-21": 1
           "2026-10-05": 1
           "2026-10-12": 1
           "2026-10-26": 1
           "2026-11-02": 1
           "2027-02-08": 1
           "2027-04-19": 1
+      # No away matches before the club's 5th October season start (Leslie
+      # Pringle, 2026-09-02). The home side is handled by home_dates below
+      # skipping the three preceding Mondays.
+      - max: 0
+        venue_scope: away
+        date_ranges:
+          - { start_date: "2026-09-01", end_date: "2026-10-04" }
+      # Ealing 1 (Leslie Pringle, 2026-09-02): the 2027-01-12 match against
+      # Hackney 1 is difficult and should move, but not into w/c 9 Nov, 7
+      # Dec, 11 Jan or 8 Feb - blocked here (home and away) for Ealing 1
+      # only. w/c 11 Jan already contains 2027-01-12, so moving it out of
+      # that week is enough; no separate single-date exclusion is needed.
+      - max: 0
+        teams: [ealing-1]
+        date_ranges:
+          - { start_date: "2026-11-09", end_date: "2026-11-13" }
+          - { start_date: "2026-12-07", end_date: "2026-12-11" }
+          - { start_date: "2027-01-11", end_date: "2027-01-15" }
+          - { start_date: "2027-02-08", end_date: "2027-02-12" }
+      # Ealing 2 (Leslie Pringle, 2026-09-02): the 2026-11-09 match against
+      # Hendon 6 is very difficult, as is the "11th March v Hendon 6" match -
+      # draft1 has no second Ealing 2 v Hendon 6 fixture (division 3 is
+      # single_round, one meeting per pair); its only March fixture against
+      # a Hendon team is against Hendon 5, on 2027-03-11, so this is assumed
+      # to be what Leslie meant (worth confirming the "Hendon 6" label with
+      # her). Both matches should move, avoiding w/c 26 Oct, 9 Nov
+      # and the week containing 11 March (w/c 8 Mar, since the 11th is a
+      # Thursday) - blocked here (home and away) for Ealing 2 only.
+      - max: 0
+        teams: [ealing-2]
+        date_ranges:
+          - { start_date: "2026-10-26", end_date: "2026-10-30" }
+          - { start_date: "2026-11-09", end_date: "2026-11-13" }
+          - { start_date: "2027-03-08", end_date: "2027-03-12" }
     home_dates:
-      - "2026-09-14"
-      - "2026-09-21"
-      - "2026-09-28"
       - "2026-10-05"
       - "2026-10-12"
       - "2026-10-19"
