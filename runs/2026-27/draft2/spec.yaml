@@ -1381,45 +1381,56 @@ club_constraints:
       - "2027-07-01"
       - "2027-07-02"
   harrow:
-    # Details from Surjit Dhemrait (2026-08-27). Home night is Thursday,
-    # 19:30 start (venue and assumed 75+15 time limit are in the clubs
-    # section above).
+    # Details from Surjit Dhemrait (2026-08-27). Home night is Thursday, 19:30
+    # start (venue and assumed 75+15 time limit are in the clubs section above).
     #
-    # Surjit gives the venue capacity as 5 concurrent team matches ("max
-    # home matches we can host is 5 teams"), recorded as the real value in the
+    # Surjit gives the venue capacity as 5 concurrent team matches ("max home
+    # matches we can host is 5 teams"), recorded as the real value in the
     # match_count_limits home entry below. Harrow field only 2 teams, so a limit
     # of 5 can't actually bind yet (the solver skips a shared limit >= the group
-    # size); the keep-apart entry below is scoped to away matches only, so it does
-    # NOT stop the two teams both hosting on the same date - the home limit is
-    # what would, once Harrow have enough teams for it to matter.
+    # size); the keep-apart entry below is scoped to away matches only, so it
+    # does NOT stop the two teams both hosting on the same date - the home limit
+    # is what would, once Harrow have enough teams for it to matter.
     #
-    # home_dates: Thursdays across the season window (2026-09-10 to
-    # 2027-05-13, matching the other clubs), minus -
-    #   - all of September 2026: Harrow can't host then, though they can
-    #     still play away, so September is dropped from home_dates but not
-    #     added to unavailable_away_dates;
-    #   - the first Thursday of every month, the Harrow Swiss - Surjit
-    #     confirmed (2026-08-27 follow-up) this date is fully reserved, no
-    #     match home or away, so these Thursdays are also in
-    #     unavailable_away_dates below. (October's first two Thursdays are
-    #     already covered by the Blitz below; September's first Thursday,
-    #     2026-09-03, is before the season window.)
-    #   - the first two Thursdays of October 2026 (2026-10-01, 2026-10-08),
-    #     the Harrow Blitz - blocked home AND away;
+    # home_dates: Thursdays across the season window (2026-09-10 to 2027-05-13,
+    # matching the other clubs), minus -
+    #   - all of September 2026: Harrow can't host then, though they can still
+    #     play away, so September is dropped from home_dates but not added to
+    #     unavailable_away_dates;
+    #   - the first Thursday of every month, the Harrow Swiss - Surjit confirmed
+    #     (2026-08-27 follow-up) this date is fully reserved, no match home or
+    #     away, so these Thursdays are also in unavailable_away_dates below.
+    #     (October's first two Thursdays are already covered by the Blitz below;
+    #     September's first Thursday, 2026-09-03, is before the season window.)
+    #   - the first two Thursdays of October 2026 (2026-10-01, 2026-10-08), the
+    #     Harrow Blitz - blocked home AND away;
     #   - 2026-12-17, the Christmas Lightning - blocked home AND away;
-    #   - the Christmas/New Year fortnight (2026-12-24, 2026-12-31), as for
-    #     the other clubs (the spec-wide 'no-play-dates' default covers this too).
+    #   - the Christmas/New Year fortnight (2026-12-24, 2026-12-31), as for the
+    #     other clubs (the spec-wide 'no-play-dates' default covers this too).
     #
-    # Not expressible in the spec, recorded here so it isn't lost:
-    #   - Surjit would prefer more of Harrow's 2nd team's (harrow-2)
-    #     matches to fall in 2026, in case he has to travel to India during
-    #     2027, though he can line up another captain and is flexible.
+    # Surjit's two further asks are handled in match_count_limits below:
+    #   - He'd prefer more of Harrow's 2nd team's (harrow-2) matches to fall in
+    #     2026, as he may have reduced availability in 2027 (he can line up
+    #     another captain and is flexible). Front-loading harrow-2 alone would
+    #     hand Harrow a player-eligibility edge (harrow-2 fielding stronger
+    #     players early while they stay free for harrow-1's later fixtures), so
+    #     both teams are held to about the same *fraction* of their matches in
+    #     2027 - harrow-1 and harrow-2 play a different total (14 vs 10), so an
+    #     equal fraction, not an equal count, is what keeps them level. The rest
+    #     of the spec already pins harrow-1 at 5 of 14 in 2027 (= 36%; 4 is
+    #     infeasible), so harrow-2 is capped at 4 of 10 (= 40%, the closest an
+    #     integer count gets to 36%). The caps are ceilings, not targets: the
+    #     solver has no objective pulling matches earlier, so in practice expect
+    #     harrow-1 at 9/14 in 2026 and harrow-2 sitting on its cap at 6/10.
+    #     If these caps ever have to be loosened to keep the spec feasible,
+    #     raise both together so they stay roughly equal as a fraction of each
+    #     team's total - see the match_count_limits entry for worked examples.
     #   - He'd like Harrow 1 and Harrow 2 away matches on separate dates;
-    #     match_count_limits below does exactly this, scoped with
-    #     venue_scope: away so it only separates the two teams' away
-    #     fixtures and still lets one play away on a night the other hosts.
-    # Harrow don't play in the London League, so once set these dates
-    # should hold - there are no London League clash dates to record.
+    #     match_count_limits below does exactly this, scoped with venue_scope:
+    #     away so it only separates the two teams' away fixtures and still lets
+    #     one play away on a night the other hosts. Harrow don't play in the
+    #     London League, so once set these dates should hold - there are no
+    #     London League clash dates to record.
     home_dates:
       - "2026-10-15"
       - "2026-10-22"
@@ -1493,6 +1504,32 @@ club_constraints:
       - teams: [harrow-1, harrow-2]
         venue_scope: away
         max: 1
+      # Front-load Harrow's fixtures into 2026 (see the club note above). Both
+      # teams are held to about the same fraction of their matches in 2027, not
+      # the same count: harrow-1 and harrow-2 play a different total (14 vs
+      # 10), so an equal fraction - not an equal count - is what keeps them
+      # level and denies Harrow the player-eligibility edge. The rest of the
+      # spec already pins harrow-1 at 5 of 14 (36%; 4 is infeasible), so
+      # harrow-2 is capped at 4 of 10 (40%, the closest an integer count gets
+      # to 36%). Counts matches at either venue with a 2027 date; separate
+      # entries as the cap differs by team.
+      #
+      # If a later constraint request from another captain makes the spec
+      # infeasible and these caps have to be loosened, raise BOTH together so
+      # the two 2027 caps stay approximately equal as a fraction of each
+      # team's total (harrow-1/14 ~= harrow-2/10) - e.g. 6/14 (43%) pairs with
+      # 4/10 (40%); 7/14 (50%) pairs with 5/10 (50%). Don't relax one team's
+      # cap alone.
+      - teams: [harrow-1]
+        apply_per: each_team
+        max: 5
+        date_ranges:
+          - { start_date: "2027-01-01", end_date: "2027-12-31" }
+      - teams: [harrow-2]
+        apply_per: each_team
+        max: 4
+        date_ranges:
+          - { start_date: "2027-01-01", end_date: "2027-12-31" }
   kings-head:
     # Per Colin Mackenzie: Kings Head play home matches on Thursday evenings at
     # the Mind Sports Centre (the same venue as Hammersmith), October to May
