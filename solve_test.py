@@ -25,6 +25,8 @@ import fmodel
 import solve
 
 _MINIMAL_SPEC = """
+earliest_match_date: 2025-01-01
+
 clubs:
   albany:
     name: Albany
@@ -148,10 +150,13 @@ class TestSolve(unittest.TestCase):
     def test_earliest_match_date_excludes_earlier_home_dates(self) -> None:
         """Albany has two candidate home dates (2025-09-01 and 2025-09-29); a cutoff
         that excludes the earlier one should still solve, using the later one."""
-        output_dir = self.dir / "out"
-        solution_path = solve.solve(
-            self.spec_path, output_dir, earliest_match_date=date(2025, 9, 2)
+        self.spec_path.write_text(
+            _MINIMAL_SPEC.replace(
+                "earliest_match_date: 2025-01-01", "earliest_match_date: 2025-09-02"
+            )
         )
+        output_dir = self.dir / "out"
+        solution_path = solve.solve(self.spec_path, output_dir)
         loaded = fixturesolution.load_solution(
             solution_path,
             [
@@ -162,11 +167,6 @@ class TestSolve(unittest.TestCase):
         )
         for sf in loaded.fixtures:
             self.assertGreaterEqual(sf.date, date(2025, 9, 2))
-
-    def test_no_cutoff_by_default(self) -> None:
-        output_dir = self.dir / "out"
-        solution_path = solve.solve(self.spec_path, output_dir)
-        self.assertTrue(solution_path.exists())
 
 
 if __name__ == "__main__":

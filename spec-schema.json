@@ -26,6 +26,10 @@
       "$ref": "#/$defs/date",
       "description": "Latest date allowed for a fixture between two teams of the same club (e.g. Hendon 1 v Hendon 2) -- useful for requiring 'derby' matches to be settled earlier in the season than the rest of the fixture list. Has no effect on fixtures between teams from different clubs. If omitted, no such cutoff is applied. Any 'fixed_fixtures' entry between two teams of the same club must not be dated after it."
     },
+    "earliest_match_date": {
+      "$ref": "#/$defs/date",
+      "description": "Excludes candidate dates before this one from newly scheduled fixtures -- e.g. so re-running the solver after some home dates have already passed doesn't place a fixture in the past. If omitted, defaults to today. A 'fixed_fixtures' entry dated before this cutoff is not rejected: fixed_fixtures records matches that are already committed (possibly already played), so an old date there is expected. If this date is in the past, a warning is logged (but solving still proceeds) -- pass a date on or before the spec's earliest home date to disable the cutoff entirely, e.g. for an old spec being re-solved for reference."
+    },
     "clubs": {
       "type": "object",
       "description": "Every club in the season, keyed by club ID (a stable key referenced from teams, club_constraints, fixed_fixtures and exclude_fixtures).",

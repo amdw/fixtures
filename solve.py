@@ -29,37 +29,21 @@ needing to re-solve -- any time the report format changes.
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import logging
-from datetime import date
 from pathlib import Path
 
 import fixturesolution
 import fixturespec
 import fmodel
 
-logger = logging.getLogger(__name__)
 
-
-def solve(
-    spec_path: Path, output_dir: Path, earliest_match_date: date | None = None
-) -> Path:
+def solve(spec_path: Path, output_dir: Path) -> Path:
     """Solve the given spec and write its solution.yaml into output_dir. Returns the
     path to the solution file.
-
-    earliest_match_date, if given, overrides the spec's (always-None)
-    Parameters.earliest_match_date -- see fmodel.Parameters for what it does. It's a
-    solve-time argument rather than a spec field since its usual value (today) is
-    tied to when the solver is run, not to the season being modelled.
     """
     spec = fixturespec.load_spec(spec_path)
     team_ids = fixturespec.load_team_ids(spec_path)
     parameters = spec.parameters
-    if earliest_match_date is not None:
-        logger.info("Excluding new fixtures dated before %s", earliest_match_date)
-        parameters = dataclasses.replace(
-            parameters, earliest_match_date=earliest_match_date
-        )
     result = fmodel.solve(parameters)
     output_dir.mkdir(parents=True, exist_ok=True)
     solution_path = output_dir / "solution.yaml"
@@ -78,25 +62,12 @@ def main() -> None:
         nargs="?",
         help="Directory to write solution.yaml into (default: the spec file's own directory)",
     )
-    parser.add_argument(
-        "--earliest-match-date",
-        type=date.fromisoformat,
-        default=None,
-        metavar="YYYY-MM-DD",
-        help="Don't schedule any new fixture before this date (default: today, so "
-        "re-running the solver doesn't place a fixture in the past). Pass a date on "
-        "or before the spec's earliest home date to disable this cutoff, e.g. for an "
-        "old spec being re-solved for reference.",
-    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 
     output_dir = args.output_dir if args.output_dir is not None else args.spec.parent
-    earliest_match_date = args.earliest_match_date or date.today()
-    solution_path = solve(
-        args.spec, output_dir, earliest_match_date=earliest_match_date
-    )
+    solution_path = solve(args.spec, output_dir)
 
     print(f"Wrote solution to {solution_path}")
 
