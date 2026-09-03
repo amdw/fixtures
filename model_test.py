@@ -1874,6 +1874,53 @@ class TestMaxPlayingTeams(unittest.TestCase):
         self.assertEqual(len(fixtures), 2)
         self.assertFalse(derby_dates <= in_range_dates)
 
+    def test_exclude_dates_drops_a_date_from_the_window_tally(self) -> None:
+        """`exclude_dates` makes every window ignore whatever counted matches fall
+        on the listed dates -- unlike the *_overrides fields, it works over a
+        multi-day rolling window. H1 and H2 (double_round, so two derby legs) have
+        only two home dates two days apart: both legs land inside one 7-day window,
+        needing 4 teams'-worth of players, over a max_playing_teams cap of 3. That
+        is infeasible as-is; excluding one of the two dates drops its leg from the
+        tally, leaving every window at 2 and letting both legs be scheduled."""
+        h1 = fmodel.Team(division=1, club="H", index=1)
+        h2 = fmodel.Team(division=1, club="H", index=2)
+        d1 = date(2025, 1, 1)
+        d2 = date(2025, 1, 3)
+
+        def params_with(exclude_dates: frozenset[date]) -> fmodel.Parameters:
+            return _params(
+                teams=[h1, h2],
+                home_dates={"H": [d1, d2]},
+                unavailable_away_dates={"H": []},
+                match_count_limits=[
+                    fmodel.MatchCountLimit(
+                        teams=[h1, h2],
+                        max_matches=None,
+                        max_playing_teams=3,
+                        time_window_days=7,
+                        exclude_dates=exclude_dates,
+                    )
+                ],
+            )
+
+        with self.assertRaisesRegex(ValueError, "INFEASIBLE"):
+            fmodel.solve(params_with(frozenset()))
+
+        fixtures = list(fmodel.solve(params_with(frozenset({d1}))).fixtures)
+        self.assertEqual(len(fixtures), 2)
+
+    def test_exclude_dates_rejects_date_ranges(self) -> None:
+        """`exclude_dates` and `date_ranges` are mutually exclusive -- with explicit
+        ranges you simply leave the date out of them."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        with self.assertRaises(ValueError):
+            fmodel.MatchCountLimit(
+                teams=[a1],
+                max_matches=1,
+                date_ranges=(fmodel.DateRange(date(2025, 1, 1), date(2025, 1, 7)),),
+                exclude_dates=frozenset({date(2025, 1, 3)}),
+            )
+
 
 class TestMatchCountLimitDateRanges(unittest.TestCase):
     """A MatchCountLimit with explicit `date_ranges` caps matches within each

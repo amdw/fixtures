@@ -268,6 +268,14 @@ class MatchCountLimit:
     touched. `max_playing_teams_overrides` replaces it on specific dates (an int, or
     None to lift the cap that day), mirroring `max_matches_overrides` -- only
     meaningful, and only permitted, when `time_window_days` is 1.
+
+    `exclude_dates` drops every counted match falling on one of the listed dates
+    from this rule: each window is evaluated as if nothing counted happened then,
+    for both `max_matches` and `max_playing_teams`. Unlike the `*_overrides` maps it
+    is not tied to a single-date window, so it is the way to exempt one date from a
+    multi-day rolling cap -- typically a date whose load is already pinned by
+    `fixed_fixtures` and bounded by its own `max_matches_overrides` entry. Mutually
+    exclusive with `date_ranges` (leave the date out of the ranges instead).
     """
 
     teams: Collection[Team]
@@ -283,6 +291,7 @@ class MatchCountLimit:
     max_playing_teams_overrides: Mapping[date, int | None] = dataclasses.field(
         default_factory=dict
     )
+    exclude_dates: frozenset[date] = frozenset()
 
     def __post_init__(self) -> None:
         if self.max_matches_overrides and self.time_window_days != 1:
@@ -304,6 +313,11 @@ class MatchCountLimit:
                 raise ValueError(
                     "MatchCountLimit.date_ranges and max_matches_overrides are "
                     "mutually exclusive"
+                )
+            if self.exclude_dates:
+                raise ValueError(
+                    "MatchCountLimit.date_ranges and exclude_dates are mutually "
+                    "exclusive (leave the date out of the ranges instead)"
                 )
 
     def max_matches_for_window(self, window: Collection[date]) -> int | None:
@@ -683,6 +697,12 @@ def _add_match_count_limit_constraints(
             fixtures_by_date = _counted_fixtures_by_date(
                 fixture_date_vars, team_set, rule.venue_scope
             )
+            if rule.exclude_dates:
+                fixtures_by_date = {
+                    d: fx
+                    for d, fx in fixtures_by_date.items()
+                    if d not in rule.exclude_dates
+                }
 
             # With explicit date_ranges the windows are exactly those inclusive
             # ranges (each counted independently). Otherwise date_windows groups
