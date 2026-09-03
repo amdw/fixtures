@@ -50,10 +50,7 @@ details that aren't part of the solution itself. Keeping these as two separate
 steps (rather than one combined command) means the report can be regenerated
 -- e.g. after a formatting change -- without re-running the (comparatively
 slow) solver: just rerun the report build against the existing
-`solution.yaml`. It also keeps solve-only flags (e.g. `--earliest-match-date`,
-which excludes newly scheduled fixtures before a given date, defaulting to
-today) on `solve.py` alone, rather than needing to be added to a combined
-command too.
+`solution.yaml`.
 
 ### Spec format
 

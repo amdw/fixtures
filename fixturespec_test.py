@@ -49,7 +49,15 @@ def _find_limit(
 # supply their own version of that section (concatenating a second copy on top of an
 # existing one would create a duplicate top-level YAML key, which PyYAML resolves by
 # silently letting the later one clobber the earlier one).
+#
+# Pins earliest_match_date well before every home_dates entry below, so tests that
+# solve() end-to-end aren't affected by the default (today) cutoff excluding these
+# fixed 2025 dates as time passes; tests of earliest_match_date itself override or
+# strip this line instead of appending a second one (a duplicate top-level key, as
+# above).
 _BOILERPLATE = """
+earliest_match_date: 2025-01-01
+
 clubs:
   albany:
     name: Albany
@@ -101,7 +109,10 @@ _MINIMAL_SPEC = (
 
 # A three-team spec (two Albany teams plus Hackney) for exclude_fixtures tests, which
 # need a division where excluding one team/club still leaves other fixtures behind.
+# See _BOILERPLATE above for why earliest_match_date is pinned here too.
 _THREE_TEAM_SPEC = """
+earliest_match_date: 2025-01-01
+
 clubs:
   albany:
     name: Albany
@@ -281,6 +292,52 @@ class TestLoadSpec(unittest.TestCase):
     def test_latest_internal_match_date_invalid(self) -> None:
         path = self._write(_MINIMAL_SPEC + "latest_internal_match_date: not-a-date\n")
         with self.assertRaisesRegex(fixturespec.SpecError, "not-a-date"):
+            fixturespec.load_spec(path)
+
+    def test_earliest_match_date_defaults_to_today(self) -> None:
+        path = self._write(
+            _MINIMAL_SPEC.replace("earliest_match_date: 2025-01-01\n", "")
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.parameters.earliest_match_date, date.today())
+
+    def test_earliest_match_date_parsed(self) -> None:
+        path = self._write(
+            _MINIMAL_SPEC.replace(
+                "earliest_match_date: 2025-01-01", "earliest_match_date: 2030-01-01"
+            )
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.parameters.earliest_match_date, date(2030, 1, 1))
+
+    def test_earliest_match_date_invalid(self) -> None:
+        path = self._write(
+            _MINIMAL_SPEC.replace(
+                "earliest_match_date: 2025-01-01", "earliest_match_date: not-a-date"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "not-a-date"):
+            fixturespec.load_spec(path)
+
+    def test_earliest_match_date_in_the_past_logs_a_warning(self) -> None:
+        path = self._write(
+            _MINIMAL_SPEC.replace(
+                "earliest_match_date: 2025-01-01", "earliest_match_date: 2020-01-01"
+            )
+        )
+        with self.assertLogs(fixturespec.logger, level="WARNING") as cm:
+            fixturespec.load_spec(path)
+        self.assertIn("2020-01-01", cm.output[0])
+        self.assertIn("in the past", cm.output[0])
+
+    def test_earliest_match_date_today_does_not_log_a_warning(self) -> None:
+        path = self._write(
+            _MINIMAL_SPEC.replace(
+                "earliest_match_date: 2025-01-01",
+                f"earliest_match_date: {date.today().isoformat()}",
+            )
+        )
+        with self.assertNoLogs(fixturespec.logger, level="WARNING"):
             fixturespec.load_spec(path)
 
     def test_avoid_dates_key_no_longer_recognised(self) -> None:
@@ -1513,6 +1570,32 @@ club_constraints:
                 )
             ],
         )
+
+    def test_fixed_fixture_before_earliest_match_date_still_solves(self) -> None:
+        """A fixed_fixtures entry dated before earliest_match_date is not rejected,
+        and the solver still places it there -- the cutoff only excludes candidate
+        dates for newly scheduled fixtures, not fixtures already pinned down. Albany's
+        other home date (2025-09-29) is on/after the cutoff, so its own (unfixed)
+        fixture against Hackney still has somewhere to land."""
+        path = self._write(
+            _MINIMAL_SPEC.replace(
+                "earliest_match_date: 2025-01-01", "earliest_match_date: 2025-09-20"
+            )
+            + "fixed_fixtures:\n"
+            "  - home: hackney-1\n"
+            "    away: albany-1\n"
+            "    date: 2025-09-15\n"
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(spec.parameters.earliest_match_date, date(2025, 9, 20))
+        hackney_1 = next(t for t in spec.parameters.teams if t.club == "hackney")
+        albany_1 = next(t for t in spec.parameters.teams if t.club == "albany")
+        fixed = fmodel.ScheduledFixture(
+            fixture=fmodel.Fixture(home_team=hackney_1, away_team=albany_1),
+            date=date(2025, 9, 15),
+        )
+        fixtures = list(fmodel.solve(spec.parameters).fixtures)
+        self.assertIn(fixed, fixtures)
 
     def test_fixed_fixtures_absent(self) -> None:
         path = self._write(_MINIMAL_SPEC)
