@@ -62,14 +62,16 @@ def _params(
             limits.append(
                 fmodel.MatchCountLimit(
                     teams=club_teams,
-                    max=1,
+                    max_matches=1,
                     time_window_days=min_gap_days,
                     apply_per=fmodel.ApplyPer.EACH_TEAM,
                 )
             )
     for club, (scope, n) in (max_concurrent_matches or {}).items():
         limits.append(
-            fmodel.MatchCountLimit(teams=teams_by_club[club], max=n, venue_scope=scope)
+            fmodel.MatchCountLimit(
+                teams=teams_by_club[club], max_matches=n, venue_scope=scope
+            )
         )
     return fmodel.Parameters(match_count_limits=limits, **kwargs)
 
@@ -323,8 +325,75 @@ class TestSolveStats(unittest.TestCase):
             fmodel.solve(params)
 
 
+class TestOneMatchPerTeamPerDate(unittest.TestCase):
+    """A team -- home or away -- may never be scheduled for more than one match on
+    the same date: physically its players can't be in two places at once. This is
+    unconditional (no MatchCountLimit or other spec field is involved), so it holds
+    even when nothing else in Parameters would otherwise prevent the clash.
+    """
+
+    def test_forbids_a_team_playing_home_and_away_the_same_day(self) -> None:
+        """A1 and X1 (division of just the two of them) share a single common
+        date -- both A1 v X1 (A1 home, X1 away) and X1 v A1 (A1 away, X1 home) only
+        have that one date available, so A1 (and X1) would need to play both there.
+        Forbidden, regardless of home/away sidedness."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        shared_date = date(2025, 1, 1)
+        params = _params(
+            teams=[a1, x1],
+            home_dates={"A": [shared_date], "X": [shared_date]},
+            unavailable_away_dates={"A": [], "X": []},
+        )
+        with self.assertRaisesRegex(ValueError, "No solution found"):
+            fmodel.solve(params)
+
+    def test_allows_the_same_pair_to_meet_twice_on_different_dates(self) -> None:
+        """The same setup, but with a second date free for one of the two legs --
+        solves, confirming the rule only forbids sharing a date, not meeting twice
+        at all."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        params = _params(
+            teams=[a1, x1],
+            home_dates={
+                "A": [date(2025, 1, 1)],
+                "X": [date(2025, 1, 8)],
+            },
+            unavailable_away_dates={"A": [], "X": []},
+        )
+        fixtures = list(fmodel.solve(params).fixtures)
+        self.assertEqual(len(fixtures), 2)
+        self.assertEqual(
+            {sf.date for sf in fixtures}, {date(2025, 1, 1), date(2025, 1, 8)}
+        )
+
+    def test_forbids_two_different_opponents_on_the_same_date(self) -> None:
+        """A1 hosts both X1 and Y1, but only has one home date -- A1 can't play
+        both matches there, even though they're against different opponents (so no
+        MatchCountLimit -- which only ever names A1's own club's teams in a venue
+        capacity/keep-apart rule -- would naturally catch this). X1 and Y1 each get
+        two home dates of their own, so this isolates A1's clash as the only cause
+        of infeasibility."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        y1 = fmodel.Team(division=1, club="Y", index=1)
+        shared_date = date(2025, 1, 1)
+        params = _params(
+            teams=[a1, x1, y1],
+            home_dates={
+                "A": [shared_date],
+                "X": [date(2025, 3, 1), date(2025, 3, 8)],
+                "Y": [date(2025, 4, 1), date(2025, 4, 8)],
+            },
+            unavailable_away_dates={"A": [], "X": [], "Y": []},
+        )
+        with self.assertRaisesRegex(ValueError, "No solution found"):
+            fmodel.solve(params)
+
+
 class TestSharedLimitAtOrAboveGroupSize(unittest.TestCase):
-    """A shared-budget MatchCountLimit (apply_per=ACROSS_TEAMS) with max >= the number
+    """A shared-budget MatchCountLimit (apply_per=ACROSS_TEAMS) with max_matches >= the number
     of teams it covers can never bind -- the teams can't play more simultaneous
     matches than there are of them -- so the solver skips it (this is how a
     venue capacity stated above a club's team count stays a no-op). See issue #22.
@@ -336,21 +405,25 @@ class TestSharedLimitAtOrAboveGroupSize(unittest.TestCase):
         ]
         params = fmodel.Parameters(
             teams=teams,
-            home_dates={"A": [date(2025, 1, 1)]},
+            # Two home dates, not one: A1 v A2 and A2 v A1 both need A1 to host,
+            # and a team may only play once per date (see
+            # _add_one_match_per_team_per_date_constraints), so with only one date
+            # they couldn't both be scheduled regardless of this test's own limit.
+            home_dates={"A": [date(2025, 1, 1), date(2025, 1, 8)]},
             unavailable_away_dates={"A": []},
             match_count_limits=[
                 fmodel.MatchCountLimit(
-                    teams=teams, max=limit, venue_scope=fmodel.VenueScope.HOME
+                    teams=teams, max_matches=limit, venue_scope=fmodel.VenueScope.HOME
                 )
             ],
         )
         return list(fmodel.solve(params).fixtures)
 
     def test_limit_at_group_size_does_not_bind(self) -> None:
-        # 2 teams, one shared home date, limit 2: both home legs (A1 v A2 and
-        # A2 v A1) land on that date -- the limit is a no-op, so this solves.
+        # 2 teams, limit 2 (== group size): both home legs (A1 v A2 and A2 v A1)
+        # solve -- the limit is a no-op, so it doesn't get in the way of whatever
+        # else (here, the one-match-per-team-per-date rule) decides their dates.
         fixtures = self._solve(num_teams=2, limit=2)
-        self.assertEqual({sf.date for sf in fixtures}, {date(2025, 1, 1)})
         self.assertEqual(len(fixtures), 2)
 
     def test_limit_above_group_size_does_not_bind(self) -> None:
@@ -367,7 +440,7 @@ class TestSharedLimitAtOrAboveGroupSize(unittest.TestCase):
             unavailable_away_dates={"A": []},
             match_count_limits=[
                 fmodel.MatchCountLimit(
-                    teams=teams, max=2, venue_scope=fmodel.VenueScope.HOME
+                    teams=teams, max_matches=2, venue_scope=fmodel.VenueScope.HOME
                 )
             ],
         )
@@ -1226,14 +1299,14 @@ class TestMatchCountLimits(unittest.TestCase):
         a1 = fmodel.Team(division=1, club="A", index=1)
         a2 = fmodel.Team(division=2, club="A", index=2)
         self.assertEqual(
-            fmodel.MatchCountLimit(teams=[a1, a2], max=1).time_window_days, 1
+            fmodel.MatchCountLimit(teams=[a1, a2], max_matches=1).time_window_days, 1
         )
 
     def test_venue_scope_defaults_to_all(self) -> None:
         a1 = fmodel.Team(division=1, club="A", index=1)
         a2 = fmodel.Team(division=2, club="A", index=2)
         self.assertEqual(
-            fmodel.MatchCountLimit(teams=[a1, a2], max=1).venue_scope,
+            fmodel.MatchCountLimit(teams=[a1, a2], max_matches=1).venue_scope,
             fmodel.VenueScope.ALL,
         )
 
@@ -1261,7 +1334,7 @@ class TestMatchCountLimits(unittest.TestCase):
                 "X": _home_limit(2),
             },
             min_gap_days=7,
-            match_count_limits=[fmodel.MatchCountLimit(teams=[a1, a2], max=1)],
+            match_count_limits=[fmodel.MatchCountLimit(teams=[a1, a2], max_matches=1)],
         )
         fixtures = list(fmodel.solve(params).fixtures)
         a1_home_date = next(sf.date for sf in fixtures if sf.fixture.home_team == a1)
@@ -1288,7 +1361,7 @@ class TestMatchCountLimits(unittest.TestCase):
                 "X": _home_limit(2),
             },
             min_gap_days=7,
-            match_count_limits=[fmodel.MatchCountLimit(teams=[a1, a2], max=1)],
+            match_count_limits=[fmodel.MatchCountLimit(teams=[a1, a2], max_matches=1)],
         )
         with self.assertRaises(ValueError):
             fmodel.solve(params)
@@ -1315,13 +1388,13 @@ class TestMatchCountLimits(unittest.TestCase):
                 "X": _home_limit(2),
             },
             min_gap_days=7,
-            match_count_limits=[fmodel.MatchCountLimit(teams=[a1, a2], max=1)],
+            match_count_limits=[fmodel.MatchCountLimit(teams=[a1, a2], max_matches=1)],
         )
         with self.assertRaises(ValueError):
             fmodel.solve(params)
 
     def test_time_window_days_forbids_shorter_gaps(self) -> None:
-        """With time_window_days=3 and max=1, A1 and A2's home matches can't share
+        """With time_window_days=3 and max_matches=1, A1 and A2's home matches can't share
         any 3-consecutive-day window -- of A's three candidate dates (Jan 1, 3, 10),
         the only forbidden pairing is Jan 1 / Jan 3 (2 days apart), so the solver
         must pick a pairing that involves Jan 10. (X's two home dates, for A1/A2's
@@ -1344,7 +1417,9 @@ class TestMatchCountLimits(unittest.TestCase):
             },
             min_gap_days=7,
             match_count_limits=[
-                fmodel.MatchCountLimit(teams=[a1, a2], max=1, time_window_days=3)
+                fmodel.MatchCountLimit(
+                    teams=[a1, a2], max_matches=1, time_window_days=3
+                )
             ],
         )
         fixtures = list(fmodel.solve(params).fixtures)
@@ -1355,7 +1430,7 @@ class TestMatchCountLimits(unittest.TestCase):
     def test_time_window_days_allows_exact_gap(self) -> None:
         """time_window_days=N counts a run of N consecutive days, not a gap between
         endpoints: two dates exactly N days apart fall in separate windows. With
-        time_window_days=7, max=1 and A's only two home dates exactly a week apart
+        time_window_days=7, max_matches=1 and A's only two home dates exactly a week apart
         (Jan 1 and Jan 8), A1 and A2 must take one each -- the schedule stays
         feasible. An off-by-one that put a 7-day span in one window would make this
         infeasible."""
@@ -1376,7 +1451,9 @@ class TestMatchCountLimits(unittest.TestCase):
             },
             min_gap_days=7,
             match_count_limits=[
-                fmodel.MatchCountLimit(teams=[a1, a2], max=1, time_window_days=7)
+                fmodel.MatchCountLimit(
+                    teams=[a1, a2], max_matches=1, time_window_days=7
+                )
             ],
         )
         fixtures = list(fmodel.solve(params).fixtures)
@@ -1401,7 +1478,7 @@ class TestMatchCountLimits(unittest.TestCase):
             max_concurrent_matches={"A": _home_limit(1)},
             min_gap_days=7,
             excluded_fixtures=[fmodel.Fixture(home_team=a2, away_team=a1)],
-            match_count_limits=[fmodel.MatchCountLimit(teams=[a1, a2], max=1)],
+            match_count_limits=[fmodel.MatchCountLimit(teams=[a1, a2], max_matches=1)],
         )
         fixtures = list(fmodel.solve(params).fixtures)
         self.assertEqual(
@@ -1437,7 +1514,7 @@ class TestMatchCountLimits(unittest.TestCase):
             min_gap_days=7,
             match_count_limits=[
                 fmodel.MatchCountLimit(
-                    teams=[a1, a2], max=1, venue_scope=fmodel.VenueScope.AWAY
+                    teams=[a1, a2], max_matches=1, venue_scope=fmodel.VenueScope.AWAY
                 )
             ],
         )
@@ -1467,7 +1544,7 @@ class TestMatchCountLimits(unittest.TestCase):
             min_gap_days=7,
             match_count_limits=[
                 fmodel.MatchCountLimit(
-                    teams=[a1, a2], max=1, venue_scope=fmodel.VenueScope.AWAY
+                    teams=[a1, a2], max_matches=1, venue_scope=fmodel.VenueScope.AWAY
                 )
             ],
         )
@@ -1496,7 +1573,7 @@ class TestMatchCountLimits(unittest.TestCase):
             min_gap_days=7,
             match_count_limits=[
                 fmodel.MatchCountLimit(
-                    teams=[a1, a2], max=1, venue_scope=fmodel.VenueScope.HOME
+                    teams=[a1, a2], max_matches=1, venue_scope=fmodel.VenueScope.HOME
                 )
             ],
         )
@@ -1526,7 +1603,7 @@ class TestMatchCountLimits(unittest.TestCase):
             min_gap_days=7,
             match_count_limits=[
                 fmodel.MatchCountLimit(
-                    teams=[a1, a2], max=1, venue_scope=fmodel.VenueScope.HOME
+                    teams=[a1, a2], max_matches=1, venue_scope=fmodel.VenueScope.HOME
                 )
             ],
         )
@@ -1559,7 +1636,7 @@ class TestMatchCountLimits(unittest.TestCase):
             ],
             match_count_limits=[
                 fmodel.MatchCountLimit(
-                    teams=[a1, a2, a3], max=limit, time_window_days=30
+                    teams=[a1, a2, a3], max_matches=limit, time_window_days=30
                 )
             ],
         )
@@ -1576,6 +1653,226 @@ class TestMatchCountLimits(unittest.TestCase):
             fmodel.solve(self._three_a_teams_in_one_window(limit=3)).fixtures
         )
         self.assertEqual(len(fixtures), 3)
+
+
+class TestMaxPlayingTeams(unittest.TestCase):
+    """Test cases for MatchCountLimit.max_playing_teams: unlike max_matches, which
+    counts matches, this counts the *distinct* teams from `teams` that play (home or
+    away) within a window. A same-club derby is one match (one candidate variable)
+    but puts two of the club's own teams on to play, so it counts as 1 towards
+    max_matches but 2 towards max_playing_teams -- guarding against exactly the case
+    a plain max_matches cap misses: N matches, one of them an internal derby,
+    needing N+1 teams' worth of players.
+    """
+
+    def test_internal_derby_alone_blocked_by_a_playing_teams_cap_of_one(self) -> None:
+        """A single derby match between two of a club's own teams already needs two
+        of them playing -- so a max_playing_teams: 1 cap makes every candidate date
+        infeasible, even though it's only one match (well within max_matches). Unlike
+        a plain max_matches: 0 (which prunes the candidate variables entirely, see
+        MatchCountLimit.forbids), this isn't detectable per-candidate -- it only
+        shows up as a genuine solver infeasibility."""
+        h1 = fmodel.Team(division=1, club="H", index=1)
+        h2 = fmodel.Team(division=1, club="H", index=2)
+        params = _params(
+            teams=[h1, h2],
+            home_dates={"H": [date(2025, 1, 1), date(2025, 1, 8)]},
+            unavailable_away_dates={"H": []},
+            match_count_limits=[
+                fmodel.MatchCountLimit(
+                    teams=[h1, h2],
+                    max_matches=2,
+                    max_playing_teams=1,
+                    venue_scope=fmodel.VenueScope.HOME,
+                )
+            ],
+        )
+        with self.assertRaisesRegex(ValueError, "INFEASIBLE"):
+            fmodel.solve(params)
+
+    def test_venue_capacity_spreads_an_internal_derby_off_a_full_night(self) -> None:
+        """Mirrors the motivating case: a club hosts up to 3 matches a night
+        (max_matches: 3) but only has 3 teams' worth of players to field
+        (max_playing_teams: 3). Two of its teams (H3, H4) are only free to host on
+        one shared date; adding either leg of the H1-v-H2 derby there too would need
+        a 4th team's worth of players, so the solver must push both legs onto H1/H2's
+        other two shared dates instead (one leg per date, since -- regardless of this
+        cap -- a team may only play once per date), even though max_matches alone
+        (2 + 1 = 3) would have allowed combining a leg with H3/H4."""
+        h1 = fmodel.Team(division=1, club="H", index=1)
+        h2 = fmodel.Team(division=1, club="H", index=2)
+        h3 = fmodel.Team(division=2, club="H", index=3)
+        h4 = fmodel.Team(division=3, club="H", index=4)
+        x1 = fmodel.Team(division=2, club="X", index=1)
+        y1 = fmodel.Team(division=3, club="Y", index=1)
+        shared_date = date(2025, 1, 1)
+        params = _params(
+            teams=[h1, h2, h3, h4, x1, y1],
+            home_dates={
+                "H": [shared_date, date(2025, 1, 8), date(2025, 1, 15)],
+                "X": [date(2025, 3, 1)],
+                "Y": [date(2025, 3, 8)],
+            },
+            unavailable_away_dates={"H": [], "X": [], "Y": []},
+            team_home_dates={h3: [shared_date], h4: [shared_date]},
+            match_count_limits=[
+                fmodel.MatchCountLimit(
+                    teams=[h1, h2, h3, h4],
+                    max_matches=3,
+                    max_playing_teams=3,
+                    venue_scope=fmodel.VenueScope.HOME,
+                )
+            ],
+        )
+        fixtures = list(fmodel.solve(params).fixtures)
+        derby_dates = {
+            sf.date
+            for sf in fixtures
+            if {sf.fixture.home_team, sf.fixture.away_team} == {h1, h2}
+        }
+        self.assertNotIn(shared_date, derby_dates)
+
+    def test_cap_at_or_above_group_size_is_a_no_op(self) -> None:
+        """A max_playing_teams cap that can never bind (>= the group size) leaves the
+        derby free to land on either date -- unlike the test above, shared_date is
+        not excluded."""
+        h1 = fmodel.Team(division=1, club="H", index=1)
+        h2 = fmodel.Team(division=1, club="H", index=2)
+        params = _params(
+            teams=[h1, h2],
+            home_dates={"H": [date(2025, 1, 1), date(2025, 1, 8)]},
+            unavailable_away_dates={"H": []},
+            match_count_limits=[
+                fmodel.MatchCountLimit(
+                    teams=[h1, h2],
+                    max_matches=2,
+                    max_playing_teams=2,
+                    venue_scope=fmodel.VenueScope.HOME,
+                )
+            ],
+        )
+        fixtures = list(fmodel.solve(params).fixtures)
+        self.assertEqual(len(fixtures), 2)
+
+    def test_zero_forbids_the_candidate_up_front_like_max_matches_zero(self) -> None:
+        """Unlike a cap of 1 or more, max_playing_teams: 0 is an up-front bar: any
+        counted match puts at least one team from `teams` on to play, so it's
+        detectable per-candidate (see MatchCountLimit.forbids) rather than only
+        showing up as a solver infeasibility."""
+        h1 = fmodel.Team(division=1, club="H", index=1)
+        h2 = fmodel.Team(division=1, club="H", index=2)
+        fix = fmodel.Fixture(home_team=h1, away_team=h2)
+        blocked = fmodel.MatchCountLimit(
+            teams=[h1, h2], max_matches=2, max_playing_teams=0
+        )
+        self.assertTrue(blocked.forbids(fix, date(2025, 1, 1)))
+
+    def test_override_lifts_the_cap_on_a_specific_date(self) -> None:
+        """max_playing_teams_overrides replaces the base cap on that one date only
+        -- mirroring max_matches_overrides. A base cap of 1 blocks either derby leg
+        everywhere on its own (each alone already needs 2 teams playing), but two
+        overridden dates raise it to 2 -- enough for one leg apiece (a team may only
+        play once per date, so the two legs can't share even an overridden date) --
+        while a third, un-overridden date stays governed by the base cap and so is
+        left unused."""
+        h1 = fmodel.Team(division=1, club="H", index=1)
+        h2 = fmodel.Team(division=1, club="H", index=2)
+        overridden_date_1 = date(2025, 1, 1)
+        overridden_date_2 = date(2025, 1, 8)
+        plain_date = date(2025, 1, 15)
+        params = _params(
+            teams=[h1, h2],
+            home_dates={"H": [overridden_date_1, overridden_date_2, plain_date]},
+            unavailable_away_dates={"H": []},
+            match_count_limits=[
+                fmodel.MatchCountLimit(
+                    teams=[h1, h2],
+                    max_matches=2,
+                    max_playing_teams=1,
+                    max_playing_teams_overrides={
+                        overridden_date_1: 2,
+                        overridden_date_2: 2,
+                    },
+                    venue_scope=fmodel.VenueScope.HOME,
+                )
+            ],
+        )
+        fixtures = list(fmodel.solve(params).fixtures)
+        derby_dates = {
+            sf.date
+            for sf in fixtures
+            if {sf.fixture.home_team, sf.fixture.away_team} == {h1, h2}
+        }
+        self.assertEqual(derby_dates, {overridden_date_1, overridden_date_2})
+
+    def test_overrides_reject_non_default_time_window_days(self) -> None:
+        """Unlike max_playing_teams itself (see the multi-day-window tests below,
+        which show it's meaningful over a wider window), max_playing_teams_overrides
+        is still tied to a single date: an override names one specific date, which
+        only lines up with one specific window when time_window_days is 1."""
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        with self.assertRaises(ValueError):
+            fmodel.MatchCountLimit(
+                teams=[a1],
+                max_matches=1,
+                time_window_days=7,
+                max_playing_teams_overrides={date(2025, 1, 1): 1},
+            )
+
+    def test_multi_day_window_counts_a_repeated_pair_twice(self) -> None:
+        """Over a multi-day window, the same pair meeting twice counts towards
+        max_playing_teams once per match, not once per team: two internal H1-v-H2
+        matches within 7 days of each other would need 4 teams'-worth of players in
+        that week (2 matches x 2 teams each), exceeding a cap of 3, even though only
+        2 distinct teams are ever involved. H1 and H2 have two close-together dates
+        and one far-apart one; the solver must use the far one for at least one leg
+        to keep any 7-day window's tally at or under 3."""
+        h1 = fmodel.Team(division=1, club="H", index=1)
+        h2 = fmodel.Team(division=1, club="H", index=2)
+        close_dates = {date(2025, 1, 1), date(2025, 1, 3)}
+        far_date = date(2025, 1, 20)
+        params = _params(
+            teams=[h1, h2],
+            home_dates={"H": sorted(close_dates | {far_date})},
+            unavailable_away_dates={"H": []},
+            match_count_limits=[
+                fmodel.MatchCountLimit(
+                    teams=[h1, h2],
+                    max_matches=None,
+                    max_playing_teams=3,
+                    time_window_days=7,
+                )
+            ],
+        )
+        fixtures = list(fmodel.solve(params).fixtures)
+        derby_dates = {sf.date for sf in fixtures}
+        self.assertEqual(len(fixtures), 2)
+        self.assertFalse(derby_dates <= close_dates)
+
+    def test_date_ranges_counts_a_repeated_pair_twice(self) -> None:
+        """The same property, using an explicit date_ranges window instead of a
+        rolling time_window_days one."""
+        h1 = fmodel.Team(division=1, club="H", index=1)
+        h2 = fmodel.Team(division=1, club="H", index=2)
+        in_range_dates = {date(2025, 1, 1), date(2025, 1, 3)}
+        out_of_range_date = date(2025, 1, 20)
+        params = _params(
+            teams=[h1, h2],
+            home_dates={"H": sorted(in_range_dates | {out_of_range_date})},
+            unavailable_away_dates={"H": []},
+            match_count_limits=[
+                fmodel.MatchCountLimit(
+                    teams=[h1, h2],
+                    max_matches=None,
+                    max_playing_teams=3,
+                    date_ranges=(fmodel.DateRange(date(2025, 1, 1), date(2025, 1, 7)),),
+                )
+            ],
+        )
+        fixtures = list(fmodel.solve(params).fixtures)
+        derby_dates = {sf.date for sf in fixtures}
+        self.assertEqual(len(fixtures), 2)
+        self.assertFalse(derby_dates <= in_range_dates)
 
 
 class TestMatchCountLimitDateRanges(unittest.TestCase):
@@ -1614,13 +1911,13 @@ class TestMatchCountLimitDateRanges(unittest.TestCase):
             ],
             match_count_limits=[
                 fmodel.MatchCountLimit(
-                    teams=[a1, a2, a3], max=limit, date_ranges=date_ranges
+                    teams=[a1, a2, a3], max_matches=limit, date_ranges=date_ranges
                 )
             ],
         )
 
     def test_cap_binds_inside_the_range_only(self) -> None:
-        """The range covers January; A also has two February home dates. max=1
+        """The range covers January; A also has two February home dates. max_matches=1
         inside the range forces at least two of the three home legs into
         February, leaving at most one in January."""
         params = self._three_a_teams(
@@ -1640,7 +1937,7 @@ class TestMatchCountLimitDateRanges(unittest.TestCase):
 
     def test_infeasible_when_range_cap_leaves_nowhere(self) -> None:
         """Three in-range home dates plus one outside; with a one-a-night venue
-        and max=1 inside the range, only two of the three required home legs can
+        and max_matches=1 inside the range, only two of the three required home legs can
         be placed -> infeasible."""
         params = self._three_a_teams(
             a_home_dates=[
@@ -1676,7 +1973,7 @@ class TestMatchCountLimitDateRanges(unittest.TestCase):
             fmodel.solve(params)
 
     def test_max_zero_forces_matches_out_of_the_range(self) -> None:
-        """max=0 bars every counted match inside the range: A1's one home leg,
+        """max_matches=0 bars every counted match inside the range: A1's one home leg,
         with an in-range and an out-of-range home date available, is forced onto
         the out-of-range one."""
         a1 = fmodel.Team(division=1, club="A", index=1)
@@ -1690,7 +1987,7 @@ class TestMatchCountLimitDateRanges(unittest.TestCase):
             match_count_limits=[
                 fmodel.MatchCountLimit(
                     teams=[a1],
-                    max=0,
+                    max_matches=0,
                     date_ranges=(
                         fmodel.DateRange(date(2025, 1, 1), date(2025, 1, 31)),
                     ),
@@ -1722,7 +2019,7 @@ class TestMatchCountLimitDateRanges(unittest.TestCase):
             match_count_limits=[
                 fmodel.MatchCountLimit(
                     teams=[a1],
-                    max=1,
+                    max_matches=1,
                     date_ranges=(
                         fmodel.DateRange(date(2025, 1, 1), date(2025, 1, 31)),
                     ),
@@ -1737,18 +2034,18 @@ class TestMatchCountLimitDateRanges(unittest.TestCase):
         with self.assertRaises(ValueError):
             fmodel.MatchCountLimit(
                 teams=[a1],
-                max=1,
+                max_matches=1,
                 time_window_days=7,
                 date_ranges=(fmodel.DateRange(date(2025, 1, 1), date(2025, 1, 31)),),
             )
 
-    def test_rejects_date_max_overrides(self) -> None:
+    def test_rejects_max_matches_overrides(self) -> None:
         a1 = fmodel.Team(division=1, club="A", index=1)
         with self.assertRaises(ValueError):
             fmodel.MatchCountLimit(
                 teams=[a1],
-                max=1,
-                date_max_overrides={date(2025, 1, 1): 1},
+                max_matches=1,
+                max_matches_overrides={date(2025, 1, 1): 1},
                 date_ranges=(fmodel.DateRange(date(2025, 1, 1), date(2025, 1, 31)),),
             )
 
@@ -1763,7 +2060,7 @@ class TestMatchCountLimitDateRanges(unittest.TestCase):
         self.assertNotIn(date(2025, 2, 1), rng)
 
     def test_max_zero_prunes_candidate_var(self) -> None:
-        """A max: 0 limit makes its candidates a certain zero, so _build_model
+        """A max_matches: 0 limit makes its candidates a certain zero, so _build_model
         never creates a decision variable for them -- observable because a
         fixed_fixtures entry pinned onto such a date then fails with the
         descriptive 'not schedulable on that date' error (the fixture is still
@@ -1787,7 +2084,7 @@ class TestMatchCountLimitDateRanges(unittest.TestCase):
             match_count_limits=[
                 fmodel.MatchCountLimit(
                     teams=[a1, x1],
-                    max=0,
+                    max_matches=0,
                     date_ranges=(
                         fmodel.DateRange(date(2025, 12, 22), date(2026, 1, 4)),
                     ),
@@ -1804,15 +2101,18 @@ class TestMatchCountLimitDateRanges(unittest.TestCase):
         away_fix = fmodel.Fixture(home_team=x1, away_team=a1)
         rng = fmodel.DateRange(date(2025, 12, 22), date(2026, 1, 4))
         away_only = fmodel.MatchCountLimit(
-            teams=[a1], max=0, venue_scope=fmodel.VenueScope.AWAY, date_ranges=(rng,)
+            teams=[a1],
+            max_matches=0,
+            venue_scope=fmodel.VenueScope.AWAY,
+            date_ranges=(rng,),
         )
         # AWAY scope: bars a1's away fixture in the range, not its home one.
         self.assertTrue(away_only.forbids(away_fix, date(2025, 12, 29)))
         self.assertFalse(away_only.forbids(home_fix, date(2025, 12, 29)))
         # Outside the range: not forbidden.
         self.assertFalse(away_only.forbids(away_fix, date(2026, 1, 5)))
-        # max > 0: never an up-front bar.
-        keep = fmodel.MatchCountLimit(teams=[a1], max=1, date_ranges=(rng,))
+        # max_matches > 0: never an up-front bar.
+        keep = fmodel.MatchCountLimit(teams=[a1], max_matches=1, date_ranges=(rng,))
         self.assertFalse(keep.forbids(away_fix, date(2025, 12, 29)))
 
 
@@ -1840,7 +2140,7 @@ class TestPerClubGap(unittest.TestCase):
             match_count_limits=[
                 fmodel.MatchCountLimit(
                     teams=teams_by_club[club],
-                    max=1,
+                    max_matches=1,
                     time_window_days=gap,
                     apply_per=fmodel.ApplyPer.EACH_TEAM,
                 )
@@ -1869,8 +2169,8 @@ class TestPerClubGap(unittest.TestCase):
 
 
 class TestSharedHomeLimitNullAndOverrides(unittest.TestCase):
-    """A shared home-scope MatchCountLimit with max=None imposes no cap; a
-    `date_max_overrides` entry of None lifts it for that one date, an int replaces it.
+    """A shared home-scope MatchCountLimit with max_matches=None imposes no cap; a
+    `max_matches_overrides` entry of None lifts it for that one date, an int replaces it.
     """
 
     def test_finite_default_makes_it_infeasible(self) -> None:
@@ -1942,9 +2242,9 @@ class TestSharedHomeLimitNullAndOverrides(unittest.TestCase):
             match_count_limits=(
                 fmodel.MatchCountLimit(
                     teams=[a1, a2],
-                    max=1,
+                    max_matches=1,
                     venue_scope=fmodel.VenueScope.HOME,
-                    date_max_overrides={date(2025, 1, 1): None},
+                    max_matches_overrides={date(2025, 1, 1): None},
                 ),
             ),
             min_gap_days=7,
@@ -1984,12 +2284,12 @@ class TestSharedLimitAwayAndAllScopes(unittest.TestCase):
 
     def _any(self, limit: int | None) -> fmodel.MatchCountLimit:
         return fmodel.MatchCountLimit(
-            teams=[], max=limit, venue_scope=fmodel.VenueScope.ALL
+            teams=[], max_matches=limit, venue_scope=fmodel.VenueScope.ALL
         )
 
     def _away(self, limit: int | None) -> fmodel.MatchCountLimit:
         return fmodel.MatchCountLimit(
-            teams=[], max=limit, venue_scope=fmodel.VenueScope.AWAY
+            teams=[], max_matches=limit, venue_scope=fmodel.VenueScope.AWAY
         )
 
     def test_any_scope_limit_blocks_two_matches_on_one_date(self) -> None:

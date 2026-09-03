@@ -548,14 +548,15 @@ fixtures:
 - home: hendon-1
   away: hackney-1
   date: 2026-05-28
-spec_checksum: sha256:abf1ec6d4f1b5b22ed266e02c0198062e33dbe9760d0d20a806891f1f5557d98
+spec_checksum: sha256:fc221b89fe90f1feb2ffd6daf7d95b9e0fe36f5af4d5f1550eb44894d9f36f3f
 stats:
   model: |-
-    satisfaction model '': (model_fingerprint: 0x7a72f3dd866787a9)
+    satisfaction model '': (model_fingerprint: 0xf871d7678b7eaa1a)
     #Variables: 5'653 (5'470 primary variables)
       - 5'653 Booleans in [0,1]
-    #kLinear3: 4
-    #kLinearN: 3'602 (#terms: 50'418)
+    #kLinear2: 570
+    #kLinear3: 184
+    #kLinearN: 4'596 (#terms: 58'343)
   solve: |
     CpSolverResponse summary:
     status: OPTIMAL
@@ -564,13 +565,13 @@ stats:
     integers: 2215
     booleans: 5639
     conflicts: 0
-    branches: 7600
-    propagations: 269012
-    integer_propagations: 84076
+    branches: 6544
+    propagations: 228386
+    integer_propagations: 72340
     restarts: 0
     lp_iterations: 0
-    walltime: 0.204949
-    usertime: 0.204949
-    deterministic_time: 0.371173
+    walltime: 0.212975
+    usertime: 0.212975
+    deterministic_time: 0.367307
     gap_integral: 0
     solution_fingerprint: 0x5ef51ce980a21f5d

@@ -164,7 +164,7 @@ for _team in _TEAMS:
 _MATCH_COUNT_LIMITS = [
     fmodel.MatchCountLimit(
         teams=club_teams,
-        max=1,
+        max_matches=1,
         time_window_days=_MIN_MATCH_GAP_DAYS,
         apply_per=fmodel.ApplyPer.EACH_TEAM,
     )
@@ -172,7 +172,7 @@ _MATCH_COUNT_LIMITS = [
 ] + [
     fmodel.MatchCountLimit(
         teams=club_teams,
-        max=2,
+        max_matches=2,
         venue_scope=fmodel.VenueScope.HOME,
     )
     for club_teams in _TEAMS_BY_CLUB.values()
