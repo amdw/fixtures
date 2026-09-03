@@ -1787,6 +1787,76 @@ club_constraints:
         ):
             fixturespec.load_spec(path)
 
+    def test_match_count_limits_exclude_dates_parsed(self) -> None:
+        """'exclude_dates' lands on the resolved limit as a frozenset of dates
+        whose counted matches the rule ignores -- and, unlike the *_overrides
+        fields, it's allowed alongside a multi-day rolling window."""
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - venue_scope: home\n"
+            "        max_playing_teams: 3\n"
+            "        time_window_days: 7\n"
+            "        exclude_dates:\n"
+            "          - 2025-09-01\n"
+            "          - 2025-09-08\n"
+        )
+        spec = fixturespec.load_spec(path)
+        limit = _find_limit(
+            spec.parameters.match_count_limits,
+            club="albany",
+            venue_scope=fmodel.VenueScope.HOME,
+            apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
+        )
+        self.assertEqual(limit.time_window_days, 7)
+        self.assertEqual(
+            limit.exclude_dates,
+            frozenset({date(2025, 9, 1), date(2025, 9, 8)}),
+        )
+
+    def test_match_count_limits_exclude_dates_defaults_to_empty(self) -> None:
+        path = self._write(_MINIMAL_SPEC)
+        spec = fixturespec.load_spec(path)
+        limit = _find_limit(
+            spec.parameters.match_count_limits,
+            club="albany",
+            venue_scope=fmodel.VenueScope.HOME,
+            apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
+        )
+        self.assertEqual(limit.exclude_dates, frozenset())
+
+    def test_match_count_limits_exclude_dates_invalid_date_rejected(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - venue_scope: home\n"
+            "        max_matches: 3\n"
+            "        exclude_dates:\n"
+            "          - not-a-date\n"
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "exclude_dates"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_exclude_dates_reject_date_ranges(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - venue_scope: home\n"
+            "        max_matches: 0\n"
+            "        exclude_dates:\n"
+            "          - 2025-09-01\n"
+            "        date_ranges:\n"
+            "          - start_date: 2025-09-01\n"
+            "            end_date: 2025-09-07\n"
+        )
+        with self.assertRaisesRegex(
+            fixturespec.SpecError, "exclude_dates.*date_ranges"
+        ):
+            fixturespec.load_spec(path)
+
     def test_club_latest_match_date_parsed(self) -> None:
         """A per-club latest_match_date lands in Parameters.club_latest_match_date,
         keyed by club, and only for the clubs that set one."""

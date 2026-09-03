@@ -309,6 +309,13 @@
           }
         }
       },
+      "exclude_dates": {
+        "type": "array",
+        "minItems": 1,
+        "description": "Dates whose counted matches this rule ignores entirely -- every window is evaluated as if nothing counted falls on them. Use to exempt a date the rule would otherwise make infeasible, typically one whose load is already pinned by fixed_fixtures and governed by a 'max_matches_overrides' entry (e.g. two pre-season derbies on one night, four teams'-worth, under a rolling 'max_playing_teams: 3'). Applies to both 'max_matches' and 'max_playing_teams'; not combinable with 'date_ranges' (list ranges that skip the date instead).",
+        "items": { "$ref": "#/$defs/date" },
+        "uniqueItems": true
+      },
       "override_key": {
         "type": "string",
         "description": "Names a club_constraints.defaults.match_count_limits entry (via its own 'override_key'). On a club entry, replaces that default for the club. Required and unique on every defaults entry; on a club entry it can't be combined with 'teams'."
@@ -344,6 +351,9 @@
         "date_ranges": {
           "$ref": "#/$defs/match_count_limit_fields/date_ranges"
         },
+        "exclude_dates": {
+          "$ref": "#/$defs/match_count_limit_fields/exclude_dates"
+        },
         "override_key": {
           "$ref": "#/$defs/match_count_limit_fields/override_key"
         }
@@ -372,6 +382,9 @@
         },
         "date_ranges": {
           "$ref": "#/$defs/match_count_limit_fields/date_ranges"
+        },
+        "exclude_dates": {
+          "$ref": "#/$defs/match_count_limit_fields/exclude_dates"
         },
         "override_key": {
           "$ref": "#/$defs/match_count_limit_fields/override_key"

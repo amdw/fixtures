@@ -367,6 +367,7 @@ _MATCH_COUNT_LIMIT_FIELD_KEYS = {
     "max_matches_overrides",
     "max_playing_teams_overrides",
     "date_ranges",
+    "exclude_dates",
     "override_key",
 }
 
@@ -420,6 +421,7 @@ class _ParsedMatchCountLimit:
     max_playing_teams_overrides: Mapping[date, int | None] = dataclasses.field(
         default_factory=dict
     )
+    exclude_dates: frozenset[date] = frozenset()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -746,6 +748,11 @@ def _parse_match_count_limits(
         must then be a non-negative integer (0 bars every counted match in the
         range -- a whole-club, all-teams 'defaults' entry with max_matches 0 is how a
         spec-wide "nobody plays these dates" block is expressed).
+      - 'exclude_dates' (optional): a non-empty list of dates whose counted
+        matches this rule ignores entirely -- every window is evaluated as if
+        nothing counted falls on them. Unlike the '*_overrides' maps it is not tied
+        to a single-date window, so it can exempt one date from a multi-day rolling
+        cap. Not combinable with 'date_ranges'.
       - 'override_key': required for a 'defaults' entry (and unique within that
         list); optional for a club entry, where it names the default this one
         replaces for the club wholesale.
@@ -936,6 +943,19 @@ def _parse_match_count_limits(
                 entry["date_ranges"], f"{entry_context}.date_ranges"
             )
 
+        exclude_dates: frozenset[date] = frozenset()
+        if "exclude_dates" in entry:
+            if has_date_ranges:
+                raise SpecError(
+                    f"{entry_context}: 'exclude_dates' and 'date_ranges' can't be "
+                    "combined"
+                )
+            exclude_dates = frozenset(
+                _parse_date_list(
+                    entry["exclude_dates"], f"{entry_context}.exclude_dates"
+                )
+            )
+
         if (
             max_ is None
             and not max_matches_overrides
@@ -961,6 +981,7 @@ def _parse_match_count_limits(
                 date_ranges=date_ranges,
                 override_key=override_key,
                 max_playing_teams_overrides=max_playing_teams_overrides,
+                exclude_dates=exclude_dates,
             )
         )
 
@@ -1035,6 +1056,7 @@ def _resolve_match_count_limits(
                     date_ranges=pl.date_ranges,
                     max_playing_teams=pl.max_playing_teams,
                     max_playing_teams_overrides=pl.max_playing_teams_overrides,
+                    exclude_dates=pl.exclude_dates,
                 )
             )
     return resolved
