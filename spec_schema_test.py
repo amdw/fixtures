@@ -120,6 +120,7 @@ club_constraints:
         time_window_days: 7
         max_matches: 1
         venue_scope: away
+        exclude_dates: [2025-09-08]
       - teams: [hackney-1, hackney-5]
         max_matches: 1
         date_ranges:
