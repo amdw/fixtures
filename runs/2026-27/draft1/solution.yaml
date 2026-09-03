@@ -500,16 +500,16 @@ fixtures:
 - home: metropolitan-1
   away: kings-head-1
   date: 2027-06-10
-spec_checksum: sha256:7fe649793337624a4ce2d700569729d4bdb2e4658f5951305152ad214b498da8
+spec_checksum: sha256:3fbda3975367b2c08bc4c61689004bc4d1df2fcdf22b607f4f91229101aabd4d
 stats:
   model: |-
-    satisfaction model '': (model_fingerprint: 0xb1889413f58d408d)
+    satisfaction model '': (model_fingerprint: 0x975b3c8a13757e13)
     #Variables: 3'176 (3'003 primary variables)
       - 3'176 Booleans in [0,1]
     #kLinear1: 6
-    #kLinear2: 168
-    #kLinear3: 89
-    #kLinearN: 2'307 (#enforced: 50) (#terms: 29'591)
+    #kLinear2: 556
+    #kLinear3: 229
+    #kLinearN: 2'972 (#enforced: 50) (#terms: 33'830)
   solve: |
     CpSolverResponse summary:
     status: OPTIMAL
@@ -518,13 +518,13 @@ stats:
     integers: 1466
     booleans: 3028
     conflicts: 0
-    branches: 4760
-    propagations: 122409
-    integer_propagations: 60695
+    branches: 5838
+    propagations: 149180
+    integer_propagations: 77294
     restarts: 0
     lp_iterations: 0
-    walltime: 0.141716
-    usertime: 0.141716
-    deterministic_time: 0.155467
+    walltime: 0.135616
+    usertime: 0.135616
+    deterministic_time: 0.164457
     gap_integral: 0
     solution_fingerprint: 0xbfb973bb26eeac8c

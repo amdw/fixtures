@@ -1,6 +1,9 @@
 # yaml-language-server: $schema=../../spec-schema.json
 name: "2025-26 Season"
 draft: true
+# This is a static reference example, not a live season, so its whole (long past)
+# season window is exempted from the default (today) earliest_match_date cutoff.
+earliest_match_date: "2025-01-01"
 clubs:
   albany:
     name: Albany
@@ -194,11 +197,11 @@ club_constraints:
       - override_key: weekly-gap
         apply_per: each_team
         time_window_days: 7
-        max: 1
+        max_matches: 1
       # Each club hosts at most two home matches a night (shared venue).
       - override_key: venue-capacity
         venue_scope: home
-        max: 2
+        max_matches: 2
   albany:
     home_dates:
       - "2025-09-01"
@@ -368,8 +371,8 @@ club_constraints:
       # take a third on 2025-11-13 only.
       - override_key: venue-capacity
         venue_scope: home
-        max: 2
-        date_max_overrides:
+        max_matches: 2
+        max_matches_overrides:
           "2025-11-13": 3
   harrow:
     match_count_limits:
@@ -377,7 +380,7 @@ club_constraints:
       - override_key: weekly-gap
         apply_per: each_team
         time_window_days: 14
-        max: 1
+        max_matches: 1
     home_dates:
       - "2025-09-11"
       - "2025-09-18"

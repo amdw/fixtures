@@ -204,10 +204,11 @@ class VenueScope(enum.Enum):
 
 
 class ApplyPer(enum.Enum):
-    """How a MatchCountLimit's `max` applies to its `teams`. ACROSS_TEAMS: one
-    shared budget for the whole set (a venue capacity, or a keep-these-teams-apart
-    rule). EACH_TEAM: the cap is enforced separately for every team in the set (a
-    per-team gap -- `teams` is then typically every team of a club and `max` is 1).
+    """How a MatchCountLimit's `max_matches`/`max_playing_teams` applies to its
+    `teams`. ACROSS_TEAMS: one shared budget for the whole set (a venue capacity, or
+    a keep-these-teams-apart rule). EACH_TEAM: the cap is enforced separately for
+    every team in the set (a per-team gap -- `teams` is then typically every team of
+    a club and `max_matches` is 1).
     """
 
     EACH_TEAM = "each_team"
@@ -216,7 +217,7 @@ class ApplyPer(enum.Enum):
 
 @dataclasses.dataclass(frozen=True)
 class MatchCountLimit:
-    """At most `max` matches involving `teams` may fall within any window of
+    """At most `max_matches` matches involving `teams` may fall within any window of
     `time_window_days` consecutive calendar days. This is the sole match-count
     constraint mechanism -- a per-team gap ("each team plays at most once a week"),
     a venue's concurrent-match capacity ("at most two home matches a night"), and a
@@ -228,43 +229,70 @@ class MatchCountLimit:
     matches exactly a week apart (day N and day N+7) never share a window and are
     unrestricted relative to each other.
 
-    `apply_per` (see ApplyPer) decides whether `max` is one shared budget for the
-    whole `teams` set (ACROSS_TEAMS, the default) or enforced separately per team
-    (EACH_TEAM).
+    `apply_per` (see ApplyPer) decides whether `max_matches` (and `max_playing_teams`)
+    is one shared budget for the whole `teams` set (ACROSS_TEAMS, the default) or
+    enforced separately per team (EACH_TEAM).
 
     `venue_scope` narrows which of those teams' matches count: VenueScope.HOME only
     their home matches, VenueScope.AWAY only their away matches, VenueScope.ALL (the
     default) every match they play. So an AWAY cap counts only the teams' away
     fixtures, still allowing one to play away on a night another is hosting.
 
-    `max` may be None, meaning no cap from the plain value -- only useful alongside
-    `date_max_overrides`, which replace `max` on specific dates (an int, or None to
-    lift the cap that day). These per-date overrides are only meaningful, and only
-    permitted, when `time_window_days` is 1, so each window is a single date.
+    `max_matches` may be None, meaning no cap from the plain value -- only useful
+    alongside `max_matches_overrides`, which replace `max_matches` on specific dates
+    (an int, or None to lift the cap that day). These per-date overrides are only
+    meaningful, and only permitted, when `time_window_days` is 1, so each window is a
+    single date.
 
     `date_ranges`, when non-empty, replaces the rolling-window behaviour entirely:
     instead of every run of `time_window_days` consecutive days, the cap applies to
     exactly the given DateRanges, each counted independently. This targets a limit
     tied to specific weeks -- a school-holiday week, a congress fortnight -- that a
     rolling window can't express. It requires `time_window_days` left at its default
-    of 1, is mutually exclusive with `date_max_overrides`, and `max` must then be a
-    non-negative integer (`max=0` bars every counted match in the range).
+    of 1, is mutually exclusive with `max_matches_overrides`, and `max_matches` must
+    then be a non-negative integer (`max_matches=0` bars every counted match in the
+    range).
+
+    `max_playing_teams`, when not None, caps how many teams'-worth of players from
+    `teams` a window asks for: each counted match adds one of `teams` playing to the
+    total, or two if it's an internal match between two of `teams` (e.g. a same-club
+    derby counted by a club's own venue-capacity rule) -- one entry towards
+    `max_matches`, but two teams from the set on to play. A venue that can physically
+    host 3 simultaneous matches but only has 3 sets of players to field wants
+    `max_matches=3` *and* `max_playing_teams=3` -- otherwise 3 matches, one an
+    internal derby, would need 4 teams' worth of players. Over a wider window (a
+    multi-day `time_window_days`, or `date_ranges`), the same pair meeting twice
+    counts twice: two internal matches between the same two teams still means
+    fielding 4 teams'-worth of players across the window, once per match, not 2 --
+    this is a running tally of teams asked to play, not a count of distinct teams
+    touched. `max_playing_teams_overrides` replaces it on specific dates (an int, or
+    None to lift the cap that day), mirroring `max_matches_overrides` -- only
+    meaningful, and only permitted, when `time_window_days` is 1.
     """
 
     teams: Collection[Team]
-    max: int | None
+    max_matches: int | None
     time_window_days: int = 1
     venue_scope: VenueScope = VenueScope.ALL
     apply_per: ApplyPer = ApplyPer.ACROSS_TEAMS
-    date_max_overrides: Mapping[date, int | None] = dataclasses.field(
+    max_matches_overrides: Mapping[date, int | None] = dataclasses.field(
         default_factory=dict
     )
     date_ranges: tuple[DateRange, ...] = ()
+    max_playing_teams: int | None = None
+    max_playing_teams_overrides: Mapping[date, int | None] = dataclasses.field(
+        default_factory=dict
+    )
 
     def __post_init__(self) -> None:
-        if self.date_max_overrides and self.time_window_days != 1:
+        if self.max_matches_overrides and self.time_window_days != 1:
             raise ValueError(
-                "MatchCountLimit.date_max_overrides requires time_window_days == 1"
+                "MatchCountLimit.max_matches_overrides requires time_window_days == 1"
+            )
+        if self.max_playing_teams_overrides and self.time_window_days != 1:
+            raise ValueError(
+                "MatchCountLimit.max_playing_teams_overrides requires "
+                "time_window_days == 1"
             )
         if self.date_ranges:
             if self.time_window_days != 1:
@@ -272,19 +300,28 @@ class MatchCountLimit:
                     "MatchCountLimit.date_ranges can't be combined with a "
                     "non-default time_window_days (it replaces the rolling window)"
                 )
-            if self.date_max_overrides:
+            if self.max_matches_overrides:
                 raise ValueError(
-                    "MatchCountLimit.date_ranges and date_max_overrides are "
+                    "MatchCountLimit.date_ranges and max_matches_overrides are "
                     "mutually exclusive"
                 )
 
-    def max_for_window(self, window: Collection[date]) -> int | None:
-        """The effective cap for one window: a `date_max_overrides` entry when the
-        window is a single overridden date, otherwise `max`."""
-        if self.date_max_overrides and len(window) == 1:
+    def max_matches_for_window(self, window: Collection[date]) -> int | None:
+        """The effective matches cap for one window: a `max_matches_overrides` entry
+        when the window is a single overridden date, otherwise `max_matches`."""
+        if self.max_matches_overrides and len(window) == 1:
             (d,) = tuple(window)
-            return self.date_max_overrides.get(d, self.max)
-        return self.max
+            return self.max_matches_overrides.get(d, self.max_matches)
+        return self.max_matches
+
+    def max_playing_teams_for_window(self, window: Collection[date]) -> int | None:
+        """The effective playing-teams cap for one window: a
+        `max_playing_teams_overrides` entry when the window is a single overridden
+        date, otherwise `max_playing_teams`."""
+        if self.max_playing_teams_overrides and len(window) == 1:
+            (d,) = tuple(window)
+            return self.max_playing_teams_overrides.get(d, self.max_playing_teams)
+        return self.max_playing_teams
 
     def counts_fixture(self, fixture: Fixture) -> bool:
         """Whether this limit counts `fixture` at all: its home team (for a HOME or
@@ -306,10 +343,15 @@ class MatchCountLimit:
         if not self.counts_fixture(fixture):
             return False
         if self.date_ranges:
-            return self.max == 0 and any(d in rng for rng in self.date_ranges)
-        if self.max == 0:
+            return (self.max_matches == 0 or self.max_playing_teams == 0) and any(
+                d in rng for rng in self.date_ranges
+            )
+        if self.max_matches == 0 or self.max_playing_teams == 0:
             return True
-        return self.date_max_overrides.get(d) == 0
+        return (
+            self.max_matches_overrides.get(d) == 0
+            or self.max_playing_teams_overrides.get(d) == 0
+        )
 
 
 def _check_no_duplicate_teams(teams: Collection[Team]) -> None:
@@ -476,9 +518,12 @@ class _FixtureVars:
         self._by_fixture: MutableMapping[Fixture, list[cp_model.IntVar]] = (
             collections.defaultdict(list)
         )
-        self._by_team_date: MutableMapping[
-            Team, MutableMapping[date, list[cp_model.IntVar]]
-        ] = collections.defaultdict(lambda: collections.defaultdict(list))
+        # (team, date) -> vars for every match -- home or away -- that team could
+        # play on that date (at most one may end up true: see
+        # _add_one_match_per_team_per_date_constraints).
+        self._by_team_date: MutableMapping[tuple[Team, date], list[cp_model.IntVar]] = (
+            collections.defaultdict(list)
+        )
         # (club, date) -> vars for that club's home matches on that date (for the
         # home_dates_used bound).
         self._by_club_home_date: MutableMapping[
@@ -500,8 +545,8 @@ class _FixtureVars:
         home, away = fixture.home_team, fixture.away_team
         self._by_fixture_date[key] = var
         self._by_fixture[fixture].append(var)
-        self._by_team_date[home][match_date].append(var)
-        self._by_team_date[away][match_date].append(var)
+        self._by_team_date[home, match_date].append(var)
+        self._by_team_date[away, match_date].append(var)
         self._by_club_home_date[home.club, match_date].append(var)
 
     def fixture_date_vars(self) -> Mapping[tuple[Fixture, date], cp_model.IntVar]:
@@ -520,6 +565,61 @@ class _FixtureVars:
     ) -> Mapping[tuple[ClubT, date], list[cp_model.IntVar]]:
         """Per (club, date), the vars for that club's home matches on that date."""
         return self._by_club_home_date
+
+    def by_team_date(self) -> Mapping[tuple[Team, date], list[cp_model.IntVar]]:
+        """Per (team, date), the vars for every match -- home or away -- that team
+        could play on that date."""
+        return self._by_team_date
+
+    def teams_playing(
+        self, fixture: Fixture, match_date: date, teams: Collection[Team]
+    ) -> cp_model.LinearExprT:
+        """How many of `teams` play in `fixture` on `match_date`, in terms of that
+        candidate's own decision variable: 0 if neither of the fixture's two teams
+        is in `teams`; the variable itself if exactly one is (an ordinary match,
+        from `teams`' perspective); twice the variable if both are (an internal
+        match between two of `teams`, e.g. a same-club derby -- one candidate, but
+        two of `teams` playing if it's scheduled). Summing this over every counted
+        candidate in a window gives exactly how many teams'-worth of players from
+        `teams` the window asks for -- once per match a team plays in, not just once
+        per team, so the same pair meeting twice in the window counts twice (see
+        MatchCountLimit.max_playing_teams)."""
+        count = (fixture.home_team in teams) + (fixture.away_team in teams)
+        if count == 0:
+            return 0
+        var = self._by_fixture_date[fixture, match_date]
+        return var if count == 1 else 2 * var
+
+
+def _counted_fixtures_by_date(
+    fixture_date_vars: Mapping[tuple[Fixture, date], cp_model.IntVar],
+    teams: Collection[Team],
+    venue_scope: VenueScope,
+) -> Mapping[date, list[Fixture]]:
+    """Every candidate fixture in `fixture_date_vars`, grouped by date, that counts
+    towards a MatchCountLimit over `teams` with the given `venue_scope`: its home
+    team is among `teams` (HOME or ALL scope), or its away team is (AWAY or ALL)."""
+    count_home = venue_scope in (VenueScope.HOME, VenueScope.ALL)
+    count_away = venue_scope in (VenueScope.AWAY, VenueScope.ALL)
+    result: MutableMapping[date, list[Fixture]] = collections.defaultdict(list)
+    for fixture, match_date in fixture_date_vars:
+        if (count_home and fixture.home_team in teams) or (
+            count_away and fixture.away_team in teams
+        ):
+            result[match_date].append(fixture)
+    return result
+
+
+def _add_one_match_per_team_per_date_constraints(
+    model: cp_model.CpModel, fixture_vars: _FixtureVars
+) -> None:
+    """No team -- home or away -- may play more than one match on the same date: a
+    team's players can't be in two places at once. Unconditional, unlike the rest of
+    _build_model's constraints: there's no spec field to turn it off, since no real
+    fixture list should ever want to violate it."""
+    for vars_for_team_date in fixture_vars.by_team_date().values():
+        if len(vars_for_team_date) > 1:
+            model.add(cp_model.LinearExpr.Sum(vars_for_team_date) <= 1)
 
 
 def _add_home_dates_used_constraints(
@@ -563,28 +663,26 @@ def _add_match_count_limit_constraints(
 ) -> None:
     """Apply every MatchCountLimit: no window of `time_window_days` consecutive days
     -- or, when the rule sets `date_ranges`, no listed calendar range -- may hold
-    more than the rule's effective cap (see max_for_window) matches from the counted
-    set. `venue_scope` selects which of the teams' matches count (home only, away
-    only, or all); `apply_per` decides whether `max` is a shared budget for the
-    whole group or enforced separately per team.
+    more than the rule's effective cap (see max_matches_for_window) matches from the
+    counted set, nor (when `max_playing_teams` is set) more teams'-worth of players
+    from the set than that. `venue_scope` selects which of the teams' matches count
+    (home only, away only, or all); `apply_per` decides whether the caps are a
+    shared budget for the whole group or enforced separately per team.
     """
     fixture_date_vars = fixture_vars.fixture_date_vars()
     for rule in limits:
-        count_home = rule.venue_scope in (VenueScope.HOME, VenueScope.ALL)
-        count_away = rule.venue_scope in (VenueScope.AWAY, VenueScope.ALL)
         each_team = rule.apply_per is ApplyPer.EACH_TEAM
         groups = [{team} for team in rule.teams] if each_team else [set(rule.teams)]
         for team_set in groups:
-            # Each (fixture, date) maps to a single variable, visited once here, so
-            # a match between two teams both in `team_set` is counted once.
-            vars_by_date: MutableMapping[date, list[cp_model.IntVar]] = (
-                collections.defaultdict(list)
+            # Every candidate this rule counts (per its venue_scope), grouped by
+            # date. A match between two teams both in `team_set` (e.g. a same-club
+            # derby counted by that club's own rule) appears once here, under one
+            # variable -- counted once towards max_matches below, but twice towards
+            # max_playing_teams (see _FixtureVars.teams_playing), since it puts two of
+            # `team_set` on to play.
+            fixtures_by_date = _counted_fixtures_by_date(
+                fixture_date_vars, team_set, rule.venue_scope
             )
-            for (fixture, d), var in fixture_date_vars.items():
-                if (count_home and fixture.home_team in team_set) or (
-                    count_away and fixture.away_team in team_set
-                ):
-                    vars_by_date[d].append(var)
 
             # With explicit date_ranges the windows are exactly those inclusive
             # ranges (each counted independently). Otherwise date_windows groups
@@ -596,25 +694,50 @@ def _add_match_count_limit_constraints(
             windows: Iterable[Collection[date]]
             if rule.date_ranges:
                 windows = [
-                    [d for d in vars_by_date if d in rng] for rng in rule.date_ranges
+                    [d for d in fixtures_by_date if d in rng]
+                    for rng in rule.date_ranges
                 ]
             else:
-                windows = date_windows(vars_by_date.keys(), rule.time_window_days - 1)
+                windows = date_windows(
+                    fixtures_by_date.keys(), rule.time_window_days - 1
+                )
             for window in windows:
-                cap = rule.max_for_window(window)
-                if cap is None:
-                    continue
+                window_fixture_dates = [
+                    (fixture, d) for d in window for fixture in fixtures_by_date[d]
+                ]
+
+                cap = rule.max_matches_for_window(window)
                 # A shared-budget cap that is >= the group size can never bind: the
                 # teams can't play more simultaneous matches than there are of them
                 # (this is how a stated venue capacity above a club's team count
                 # stays a no-op). A date range spans many days, in which one team
                 # can play more than once, so the shortcut only holds for the
                 # single-instant rolling-window form.
-                if not each_team and not rule.date_ranges and cap >= len(team_set):
-                    continue
-                window_vars = [v for d in window for v in vars_by_date[d]]
-                if len(window_vars) > cap:
-                    model.add(cp_model.LinearExpr.Sum(window_vars) <= cap)
+                if cap is not None and (
+                    each_team or rule.date_ranges or cap < len(team_set)
+                ):
+                    window_vars = [
+                        fixture_date_vars[fixture, d]
+                        for fixture, d in window_fixture_dates
+                    ]
+                    if len(window_vars) > cap:
+                        model.add(cp_model.LinearExpr.Sum(window_vars) <= cap)
+
+                # Unlike max_matches, a shared cap here can still bind even at or
+                # above the group size -- the same two teams meeting twice in the
+                # window already asks for twice their number of teams'-worth of
+                # players -- so there's no equivalent no-op shortcut to check first.
+                playing_cap = rule.max_playing_teams_for_window(window)
+                if playing_cap is not None:
+                    playing_contributions = [
+                        fixture_vars.teams_playing(fixture, d, team_set)
+                        for fixture, d in window_fixture_dates
+                    ]
+                    if playing_contributions:
+                        model.add(
+                            cp_model.LinearExpr.Sum(playing_contributions)
+                            <= playing_cap
+                        )
 
 
 def _add_fixed_fixtures_constraints(
@@ -730,6 +853,7 @@ def _build_model(params: Parameters) -> tuple[cp_model.CpModel, _FixtureVars]:
             "Add a usable date, or exclude the fixture."
         )
 
+    _add_one_match_per_team_per_date_constraints(model, fixture_vars)
     _add_home_dates_used_constraints(model, params.home_dates_used, fixture_vars)
     _add_match_count_limit_constraints(model, params.match_count_limits, fixture_vars)
     _add_fixed_fixtures_constraints(model, params.fixed_fixtures, fixture_vars)
