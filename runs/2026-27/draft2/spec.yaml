@@ -345,11 +345,14 @@ club_constraints:
         max_matches: 0
         date_ranges:
           - { start_date: "2026-11-24", end_date: "2026-12-07" }
-      # Cap Hendon's overall load: no more than 3 matches (home or away, any
-      # team) in any 7-consecutive-day period. teams defaults to all of Hendon's
-      # teams.
+      # Cap Hendon's overall load: no more than 3 teams playing in any
+      # 7-consecutive-day period. 2026-09-10 is exempt: fixed_fixtures pins two
+      # pre-season derbies there (Hendon 1 v 2 and Hendon 4 v 5 = 4 teams'-worth),
+      # which that date's own max_matches_overrides entry (2) already covers.
       - time_window_days: 7
-        max_matches: 3
+        max_playing_teams: 3
+        exclude_dates:
+          - "2026-09-10"
       # No matches (even away matches) the week we have a seasonal break for Christmas
       - max_matches: 0
         date_ranges:
