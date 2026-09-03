@@ -381,6 +381,7 @@ _TOP_LEVEL_KEYS = {
     "draft",
     "description",
     "latest_internal_match_date",
+    "earliest_match_date",
     "clubs",
     "teams",
     "divisions",
@@ -1283,6 +1284,20 @@ def load_spec(spec_path: str | Path) -> Spec:
                     "latest_internal_match_date"
                 )
         kwargs["latest_internal_match_date"] = latest_internal_match_date
+
+    if "earliest_match_date" in data:
+        earliest_match_date = _parse_date(
+            data["earliest_match_date"], f"{path}: 'earliest_match_date'"
+        )
+    else:
+        earliest_match_date = date.today()
+    if earliest_match_date < date.today():
+        logger.warning(
+            "%s: earliest_match_date %s is in the past",
+            path,
+            earliest_match_date.isoformat(),
+        )
+    kwargs["earliest_match_date"] = earliest_match_date
 
     for sf in fixed_fixtures:
         for team in (sf.fixture.home_team, sf.fixture.away_team):

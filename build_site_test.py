@@ -25,6 +25,7 @@ import solve
 
 _SPEC = """
 name: "{name}"
+earliest_match_date: 2025-01-01
 
 clubs:
   albany:
