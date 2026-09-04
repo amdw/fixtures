@@ -2,10 +2,8 @@
 name: "2026-27 Season"
 draft: true
 
-# Don't schedule matches before this, to make sure all clubs have time to raise teams.
-# Adam Cranston from Hammersmith expressed a preference to have a match on 2026-09-10 if possible
-# but I'd rather that be negotiated bilaterally rather than risk a second draft being rejected.
-earliest_match_date: "2026-09-14"
+# Don't schedule matches before the Fixtures Meeting.
+earliest_match_date: "2026-09-15"
 
 # Same-club "internal" fixtures (e.g. Hendon 1 v Hendon 2) must be settled by the
 # end of the calendar year, well before the rest of the fixture list.
@@ -401,6 +399,14 @@ club_constraints:
           "2027-07-01": 1
           "2027-08-05": 1
   west-london:
+    # Andy Hayler (draft2 feedback): exclude September entirely for West London.
+    # He had assumed an early-October start (not realising matches could begin
+    # in September); 24th September is a problem, and 14th September could be
+    # the League fixtures meeting. Several other September dates are also
+    # awkward and he is unsure how much notice the home venue needs to book.
+    # Home matches already start in October (home_dates below); the September
+    # away block is in match_count_limits. The later dates are fine as they
+    # stand.
     home_dates:
       - "2026-10-07"
       - "2026-10-14"
@@ -433,8 +439,9 @@ club_constraints:
       - "2027-05-05"
       - "2027-05-12"
     unavailable_away_dates:
-      # Club-level date to avoid (Andy Hayler).
-      - "2026-09-30"
+      # September 2026 is blocked wholesale by the match_count_limits entry
+      # below (Andy Hayler, draft2 feedback), which supersedes the earlier
+      # single-date 2026-09-30 avoid.
       # draft1 placed the away match at Albany on 2026-10-19; Andy Hayler
       # asked (2026-09-02) to move it to another date.
       - "2026-10-19"
@@ -448,6 +455,14 @@ club_constraints:
       - "2027-04-15"
       # Christmas/New Year is handled by the spec-wide 'no-play-dates' default.
     match_count_limits:
+      # No away matches in September 2026 (Andy Hayler, draft2 feedback - see
+      # the club note above). West London have no September home_dates, so
+      # this blocks the whole month. Replaces the earlier 2026-09-30 avoid in
+      # unavailable_away_dates.
+      - max_matches: 0
+        venue_scope: away
+        date_ranges:
+          - { start_date: "2026-09-01", end_date: "2026-09-30" }
       # London Chess Classic precaution (Andy Hayler): no away matches the last
       # week of November / first week of December 2026. The 2026 Classic runs
       # 24 Nov - 7 Dec; the range starts the Monday of that week (2026-11-23)
