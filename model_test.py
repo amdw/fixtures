@@ -2371,6 +2371,110 @@ class TestSharedLimitAwayAndAllScopes(unittest.TestCase):
         self.assertEqual(away, [date(2025, 1, 1), date(2025, 1, 8)])
 
 
+class TestInternalMatchAwayScope(unittest.TestCase):
+    """An internal match (both teams the same club) is played at that club's venue,
+    so it is never counted under AWAY venue_scope: its "away" team isn't away in the
+    sense an away-load cap is about. It still counts under HOME and ALL scope.
+    """
+
+    h1 = fmodel.Team(division=1, club="H", index=1)
+    h2 = fmodel.Team(division=1, club="H", index=2)
+    x1 = fmodel.Team(division=1, club="X", index=1)
+    derby = fmodel.Fixture(home_team=h1, away_team=h2)
+    away_at_x = fmodel.Fixture(home_team=x1, away_team=h1)
+
+    def test_counts_fixture_skips_internal_derby_under_away_scope(self) -> None:
+        away = fmodel.MatchCountLimit(
+            teams=[self.h1, self.h2],
+            max_matches=1,
+            venue_scope=fmodel.VenueScope.AWAY,
+        )
+        self.assertFalse(away.counts_fixture(self.derby))
+        # A genuine away match for one of the teams is still counted.
+        self.assertTrue(away.counts_fixture(self.away_at_x))
+
+    def test_counts_fixture_keeps_internal_derby_under_home_and_all_scope(self) -> None:
+        for scope in (fmodel.VenueScope.HOME, fmodel.VenueScope.ALL):
+            rule = fmodel.MatchCountLimit(
+                teams=[self.h1, self.h2], max_matches=1, venue_scope=scope
+            )
+            self.assertTrue(rule.counts_fixture(self.derby), scope)
+
+    def test_forbids_ignores_internal_derby_under_away_scope(self) -> None:
+        rng = fmodel.DateRange(date(2025, 1, 1), date(2025, 1, 31))
+        away_blackout = fmodel.MatchCountLimit(
+            teams=[self.h1, self.h2],
+            max_matches=0,
+            venue_scope=fmodel.VenueScope.AWAY,
+            date_ranges=(rng,),
+        )
+        self.assertFalse(away_blackout.forbids(self.derby, date(2025, 1, 15)))
+        self.assertTrue(away_blackout.forbids(self.away_at_x, date(2025, 1, 15)))
+
+    def test_two_internal_derbies_share_a_night_under_an_away_playing_teams_cap(
+        self,
+    ) -> None:
+        """The draft3 case in miniature: two of a club's own derbies are pinned to
+        the same night, and the club has an AWAY-scope max_playing_teams: 2 cap. The
+        derbies play at the club's own venue, so they don't count as away and the
+        cap is satisfied. Before internal matches were excluded from AWAY scope each
+        derby put 2 of the club's teams "away" (4 > 2) and this was INFEASIBLE.
+        """
+        h3 = fmodel.Team(division=2, club="H", index=3)
+        h4 = fmodel.Team(division=2, club="H", index=4)
+        night = date(2025, 1, 6)
+        params = _params(
+            teams=[self.h1, self.h2, h3, h4],
+            home_dates={"H": [night, date(2025, 1, 13), date(2025, 1, 20)]},
+            unavailable_away_dates={"H": []},
+            fixed_fixtures=[
+                fmodel.ScheduledFixture(
+                    fmodel.Fixture(home_team=self.h1, away_team=self.h2), night
+                ),
+                fmodel.ScheduledFixture(
+                    fmodel.Fixture(home_team=h3, away_team=h4), night
+                ),
+            ],
+            match_count_limits=[
+                fmodel.MatchCountLimit(
+                    teams=[self.h1, self.h2, h3, h4],
+                    max_matches=None,
+                    max_playing_teams=2,
+                    venue_scope=fmodel.VenueScope.AWAY,
+                )
+            ],
+        )
+        fixtures = list(fmodel.solve(params).fixtures)
+        self.assertEqual(len(fixtures), 4)  # both derbies, both legs
+        on_night = {sf.date for sf in fixtures if sf.date == night}
+        self.assertEqual(on_night, {night})
+
+    def test_away_playing_teams_cap_still_limits_genuine_away_matches(self) -> None:
+        """The same cap still bites when the matches really are away: club A's two
+        teams (different divisions, so no internal match between them) both have to
+        play their away leg on X's single home date, exceeding max_playing_teams: 1.
+        """
+        a1 = fmodel.Team(division=1, club="A", index=1)
+        a2 = fmodel.Team(division=2, club="A", index=2)
+        x1 = fmodel.Team(division=1, club="X", index=1)
+        x2 = fmodel.Team(division=2, club="X", index=2)
+        params = _params(
+            teams=[a1, a2, x1, x2],
+            home_dates={"A": [date(2025, 3, 1)], "X": [date(2025, 1, 6)]},
+            unavailable_away_dates={"A": [], "X": []},
+            match_count_limits=[
+                fmodel.MatchCountLimit(
+                    teams=[a1, a2],
+                    max_matches=None,
+                    max_playing_teams=1,
+                    venue_scope=fmodel.VenueScope.AWAY,
+                )
+            ],
+        )
+        with self.assertRaisesRegex(ValueError, "INFEASIBLE"):
+            fmodel.solve(params)
+
+
 class TestDuplicateRejection(unittest.TestCase):
     """Parameters construction relies on each (Fixture, date) pair mapping to at most
     one solver variable; these are the two ways it could otherwise be violated."""

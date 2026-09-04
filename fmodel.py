@@ -215,6 +215,26 @@ class ApplyPer(enum.Enum):
     ACROSS_TEAMS = "across_teams"
 
 
+def _fixture_counts_for_scope(
+    fixture: Fixture, teams: Collection[Team], venue_scope: VenueScope
+) -> bool:
+    """Whether a MatchCountLimit over `teams` with `venue_scope` counts `fixture`.
+
+    HOME / ALL scope: the fixture's home team is one of `teams`.
+    AWAY / ALL scope: its away team is one of `teams` -- except that under AWAY
+    scope an internal match (both teams the same club) never counts: that "away"
+    team is playing at its own club's venue, so it is not away in the sense an
+    away-load cap is about. Such a match still counts under HOME or ALL scope via
+    the home-team test (its players are committed either way).
+    """
+    if venue_scope in (VenueScope.HOME, VenueScope.ALL) and fixture.home_team in teams:
+        return True
+    if venue_scope in (VenueScope.AWAY, VenueScope.ALL) and fixture.away_team in teams:
+        internal = fixture.home_team.club == fixture.away_team.club
+        return not (venue_scope is VenueScope.AWAY and internal)
+    return False
+
+
 @dataclasses.dataclass(frozen=True)
 class MatchCountLimit:
     """At most `max_matches` matches involving `teams` may fall within any window of
@@ -236,7 +256,11 @@ class MatchCountLimit:
     `venue_scope` narrows which of those teams' matches count: VenueScope.HOME only
     their home matches, VenueScope.AWAY only their away matches, VenueScope.ALL (the
     default) every match they play. So an AWAY cap counts only the teams' away
-    fixtures, still allowing one to play away on a night another is hosting.
+    fixtures, still allowing one to play away on a night another is hosting. An
+    internal match (both teams the same club) is never counted under AWAY scope:
+    its "away" team is playing at its own club's venue, so it isn't away for the
+    purpose of an away-load cap (it still counts under HOME and ALL, where its
+    players are committed either way).
 
     `max_matches` may be None, meaning no cap from the plain value -- only useful
     alongside `max_matches_overrides`, which replace `max_matches` on specific dates
@@ -257,17 +281,19 @@ class MatchCountLimit:
     `teams` a window asks for: each counted match adds one of `teams` playing to the
     total, or two if it's an internal match between two of `teams` (e.g. a same-club
     derby counted by a club's own venue-capacity rule) -- one entry towards
-    `max_matches`, but two teams from the set on to play. A venue that can physically
-    host 3 simultaneous matches but only has 3 sets of players to field wants
-    `max_matches=3` *and* `max_playing_teams=3` -- otherwise 3 matches, one an
-    internal derby, would need 4 teams' worth of players. Over a wider window (a
-    multi-day `time_window_days`, or `date_ranges`), the same pair meeting twice
-    counts twice: two internal matches between the same two teams still means
-    fielding 4 teams'-worth of players across the window, once per match, not 2 --
-    this is a running tally of teams asked to play, not a count of distinct teams
-    touched. `max_playing_teams_overrides` replaces it on specific dates (an int, or
-    None to lift the cap that day), mirroring `max_matches_overrides` -- only
-    meaningful, and only permitted, when `time_window_days` is 1.
+    `max_matches`, but two teams from the set on to play. (Under AWAY `venue_scope`
+    an internal match is not counted at all, so it adds nothing here either.) A
+    venue that can physically host 3 simultaneous matches but only has 3 sets of
+    players to field wants `max_matches=3` *and* `max_playing_teams=3` -- otherwise
+    3 matches, one an internal derby, would need 4 teams' worth of players. Over a
+    wider window (a multi-day `time_window_days`, or `date_ranges`), the same pair
+    meeting twice counts twice: two internal matches between the same two teams
+    still means fielding 4 teams'-worth of players across the window, once per
+    match, not 2 -- this is a running tally of teams asked to play, not a count of
+    distinct teams touched. `max_playing_teams_overrides` replaces it on specific
+    dates (an int, or None to lift the cap that day), mirroring
+    `max_matches_overrides` -- only meaningful, and only permitted, when
+    `time_window_days` is 1.
 
     `exclude_dates` drops every counted match falling on one of the listed dates
     from this rule: each window is evaluated as if nothing counted happened then,
@@ -339,15 +365,10 @@ class MatchCountLimit:
 
     def counts_fixture(self, fixture: Fixture) -> bool:
         """Whether this limit counts `fixture` at all: its home team (for a HOME or
-        ALL scope) or away team (AWAY or ALL) is among `teams`."""
-        teams = set(self.teams)
-        return (
-            self.venue_scope in (VenueScope.HOME, VenueScope.ALL)
-            and fixture.home_team in teams
-        ) or (
-            self.venue_scope in (VenueScope.AWAY, VenueScope.ALL)
-            and fixture.away_team in teams
-        )
+        ALL scope) or away team (AWAY or ALL) is among `teams` -- except that an
+        internal match never counts under AWAY scope (see _fixture_counts_for_scope
+        and the `venue_scope` note above)."""
+        return _fixture_counts_for_scope(fixture, set(self.teams), self.venue_scope)
 
     def forbids(self, fixture: Fixture, d: date) -> bool:
         """Whether this limit makes `fixture` on `d` outright impossible -- an
@@ -611,15 +632,12 @@ def _counted_fixtures_by_date(
     venue_scope: VenueScope,
 ) -> Mapping[date, list[Fixture]]:
     """Every candidate fixture in `fixture_date_vars`, grouped by date, that counts
-    towards a MatchCountLimit over `teams` with the given `venue_scope`: its home
-    team is among `teams` (HOME or ALL scope), or its away team is (AWAY or ALL)."""
-    count_home = venue_scope in (VenueScope.HOME, VenueScope.ALL)
-    count_away = venue_scope in (VenueScope.AWAY, VenueScope.ALL)
+    towards a MatchCountLimit over `teams` with the given `venue_scope` (see
+    _fixture_counts_for_scope: home team among `teams` for HOME/ALL, away team for
+    AWAY/ALL, but an internal match never counts under AWAY scope)."""
     result: MutableMapping[date, list[Fixture]] = collections.defaultdict(list)
     for fixture, match_date in fixture_date_vars:
-        if (count_home and fixture.home_team in teams) or (
-            count_away and fixture.away_team in teams
-        ):
+        if _fixture_counts_for_scope(fixture, teams, venue_scope):
             result[match_date].append(fixture)
     return result
 

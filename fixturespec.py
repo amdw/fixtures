@@ -713,7 +713,9 @@ def _parse_match_count_limits(
         'max_matches', which counts matches. Each counted match adds one of 'teams'
         playing, or two if it's an internal match between two of 'teams' (e.g. a
         same-club derby counted by that club's own venue-capacity rule): one match
-        towards 'max_matches', but two teams from the set on to play. A venue that
+        towards 'max_matches', but two teams from the set on to play. (Under 'away'
+        venue_scope an internal match is not counted at all, so it adds nothing
+        here either.) A venue that
         can physically host 3 simultaneous matches but only has 3 teams' worth of
         players to field wants both 'max_matches: 3' and 'max_playing_teams: 3' --
         otherwise 3 matches, one an internal derby, would need 4 teams' worth of
@@ -737,7 +739,10 @@ def _parse_match_count_limits(
       - 'time_window_days' (optional, default 1): window length in consecutive
         calendar days. 7 limits matches in any 7-consecutive-day period -- two
         matches exactly a week apart fall in separate windows.
-      - 'venue_scope' (optional, default 'all'): 'home', 'away' or 'all'.
+      - 'venue_scope' (optional, default 'all'): 'home', 'away' or 'all'. An
+        internal match (both teams the same club) is never counted under 'away'
+        scope -- its 'away' team plays at its own club's venue -- but still
+        counts under 'home' and 'all'.
       - 'max_matches_overrides' (optional): per-date replacements of 'max_matches'.
         Only allowed when 'time_window_days' is 1.
       - 'date_ranges' (optional): a non-empty list of {start_date, end_date}

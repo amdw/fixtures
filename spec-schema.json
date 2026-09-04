@@ -273,7 +273,7 @@
         "type": "string",
         "enum": ["home", "away", "all"],
         "default": "all",
-        "description": "Which of the counted teams' matches the cap counts: 'home' only their home matches, 'away' only their away matches, or 'all' (the default) every match they play. E.g. 'away' counts only away fixtures, still allowing one team to play away on a night another is hosting."
+        "description": "Which of the counted teams' matches the cap counts: 'home' only their home matches, 'away' only their away matches, or 'all' (the default) every match they play. E.g. 'away' counts only away fixtures, still allowing one team to play away on a night another is hosting. An internal match (both teams the same club) is never counted under 'away' scope -- its 'away' team is playing at its own club's venue, so it isn't away for an away-load cap; it still counts under 'home' and 'all'."
       },
       "max_matches_overrides": {
         "type": "object",
