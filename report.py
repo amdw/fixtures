@@ -23,6 +23,14 @@ This can be re-run at any time to regenerate the report -- e.g. after changing
 report formatting -- without re-solving, as long as solution.yaml still matches
 the teams described in spec.yaml.
 
+If the solution carries its own expected_invalid_reason (see fixturesolution --
+a hand-written note that this schedule is a deliberate, known exception to its
+spec's constraints), that's logged as a warning and shown as a banner on every
+page of the report. This only surfaces the recorded annotation -- it doesn't
+re-run the solver to check it's still accurate; validation_regression_test.py
+(via validate.py, run in CI on every change) is what keeps it honest, so by the
+time a solution.yaml is committed its expected_invalid_reason can be trusted.
+
 It renders a single run's files only. To (re)build the whole published site --
 every run's report plus the top-level index -- into _site/, run build_site.py.
 """
@@ -61,6 +69,22 @@ def _check_spec_checksum(spec_path: Path, result: fmodel.SolveResult) -> None:
         )
 
 
+def _compliance_note(result: fmodel.SolveResult) -> str:
+    """A short banner message when this solution is marked with its own
+    expected_invalid_reason (see fixturesolution) -- "" otherwise, the
+    overwhelmingly common case.
+
+    This just surfaces the recorded annotation; it doesn't re-run the solver to
+    check it's still accurate. That's validation_regression_test.py's job (via
+    validate.py, run in CI on every change) -- by the time a solution.yaml is
+    committed, its expected_invalid_reason is already known to match reality."""
+    if not result.expected_invalid_reason:
+        return ""
+    return (
+        f"This schedule does not comply with its spec: {result.expected_invalid_reason}"
+    )
+
+
 def report(spec_path: Path, solution_path: Path, output_dir: Path) -> Path:
     """Render solution_path (a solution.yaml solved from spec_path) into output_dir,
     as the HTML report pages and the CSV exports. Returns the path to the run's
@@ -71,8 +95,13 @@ def report(spec_path: Path, solution_path: Path, output_dir: Path) -> Path:
         solution_path, spec.parameters.teams, team_ids
     )
     _check_spec_checksum(spec_path, result)
+    compliance_note = _compliance_note(result)
+    if compliance_note:
+        logger.warning(compliance_note)
     csvreport.generate_csv(spec, result.fixtures, output_dir)
-    return htmlreport.generate_report(spec, result, output_dir)
+    return htmlreport.generate_report(
+        spec, result, output_dir, compliance_note=compliance_note
+    )
 
 
 def main() -> None:

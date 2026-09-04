@@ -24,6 +24,11 @@ Each fixture is identified by its home and away teams' stable spec team ID
 solved from. To make that pairing checkable, the file also records a
 "spec_checksum" of the spec's bytes (see fixturespec.spec_checksum()).
 
+A solution can also carry an "expected_invalid_reason" string: a hand-written
+note that this particular solution is deliberately being kept even though it no
+longer satisfies its spec's constraints (see fmodel.SolveResult). Absent (the
+common case), the solution is expected to validate normally.
+
 fmodel.Team itself doesn't carry that ID (it's a
 club/index/division/name_override value type, solver-internal), so callers
 provide a team_ids mapping -- see fixturespec.load_team_ids() -- to translate
@@ -101,6 +106,11 @@ def save_solution(
     after the fixtures so the solution records a fingerprint of the exact spec it
     was solved from (see fixturespec.spec_checksum()).
 
+    result.expected_invalid_reason, when non-empty, is written under an
+    "expected_invalid_reason" key -- see fmodel.SolveResult for what it means.
+    solve()-produced results never set it, so it's only ever written back
+    unchanged when re-saving an already-annotated solution.
+
     result.model_stats/result.solve_stats, when non-empty, are written under a
     trailing "stats" key so the OR-Tools summaries travel with the schedule to
     the report; empty strings leave the key out entirely. load_solution()
@@ -121,6 +131,8 @@ def save_solution(
     document: dict[str, Any] = {"fixtures": entries}
     if result.spec_checksum:
         document["spec_checksum"] = result.spec_checksum
+    if result.expected_invalid_reason:
+        document["expected_invalid_reason"] = result.expected_invalid_reason
     if result.model_stats or result.solve_stats:
         document["stats"] = {
             "model": result.model_stats,
@@ -170,6 +182,17 @@ def _load_spec_checksum(data: dict[str, Any], path: Path) -> str:
     return checksum
 
 
+def _load_expected_invalid_reason(data: dict[str, Any], path: Path) -> str:
+    """Pull the optional expected-invalid annotation out of a loaded solution
+    document. A file with no 'expected_invalid_reason' key (the common case)
+    yields an empty string, meaning the solution is expected to validate
+    normally."""
+    reason = data.get("expected_invalid_reason", "")
+    if not isinstance(reason, str):
+        raise SolutionError(f"{path}: 'expected_invalid_reason' must be a string")
+    return reason
+
+
 def load_solution(
     path: Path,
     teams: Collection[fmodel.Team],
@@ -181,9 +204,10 @@ def load_solution(
     solution was solved from) to recover full Team objects (division,
     name_override, etc.).
 
-    Any model/solver summary text stored under the file's 'stats' key, and the
-    spec-file checksum under its 'spec_checksum' key, come back on the result too
-    (empty strings if the file predates either).
+    Any model/solver summary text stored under the file's 'stats' key, the
+    spec-file checksum under its 'spec_checksum' key, and the annotation under
+    its 'expected_invalid_reason' key, come back on the result too (empty
+    strings if the file predates any of them).
     """
     with path.open() as f:
         data = yaml.safe_load(f)
@@ -197,6 +221,7 @@ def load_solution(
 
     model_stats, solve_stats = _load_stats(data, path)
     spec_file_checksum = _load_spec_checksum(data, path)
+    expected_invalid_reason = _load_expected_invalid_reason(data, path)
 
     teams_by_club_index = {(t.club, t.index): t for t in teams}
     teams_by_id = {
@@ -244,4 +269,5 @@ def load_solution(
         model_stats=model_stats,
         solve_stats=solve_stats,
         spec_checksum=spec_file_checksum,
+        expected_invalid_reason=expected_invalid_reason,
     )

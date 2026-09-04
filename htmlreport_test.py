@@ -42,6 +42,7 @@ def _generate(
     draft: bool = False,
     description: str = "",
     division_schemes: Mapping[int, fmodel.FixtureScheme] | None = None,
+    compliance_note: str = "",
 ) -> Path:
     """Assemble a minimal fixturespec.Spec from the loose pieces these tests work
     with and render `result` as its HTML report, so the tests need not build a
@@ -60,7 +61,9 @@ def _generate(
         draft=draft,
         description=description,
     )
-    return htmlreport.generate_report(spec, result, output_dir)
+    return htmlreport.generate_report(
+        spec, result, output_dir, compliance_note=compliance_note
+    )
 
 
 def _club(
@@ -530,6 +533,35 @@ class TestGenerateReport(unittest.TestCase):
             content = (out2 / filename).read_text()
             self.assertIn('<p class="description">', content)
             self.assertIn("Final schedule", content)
+
+    def test_no_compliance_banner_by_default(self) -> None:
+        marker = 'class="banner compliance-warning"'
+        for filename in ["all-matches.html", "division-1.html", "club-harrow.html"]:
+            content = (self.output_dir / filename).read_text()
+            self.assertNotIn(marker, content)
+        self.assertNotIn(marker, self.index_path.read_text())
+
+    def test_compliance_note_shown_on_every_page(self) -> None:
+        out2 = Path(self._tmpdir.name) / "out-noncompliant"
+        index_path = _generate(
+            fmodel.SolveResult(self.fixtures),
+            self.teams,
+            self.clubs,
+            out2,
+            compliance_note="This schedule no longer satisfies its spec's constraints.",
+        )
+        for filename in [
+            "all-matches.html",
+            "division-1.html",
+            "club-harrow.html",
+            index_path.name,
+        ]:
+            content = (out2 / filename).read_text()
+            self.assertIn('<div class="banner compliance-warning">', content)
+            self.assertIn(
+                "This schedule no longer satisfies its spec&#x27;s constraints.",
+                content,
+            )
 
     def test_head_title_is_bare_page_title_without_a_run_name(self) -> None:
         # setUp generates with no run name and draft=False.
