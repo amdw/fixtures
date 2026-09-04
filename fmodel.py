@@ -77,12 +77,21 @@ class SolveResult:
     solve() copies it straight off Parameters.spec_checksum, which
     fixturespec.load_spec() fills in; a solution file written before checksums
     were recorded loads as "". The report verifies it against the spec it's given.
+
+    expected_invalid_reason is never set by solve() -- it's a hand-written
+    annotation on a solution.yaml that is being deliberately kept even though it
+    no longer satisfies its spec's constraints (e.g. a schedule kept for
+    reference after tightening a constraint, or one that pins a known solver
+    bug). "" (the default) means the solution is expected to validate normally.
+    See check_schedule, validate.py and report.py, which all treat a mismatch
+    between this and the actual outcome as worth flagging.
     """
 
     fixtures: list[ScheduledFixture]
     model_stats: str = ""
     solve_stats: str = ""
     spec_checksum: str = ""
+    expected_invalid_reason: str = ""
 
 
 ClubT = str

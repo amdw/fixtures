@@ -80,6 +80,41 @@ breakdown. Two uses:
   `spec_checksum` in the solution that doesn't match the given spec is reported
   as a note, not as non-compliance.
 
+A solution can carry an `expected_invalid_reason` string, hand-written into its
+`solution.yaml`, for a schedule that's being deliberately kept even though it
+doesn't currently comply -- e.g. one kept for reference after a constraint was
+tightened, or one that pins a known solver bug. `validate.py` still reports
+plain non-compliance when this is set (its exit code always reflects whether
+the solution actually complies), but if the two disagree -- it's marked as a
+known exception yet currently validates fine, most usefully -- it prints an
+extra note about that too. `report.py` shows `expected_invalid_reason`, when
+set, as a banner on every page of the run's report; unlike `validate.py`, it
+doesn't re-run the solver to check the annotation is still accurate -- it
+trusts it, because `validation_regression_test.py` (see "Regression-testing
+constraint semantics" below) already checks that in CI on every change, so a
+solver or spec change that quietly resolves (or breaks) a known exception gets
+caught there rather than drifting unremarked into the published site.
+
+### Regression-testing constraint semantics
+
+`validation_regression_test.py` (part of `python all_tests.py`, so it runs in
+CI on every change) walks every `spec.yaml` + `solution.yaml` pair under
+`runs/` and `validation_fixtures/`, and checks each with `validate.py` against
+its own `expected_invalid_reason`. `validation_fixtures/` holds the same kind
+of pair as `runs/`, but purely to pin a specific solver bug or edge case --
+never published (`build_site.py` only looks under `runs/`), and often too small
+or synthetic to be a real season.
+
+This is *not* a check that every committed spec is currently satisfiable --
+that would make it impossible to keep an old, deliberately non-compliant
+schedule around for reference, which is exactly what `expected_invalid_reason`
+is for. What it enforces is that the *recorded* expectation and the *actual*
+outcome agree. A change to the solver or model that changes whether some
+schedule satisfies its spec -- in either direction -- fails this test, forcing
+an explicit, reviewable decision: fix a regression, or update the
+`expected_invalid_reason` of the affected solution (which is itself a change a
+reviewer will see in the diff).
+
 ### Spec format
 
 A minimal spec needs `clubs`, `teams`, `divisions` and `club_constraints`:

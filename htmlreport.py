@@ -45,6 +45,8 @@ _STYLE = """
               padding: 0.6rem 1rem; margin-bottom: 1.5rem; font-size: 1.25rem;
               border-radius: 4px; }
     .banner.draft { background: #b00020; color: #fff; }
+    .banner.compliance-warning { background: #b25f00; color: #fff; font-size: 1rem;
+              text-align: left; }
     .draft-label { font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
                     margin-right: 0.5rem; }
     .table-scroll { overflow-x: auto; margin-bottom: 2rem; }
@@ -111,6 +113,7 @@ def _page(
     *,
     is_run_home: bool = False,
     back_link: tuple[str, str] | None = None,
+    compliance_note: str = "",
 ) -> str:
     banner_html = ""
     if run_name or draft:
@@ -127,6 +130,12 @@ def _page(
         back_link_html = (
             f'<nav class="breadcrumb"><a href="{href}">{html.escape(text)}</a></nav>\n'
         )
+    compliance_html = ""
+    if compliance_note:
+        compliance_html = (
+            '<div class="banner compliance-warning">'
+            f"{html.escape(compliance_note)}</div>\n"
+        )
     description_html = ""
     if description:
         description_html = f'<p class="description">{html.escape(description)}</p>\n'
@@ -142,6 +151,7 @@ def _page(
         "<body>\n"
         f"{banner_html}"
         f"{back_link_html}"
+        f"{compliance_html}"
         f"{description_html}"
         f"<h1>{html.escape(title)}</h1>\n"
         f"{body}"
@@ -465,6 +475,8 @@ def generate_report(
     spec: fixturespec.Spec,
     result: fmodel.SolveResult,
     output_dir: Path,
+    *,
+    compliance_note: str = "",
 ) -> Path:
     """Write a solve result's report pages, plus the run's index.html linking
     them, into output_dir.
@@ -483,6 +495,10 @@ def generate_report(
     from the run index, each club's club-<slug>-dates.csv from its club page, and
     each team's team-<slug>.csv from that team's section. Run generate_csv first
     if those links are wanted.
+
+    compliance_note, when non-empty (see report.py, which computes it from the
+    solution's own expected_invalid_reason), is shown as a warning banner on
+    every page of the run.
 
     Returns the path to the run's index.html.
     """
@@ -536,6 +552,7 @@ def generate_report(
             draft,
             description,
             back_link=_RUN_INDEX_BACK_LINK,
+            compliance_note=compliance_note,
         )
     )
     all_matches_links: list[tuple[str, str]] = [("all-matches.html", "All matches")]
@@ -566,6 +583,7 @@ def generate_report(
                 draft,
                 description,
                 back_link=_RUN_INDEX_BACK_LINK,
+                compliance_note=compliance_note,
             )
         )
         division_links.append((f"division-{division}.html", f"Division {division}"))
@@ -620,6 +638,7 @@ def generate_report(
                 draft,
                 description,
                 back_link=_RUN_INDEX_BACK_LINK,
+                compliance_note=compliance_note,
             )
         )
         club_links.append((f"club-{club_slug}.html", club_name))
@@ -635,6 +654,7 @@ def generate_report(
             draft,
             description,
             is_run_home=True,
+            compliance_note=compliance_note,
         )
     )
     return index_path

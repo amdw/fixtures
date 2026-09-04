@@ -243,6 +243,52 @@ class TestSaveAndLoadSolution(unittest.TestCase):
         with self.assertRaisesRegex(fixturesolution.SolutionError, "spec_checksum"):
             fixturesolution.load_solution(self.path, [_ALBANY_1, _HACKNEY_1], _TEAM_IDS)
 
+    def test_expected_invalid_reason_round_trip(self) -> None:
+        reason = "kept to pin a known solver bug"
+        fixturesolution.save_solution(
+            fmodel.SolveResult(
+                [_sf(_ALBANY_1, _HACKNEY_1, date(2025, 9, 1))],
+                expected_invalid_reason=reason,
+            ),
+            _TEAM_IDS,
+            self.path,
+        )
+        contents = self.path.read_text()
+        self.assertIn(f"expected_invalid_reason: {reason}", contents)
+        # written after the fixtures
+        self.assertGreater(
+            contents.index("expected_invalid_reason"), contents.index("fixtures")
+        )
+
+        loaded = fixturesolution.load_solution(
+            self.path, [_ALBANY_1, _HACKNEY_1], _TEAM_IDS
+        )
+        self.assertEqual(loaded.expected_invalid_reason, reason)
+
+    def test_expected_invalid_reason_key_omitted_when_not_given(self) -> None:
+        fixturesolution.save_solution(
+            fmodel.SolveResult([_sf(_ALBANY_1, _HACKNEY_1, date(2025, 9, 1))]),
+            _TEAM_IDS,
+            self.path,
+        )
+        self.assertNotIn("expected_invalid_reason", self.path.read_text())
+
+    def test_expected_invalid_reason_absent_loads_as_empty_string(self) -> None:
+        self.path.write_text(
+            "fixtures:\n  - home: albany-1\n    away: hackney-1\n    date: 2025-09-01\n"
+        )
+        loaded = fixturesolution.load_solution(
+            self.path, [_ALBANY_1, _HACKNEY_1], _TEAM_IDS
+        )
+        self.assertEqual(loaded.expected_invalid_reason, "")
+
+    def test_expected_invalid_reason_not_a_string(self) -> None:
+        self.path.write_text("fixtures: []\nexpected_invalid_reason: [1, 2]\n")
+        with self.assertRaisesRegex(
+            fixturesolution.SolutionError, "expected_invalid_reason"
+        ):
+            fixturesolution.load_solution(self.path, [_ALBANY_1, _HACKNEY_1], _TEAM_IDS)
+
 
 if __name__ == "__main__":
     unittest.main()

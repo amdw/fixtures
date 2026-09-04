@@ -41,6 +41,12 @@ value the solution implies and asks the solver whether the model is still
 satisfied, so it tracks the solver's semantics rather than re-stating them. The
 trade-off is that any breach other than "this fixture can't be scheduled there
 at all" is reported just as an inconsistency, without saying which rule.
+
+If the solution declares an expected_invalid_reason (see fixturesolution), it's
+expected to fail validation -- ValidationReport.matches_expectation compares
+that expectation against what actually happened, so a solution flagged as a
+known exception that now validates fine (or vice versa) is reported too, even
+though its raw compliance status alone wouldn't say anything unusual happened.
 """
 
 from __future__ import annotations
@@ -61,10 +67,21 @@ class ValidationReport:
 
     problems: list[str]
     checksum_note: str | None = None
+    expected_invalid_reason: str = ""
 
     @property
     def ok(self) -> bool:
         return not self.problems
+
+    @property
+    def matches_expectation(self) -> bool:
+        """True unless the solution's own expected_invalid_reason disagrees with
+        what actually happened: it's marked as a known exception that in fact
+        validates fine, or it's not marked as one but fails validation anyway.
+        Consulted by the regression test (validation_regression_test.py) and by
+        report.py's compliance banner; validate.py's own exit code still reflects
+        plain compliance (report.ok), since that's what running it ad hoc asks."""
+        return self.ok == (not self.expected_invalid_reason)
 
 
 def _checksum_note(spec_path: Path, result: fmodel.SolveResult) -> str | None:
@@ -94,6 +111,7 @@ def validate(spec_path: Path, solution_path: Path) -> ValidationReport:
     return ValidationReport(
         problems=fmodel.check_schedule(spec.parameters, result.fixtures),
         checksum_note=_checksum_note(spec_path, result),
+        expected_invalid_reason=result.expected_invalid_reason,
     )
 
 
@@ -115,6 +133,15 @@ def main() -> None:
 
     if report.checksum_note:
         print(f"Note: {report.checksum_note}")
+
+    if report.expected_invalid_reason and report.ok:
+        # The unexpected direction: marked as a known exception, but it now
+        # validates fine -- worth a nudge even though nothing below will say so.
+        print(
+            f"Note: this solution is marked expected_invalid_reason="
+            f"{report.expected_invalid_reason!r}, but it currently validates -- "
+            "the reason may no longer apply."
+        )
 
     if report.ok:
         print(f"{args.solution} complies with {args.spec}")

@@ -172,6 +172,28 @@ class TestCheckSchedule(unittest.TestCase):
         self.assertIn(_INCONSISTENT, problems[0])
 
 
+class TestMatchesExpectation(unittest.TestCase):
+    def test_valid_and_not_expected_invalid_matches(self) -> None:
+        report = validate.ValidationReport(problems=[])
+        self.assertTrue(report.matches_expectation)
+
+    def test_invalid_and_expected_invalid_matches(self) -> None:
+        report = validate.ValidationReport(
+            problems=["boom"], expected_invalid_reason="known bug"
+        )
+        self.assertTrue(report.matches_expectation)
+
+    def test_invalid_but_not_expected_invalid_is_a_mismatch(self) -> None:
+        report = validate.ValidationReport(problems=["boom"])
+        self.assertFalse(report.matches_expectation)
+
+    def test_valid_but_expected_invalid_is_a_mismatch(self) -> None:
+        report = validate.ValidationReport(
+            problems=[], expected_invalid_reason="known bug"
+        )
+        self.assertFalse(report.matches_expectation)
+
+
 _SPEC = """
 name: "Validate Test Season"
 earliest_match_date: 2025-01-01
@@ -274,6 +296,29 @@ class TestValidateCli(unittest.TestCase):
         self.assertIn("different spec", report.checksum_note or "")
         # Reformatting doesn't change the schedule's validity.
         self.assertTrue(report.ok, report.problems)
+
+    def test_expected_invalid_reason_matches_when_solution_actually_invalid(
+        self,
+    ) -> None:
+        text = self.solution_path.read_text()
+        tampered = (
+            text.replace("date: 2025-09-15", "date: 2025-09-16")
+            + "expected_invalid_reason: kept to pin a known issue\n"
+        )
+        self.solution_path.write_text(tampered)
+
+        report = validate.validate(self.spec_path, self.solution_path)
+        self.assertFalse(report.ok)
+        self.assertTrue(report.matches_expectation)
+
+    def test_expected_invalid_reason_mismatch_when_solution_still_valid(self) -> None:
+        with self.solution_path.open("a") as f:
+            f.write("expected_invalid_reason: no longer reproduces\n")
+
+        report = validate.validate(self.spec_path, self.solution_path)
+        self.assertTrue(report.ok)
+        self.assertFalse(report.matches_expectation)
+        self.assertEqual(report.expected_invalid_reason, "no longer reproduces")
 
     def test_unreadable_solution_raises_solution_error(self) -> None:
         self.solution_path.write_text("not: a valid solution\n")
