@@ -154,8 +154,8 @@ class TestBuildReports(unittest.TestCase):
         )
 
         root = self.root_index.read_text()
-        self.assertIn("runs/example/index.html", root)
-        self.assertIn("runs/2026-27/draft1/index.html", root)
+        self.assertIn('<a href="runs/example/">', root)
+        self.assertIn('<a href="runs/2026-27/draft1/">', root)
 
     def test_writes_nothing_into_the_source_runs_dir(self) -> None:
         _make_run(self.runs_dir / "example", "Example Season")
@@ -182,7 +182,7 @@ class TestBuildReports(unittest.TestCase):
 
         self.assertFalse((self.out_dir / "runs" / "drop").exists())
         self.assertTrue((self.out_dir / "runs" / "keep" / "index.html").exists())
-        self.assertNotIn("runs/drop/index.html", self.root_index.read_text())
+        self.assertNotIn('href="runs/drop/"', self.root_index.read_text())
 
     def test_does_not_re_solve(self) -> None:
         run_dir = self.runs_dir / "example"
