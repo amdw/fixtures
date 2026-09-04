@@ -331,6 +331,18 @@ class TestGenerateReport(unittest.TestCase):
         self.assertIn(">Division 1<", content)
         self.assertIn(">Willesden &amp; Brent<", content)
 
+    def test_sub_pages_link_back_to_the_run_index(self) -> None:
+        for filename in ("all-matches.html", "division-1.html", "club-harrow.html"):
+            content = (self.output_dir / filename).read_text()
+            self.assertIn(
+                '<nav class="breadcrumb"><a href="./">← Back to run index</a></nav>',
+                content,
+                filename,
+            )
+
+    def test_run_index_has_no_back_link_to_itself(self) -> None:
+        self.assertNotIn('class="breadcrumb"', self.index_path.read_text())
+
     def test_run_index_links_to_csv_exports_when_present(self) -> None:
         # generate_report links whichever CSV exports it finds already written
         # into the output dir (csvreport.generate_csv writes them in production).
@@ -715,8 +727,9 @@ class TestWriteRunsIndex(unittest.TestCase):
         htmlreport.write_runs_index(self.runs_dir, self.index_path)
         content = self.index_path.read_text()
 
-        self.assertIn("runs/2024-25-season/index.html", content)
-        self.assertIn("runs/2025-26-season/index.html", content)
+        self.assertIn('<a href="runs/2024-25-season/">', content)
+        self.assertIn('<a href="runs/2025-26-season/">', content)
+        self.assertNotIn("index.html", content)
         self.assertNotIn("incomplete-run", content)
 
         # Sorted alphabetically by name at each level
@@ -735,9 +748,9 @@ class TestWriteRunsIndex(unittest.TestCase):
         htmlreport.write_runs_index(self.runs_dir, self.index_path)
         content = self.index_path.read_text()
 
-        self.assertIn("runs/2026-27/draft1/index.html", content)
+        self.assertIn('<a href="runs/2026-27/draft1/">', content)
         # The grouping folder itself has no report, so isn't a link.
-        self.assertNotIn('<a href="runs/2026-27/index.html"', content)
+        self.assertNotIn('<a href="runs/2026-27/"', content)
         self.assertIn("2026-27", content)
 
     def test_nested_and_flat_runs_combined(self) -> None:
@@ -750,8 +763,21 @@ class TestWriteRunsIndex(unittest.TestCase):
         htmlreport.write_runs_index(self.runs_dir, self.index_path)
         content = self.index_path.read_text()
 
-        self.assertIn("runs/example/index.html", content)
-        self.assertIn("runs/2026-27/draft1/index.html", content)
+        self.assertIn('<a href="runs/example/">', content)
+        self.assertIn('<a href="runs/2026-27/draft1/">', content)
+
+    def test_run_links_omit_redundant_index_html(self) -> None:
+        for name in ("example", "2026-27/draft1"):
+            run_dir = self.runs_dir / name
+            run_dir.mkdir(parents=True)
+            (run_dir / "all-matches.html").write_text("<html></html>")
+
+        htmlreport.write_runs_index(self.runs_dir, self.index_path)
+        content = self.index_path.read_text()
+
+        self.assertIn('<a href="runs/example/">', content)
+        self.assertIn('<a href="runs/2026-27/draft1/">', content)
+        self.assertNotIn("index.html", content)
 
     def test_siblings_sorted_alphabetically(self) -> None:
         for name in ["draft2", "draft1", "draft10"]:
