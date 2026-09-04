@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=../../../spec-schema.json
-name: "2026-27 Season"
+name: "2026-27 Season (attempt 3)"
 draft: true
 
 # Don't schedule matches before the Fixtures Meeting.
