@@ -351,6 +351,16 @@ club_constraints:
         max_playing_teams: 3
         exclude_dates:
           - "2026-09-10"
+      # No more than 2 Hendon teams playing away on the same night (Andrew).
+      # Whole-club (no 'teams'), a shared same-date budget (apply_per defaults
+      # to across_teams, time_window_days to 1). venue_scope: away counts only
+      # away fixtures, so any number of Hendon teams may still host at home
+      # that night (the venue-capacity entry above governs that); and an
+      # internal Hendon derby is not "away" for this cap (its away side plays
+      # at Hendon's own venue), so the two pinned 2026-09-10 derbies don't
+      # count against it.
+      - venue_scope: away
+        max_playing_teams: 2
       # No matches (even away matches) the week we have a seasonal break for Christmas
       - max_matches: 0
         date_ranges:
