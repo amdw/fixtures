@@ -500,7 +500,7 @@ fixtures:
 - home: metropolitan-1
   away: kings-head-1
   date: 2027-06-10
-spec_checksum: sha256:bca4630c616b24f00368c5632694dd3a8556293a1e23c8dee25fed1d88903a15
+spec_checksum: sha256:5f3e3d3f20265c3ba592e370c9f46adb27a01535395e543bc330d824da5b7e7b
 stats:
   model: |-
     satisfaction model '': (model_fingerprint: 0xaf5dde504d05d62f)
@@ -523,8 +523,8 @@ stats:
     integer_propagations: 83242
     restarts: 0
     lp_iterations: 0
-    walltime: 0.146145
-    usertime: 0.146145
-    deterministic_time: 0.189123
+    walltime: 0.144519
+    usertime: 0.144519
+    deterministic_time: 0.186691
     gap_integral: 0
     solution_fingerprint: 0xfbd608c7446d75ec
