@@ -64,8 +64,8 @@ clubs:
     home_time_limit: 75+15
   hackney:
     name: Hackney
-    home_venue_name: "The Prince"
-    home_venue_address: "59 Kynaston Road, Stoke Newington, London N16 0EB"
+    home_venue_name: "The DC Lion"
+    home_venue_address: "282-284 Mare St, London E8 1HE"
     home_start_time: "19:30"
     home_time_limit: 75+15
   potters-bar:
