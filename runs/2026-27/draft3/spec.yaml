@@ -365,11 +365,12 @@ club_constraints:
       - max_matches: 0
         date_ranges:
           - { start_date: "2026-12-14", end_date: "2026-12-20" }
-      # Camden school-holiday weeks - Andrew wants Hendon's fixture load kept
-      # down across these.
+      # Camden school-holiday and other potential low-availability weeks -
+      # Andrew wants Hendon's fixture load kept down across these.
       - max_matches: 1
         date_ranges:
           - { start_date: "2026-10-26", end_date: "2026-11-01" } # Oct half term
+          - { start_date: "2027-01-04", end_date: "2027-01-10" } # First week of New Year
           - { start_date: "2027-02-15", end_date: "2027-02-21" } # Feb half term
           - { start_date: "2027-03-22", end_date: "2027-03-28" } # Easter
           - { start_date: "2027-03-29", end_date: "2027-04-04" } # Easter
