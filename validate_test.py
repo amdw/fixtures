@@ -138,8 +138,8 @@ class TestCheckSchedule(unittest.TestCase):
             },
             unavailable_away_dates={},
             match_count_limits=[
-                fmodel.MatchCountLimit(
-                    teams=[_A1, _B1], max_matches=1, time_window_days=7
+                fmodel.RollingLimit(
+                    teams=[_A1, _B1], match_cap=fmodel.Cap(1), window_days=7
                 )
             ],
         )
