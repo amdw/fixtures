@@ -131,6 +131,28 @@ class TestReport(unittest.TestCase):
 
         self.assertIn("checksum mismatch", "\n".join(cm.output).lower())
 
+    def test_no_expected_invalid_reason_produces_no_compliance_warning_or_banner(
+        self,
+    ) -> None:
+        with self.assertNoLogs(report.logger, level="WARNING"):
+            report.report(self.spec_path, self.solution_path, self.output_dir)
+        content = (self.output_dir / "index.html").read_text()
+        self.assertNotIn('class="banner compliance-warning"', content)
+
+    def test_expected_invalid_reason_warns_and_shows_a_banner(self) -> None:
+        # report.py just surfaces this annotation -- it doesn't re-check the
+        # schedule itself (that's validate.py/validation_regression_test.py's
+        # job), so no need for the solution to actually be non-compliant here.
+        with self.solution_path.open("a") as f:
+            f.write("expected_invalid_reason: kept to pin a known issue\n")
+
+        with self.assertLogs(report.logger, level="WARNING") as cm:
+            report.report(self.spec_path, self.solution_path, self.output_dir)
+        self.assertIn("kept to pin a known issue", "\n".join(cm.output))
+        content = (self.output_dir / "index.html").read_text()
+        self.assertIn('class="banner compliance-warning"', content)
+        self.assertIn("kept to pin a known issue", content)
+
     def test_does_not_require_resolving(self) -> None:
         """Deleting nothing but the intermediate solving step should still work:
         report.py only reads solution.yaml, never calls fmodel.solve()."""

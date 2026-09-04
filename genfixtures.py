@@ -161,18 +161,20 @@ for _team in _TEAMS:
 
 # One match per team per week, plus at most two home matches a night per club --
 # expressed as match_count_limits, the sole match-count constraint mechanism.
-_MATCH_COUNT_LIMITS = [
-    fmodel.MatchCountLimit(
+_MATCH_COUNT_LIMITS: list[fmodel.MatchLimit] = []
+_MATCH_COUNT_LIMITS += [
+    fmodel.RollingLimit(
         teams=club_teams,
-        max_matches=1,
-        time_window_days=_MIN_MATCH_GAP_DAYS,
+        match_cap=fmodel.Cap(1),
+        window_days=_MIN_MATCH_GAP_DAYS,
         apply_per=fmodel.ApplyPer.EACH_TEAM,
     )
     for club_teams in _TEAMS_BY_CLUB.values()
-] + [
-    fmodel.MatchCountLimit(
+]
+_MATCH_COUNT_LIMITS += [
+    fmodel.RollingLimit(
         teams=club_teams,
-        max_matches=2,
+        match_cap=fmodel.Cap(2),
         venue_scope=fmodel.VenueScope.HOME,
     )
     for club_teams in _TEAMS_BY_CLUB.values()

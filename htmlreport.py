@@ -45,6 +45,8 @@ _STYLE = """
               padding: 0.6rem 1rem; margin-bottom: 1.5rem; font-size: 1.25rem;
               border-radius: 4px; }
     .banner.draft { background: #b00020; color: #fff; }
+    .banner.compliance-warning { background: #b25f00; color: #fff; font-size: 1rem;
+              text-align: left; }
     .draft-label { font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
                     margin-right: 0.5rem; }
     .table-scroll { overflow-x: auto; margin-bottom: 2rem; }
@@ -56,6 +58,7 @@ _STYLE = """
     nav ul { list-style: none; padding: 0; }
     nav li { margin-bottom: 0.3rem; }
     nav ul ul { padding-left: 1.2rem; margin-top: 0.3rem; }
+    nav.breadcrumb { margin-bottom: 1rem; font-size: 0.9rem; }
     .venue { margin-top: -0.5rem; margin-bottom: 1.5rem; color: #333; }
     .date-summary, .match-count { margin-top: -1.5rem; margin-bottom: 2rem;
                                   color: #333; }
@@ -109,6 +112,8 @@ def _page(
     description: str = "",
     *,
     is_run_home: bool = False,
+    back_link: tuple[str, str] | None = None,
+    compliance_note: str = "",
 ) -> str:
     banner_html = ""
     if run_name or draft:
@@ -119,6 +124,18 @@ def _page(
             parts.append(f'<span class="run-name">{html.escape(run_name)}</span>')
         classes = "banner draft" if draft else "banner"
         banner_html = f'<div class="{classes}">{" ".join(parts)}</div>\n'
+    back_link_html = ""
+    if back_link:
+        href, text = back_link
+        back_link_html = (
+            f'<nav class="breadcrumb"><a href="{href}">{html.escape(text)}</a></nav>\n'
+        )
+    compliance_html = ""
+    if compliance_note:
+        compliance_html = (
+            '<div class="banner compliance-warning">'
+            f"{html.escape(compliance_note)}</div>\n"
+        )
     description_html = ""
     if description:
         description_html = f'<p class="description">{html.escape(description)}</p>\n'
@@ -133,6 +150,8 @@ def _page(
         "</head>\n"
         "<body>\n"
         f"{banner_html}"
+        f"{back_link_html}"
+        f"{compliance_html}"
         f"{description_html}"
         f"<h1>{html.escape(title)}</h1>\n"
         f"{body}"
@@ -426,6 +445,11 @@ def _run_index_body(
     )
 
 
+# Sub-pages of a run (all-matches, per-division, per-club) carry this link back to
+# the run's own index. It points at the run directory rather than its index.html
+# so the URL stays clean on a server that serves index.html for a bare directory.
+_RUN_INDEX_BACK_LINK = ("./", "← Back to run index")
+
 _MATCH_HEADERS = ["Date", "Home", "Away", "Venue", "Start", "Time Limit"]
 _TEAM_MATCH_HEADERS = [
     "Date",
@@ -451,6 +475,8 @@ def generate_report(
     spec: fixturespec.Spec,
     result: fmodel.SolveResult,
     output_dir: Path,
+    *,
+    compliance_note: str = "",
 ) -> Path:
     """Write a solve result's report pages, plus the run's index.html linking
     them, into output_dir.
@@ -469,6 +495,10 @@ def generate_report(
     from the run index, each club's club-<slug>-dates.csv from its club page, and
     each team's team-<slug>.csv from that team's section. Run generate_csv first
     if those links are wanted.
+
+    compliance_note, when non-empty (see report.py, which computes it from the
+    solution's own expected_invalid_reason), is shown as a warning banner on
+    every page of the run.
 
     Returns the path to the run's index.html.
     """
@@ -521,6 +551,8 @@ def generate_report(
             name,
             draft,
             description,
+            back_link=_RUN_INDEX_BACK_LINK,
+            compliance_note=compliance_note,
         )
     )
     all_matches_links: list[tuple[str, str]] = [("all-matches.html", "All matches")]
@@ -550,6 +582,8 @@ def generate_report(
                 name,
                 draft,
                 description,
+                back_link=_RUN_INDEX_BACK_LINK,
+                compliance_note=compliance_note,
             )
         )
         division_links.append((f"division-{division}.html", f"Division {division}"))
@@ -597,7 +631,15 @@ def generate_report(
                 body += _csv_link(team_csv, "Download CSV")
         club_slug = reportdata.slugify(club_id)
         (output_dir / f"club-{club_slug}.html").write_text(
-            _page(club_name, body, name, draft, description)
+            _page(
+                club_name,
+                body,
+                name,
+                draft,
+                description,
+                back_link=_RUN_INDEX_BACK_LINK,
+                compliance_note=compliance_note,
+            )
         )
         club_links.append((f"club-{club_slug}.html", club_name))
     club_links.sort()
@@ -612,6 +654,7 @@ def generate_report(
             draft,
             description,
             is_run_home=True,
+            compliance_note=compliance_note,
         )
     )
     return index_path
@@ -659,7 +702,9 @@ def _render_run_tree(
         child_parts = (*path_parts, name)
         label = html.escape(name)
         if child.is_run:
-            href = f"{rel_runs_dir}/{'/'.join(child_parts)}/index.html"
+            # Link the run directory, not its index.html: a server that serves
+            # index.html for a bare directory makes the filename redundant.
+            href = f"{rel_runs_dir}/{'/'.join(child_parts)}/"
             label = f'<a href="{href}">{label}</a>'
         if child.children:
             label += _render_run_tree(child, child_parts, rel_runs_dir)

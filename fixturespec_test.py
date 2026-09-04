@@ -17,7 +17,7 @@
 import hashlib
 import tempfile
 import unittest
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from datetime import date
 from pathlib import Path
 
@@ -26,13 +26,13 @@ import fmodel
 
 
 def _find_limit(
-    limits: Collection[fmodel.MatchCountLimit],
+    limits: Collection[fmodel.MatchLimit],
     *,
     club: str,
     venue_scope: fmodel.VenueScope,
     apply_per: fmodel.ApplyPer,
-) -> fmodel.MatchCountLimit:
-    """The one resolved MatchCountLimit for `club` with the given venue_scope /
+) -> fmodel.MatchLimit:
+    """The one resolved MatchLimit for `club` with the given venue_scope /
     apply_per (fails the calling assertion if there isn't exactly one)."""
     matches = [
         limit
@@ -43,6 +43,18 @@ def _find_limit(
     ]
     assert len(matches) == 1, f"expected exactly one, got {matches}"
     return matches[0]
+
+
+def _cap_base(cap: fmodel.Cap | None) -> int | None:
+    """`cap.base`, or None if there's no cap at all -- lets a test assert on the
+    effective plain value ('max_matches'/'max_playing_teams' in the old flat
+    shape) without caring whether the whole Cap is absent or just its base."""
+    return cap.base if cap is not None else None
+
+
+def _cap_overrides(cap: fmodel.Cap | None) -> Mapping[date, int | None]:
+    """`cap.overrides`, or {} if there's no cap at all."""
+    return cap.overrides if cap is not None else {}
 
 
 # Clubs/teams/divisions boilerplate, minus 'club_constraints', for tests that need to
@@ -205,7 +217,7 @@ class TestLoadSpec(unittest.TestCase):
                 venue_scope=fmodel.VenueScope.HOME,
                 apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
             )
-            self.assertEqual(limit.max_matches, 1)
+            self.assertEqual(_cap_base(limit.match_cap), 1)
         self.assertEqual(spec.name, "")
         self.assertFalse(spec.draft)
 
@@ -365,14 +377,14 @@ class TestLoadSpec(unittest.TestCase):
             "    home_dates: [2025-12-08]\n"
         )
         spec = fixturespec.load_spec(path)
-        by_club = {}
+        by_club: dict[str, fmodel.RangeLimit] = {}
         for limit in spec.parameters.match_count_limits:
-            if limit.max_matches == 0:
+            if isinstance(limit, fmodel.RangeLimit) and _cap_base(limit.match_cap) == 0:
                 (club,) = {t.club for t in limit.teams}
                 by_club[club] = limit
         self.assertEqual(set(by_club), {"albany", "hackney"})
         self.assertEqual(
-            by_club["albany"].date_ranges,
+            by_club["albany"].ranges,
             (fmodel.DateRange(date(2025, 12, 22), date(2026, 1, 4)),),
         )
 
@@ -400,7 +412,7 @@ class TestLoadSpec(unittest.TestCase):
         zero_clubs = {
             t.club
             for limit in spec.parameters.match_count_limits
-            if limit.max_matches == 0
+            if isinstance(limit, fmodel.RangeLimit) and _cap_base(limit.match_cap) == 0
             for t in limit.teams
         }
         self.assertEqual(zero_clubs, {"hackney"})
@@ -451,7 +463,7 @@ class TestLoadSpec(unittest.TestCase):
             venue_scope=fmodel.VenueScope.HOME,
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
-        self.assertEqual(albany.max_matches, 3)
+        self.assertEqual(_cap_base(albany.match_cap), 3)
         # hackney has no entry of its own, so it keeps the default home cap 1.
         hackney = _find_limit(
             spec.parameters.match_count_limits,
@@ -459,7 +471,7 @@ class TestLoadSpec(unittest.TestCase):
             venue_scope=fmodel.VenueScope.HOME,
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
-        self.assertEqual(hackney.max_matches, 1)
+        self.assertEqual(_cap_base(hackney.match_cap), 1)
 
     def test_match_count_limits_max_matches_overrides_parsed(self) -> None:
         path = self._write(
@@ -478,8 +490,8 @@ class TestLoadSpec(unittest.TestCase):
             venue_scope=fmodel.VenueScope.HOME,
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
-        self.assertEqual(albany.max_matches, 2)
-        self.assertEqual(albany.max_matches_overrides, {date(2025, 9, 1): 3})
+        self.assertEqual(_cap_base(albany.match_cap), 2)
+        self.assertEqual(_cap_overrides(albany.match_cap), {date(2025, 9, 1): 3})
 
     def test_match_count_limits_override_null_lifts_the_cap_that_day(self) -> None:
         path = self._write(
@@ -498,8 +510,8 @@ class TestLoadSpec(unittest.TestCase):
             venue_scope=fmodel.VenueScope.HOME,
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
-        self.assertIsNone(albany.max_matches)
-        self.assertEqual(albany.max_matches_overrides, {date(2025, 9, 1): 3})
+        self.assertIsNone(_cap_base(albany.match_cap))
+        self.assertEqual(_cap_overrides(albany.match_cap), {date(2025, 9, 1): 3})
 
     def test_match_count_limits_null_max_cancels_default_via_override_key(self) -> None:
         path = self._write(
@@ -524,15 +536,13 @@ class TestLoadSpec(unittest.TestCase):
         ]
         self.assertEqual(albany_home, [])
         # hackney still gets the default.
-        self.assertEqual(
-            _find_limit(
-                spec.parameters.match_count_limits,
-                club="hackney",
-                venue_scope=fmodel.VenueScope.HOME,
-                apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
-            ).max_matches,
-            1,
+        hackney = _find_limit(
+            spec.parameters.match_count_limits,
+            club="hackney",
+            venue_scope=fmodel.VenueScope.HOME,
+            apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
+        self.assertEqual(_cap_base(hackney.match_cap), 1)
 
     def test_match_count_limits_unknown_override_key_rejected(self) -> None:
         path = self._write(
@@ -637,21 +647,25 @@ class TestLoadSpec(unittest.TestCase):
         )
         spec = fixturespec.load_spec(path)
         self.assertEqual(
-            _find_limit(
-                spec.parameters.match_count_limits,
-                club="albany",
-                venue_scope=fmodel.VenueScope.HOME,
-                apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
-            ).max_matches,
+            _cap_base(
+                _find_limit(
+                    spec.parameters.match_count_limits,
+                    club="albany",
+                    venue_scope=fmodel.VenueScope.HOME,
+                    apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
+                ).match_cap
+            ),
             2,
         )
         self.assertEqual(
-            _find_limit(
-                spec.parameters.match_count_limits,
-                club="albany",
-                venue_scope=fmodel.VenueScope.ALL,
-                apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
-            ).max_matches,
+            _cap_base(
+                _find_limit(
+                    spec.parameters.match_count_limits,
+                    club="albany",
+                    venue_scope=fmodel.VenueScope.ALL,
+                    apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
+                ).match_cap
+            ),
             1,
         )
 
@@ -683,7 +697,8 @@ class TestLoadSpec(unittest.TestCase):
             venue_scope=fmodel.VenueScope.ALL,
             apply_per=fmodel.ApplyPer.EACH_TEAM,
         )
-        self.assertEqual((limit.time_window_days, limit.max_matches), (7, 1))
+        assert isinstance(limit, fmodel.RollingLimit)
+        self.assertEqual((limit.window_days, _cap_base(limit.match_cap)), (7, 1))
 
     def test_match_count_limits_unknown_venue_scope_rejected(self) -> None:
         path = self._write(
@@ -752,14 +767,15 @@ class TestLoadSpec(unittest.TestCase):
             venue_scope=fmodel.VenueScope.ALL,
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
+        assert isinstance(limit, fmodel.RangeLimit)
         self.assertEqual(
-            limit.date_ranges,
+            limit.ranges,
             (
                 fmodel.DateRange(date(2025, 10, 27), date(2025, 11, 2)),
                 fmodel.DateRange(date(2026, 2, 16), date(2026, 2, 22)),
             ),
         )
-        self.assertEqual((limit.max_matches, limit.time_window_days), (1, 1))
+        self.assertEqual(_cap_base(limit.match_cap), 1)
 
     def test_match_count_limits_date_ranges_allow_max_zero(self) -> None:
         path = self._write(
@@ -778,7 +794,7 @@ class TestLoadSpec(unittest.TestCase):
             venue_scope=fmodel.VenueScope.ALL,
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
-        self.assertEqual(limit.max_matches, 0)
+        self.assertEqual(_cap_base(limit.match_cap), 0)
 
     def test_match_count_limits_max_zero_rejected_without_date_ranges(self) -> None:
         path = self._write(
@@ -859,8 +875,9 @@ class TestLoadSpec(unittest.TestCase):
             venue_scope=fmodel.VenueScope.ALL,
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
+        assert isinstance(limit, fmodel.RangeLimit)
         self.assertEqual(
-            limit.date_ranges,
+            limit.ranges,
             (fmodel.DateRange(date(2025, 10, 27), date(2025, 11, 2)),),
         )
 
@@ -1487,24 +1504,22 @@ club_constraints:
             "    home_dates: [2025-09-15]\n"
         )
         spec = fixturespec.load_spec(path)
-        self.assertEqual(
-            _find_limit(
-                spec.parameters.match_count_limits,
-                club="albany",
-                venue_scope=fmodel.VenueScope.ALL,
-                apply_per=fmodel.ApplyPer.EACH_TEAM,
-            ).time_window_days,
-            14,
+        albany_gap = _find_limit(
+            spec.parameters.match_count_limits,
+            club="albany",
+            venue_scope=fmodel.VenueScope.ALL,
+            apply_per=fmodel.ApplyPer.EACH_TEAM,
         )
-        self.assertEqual(
-            _find_limit(
-                spec.parameters.match_count_limits,
-                club="hackney",
-                venue_scope=fmodel.VenueScope.ALL,
-                apply_per=fmodel.ApplyPer.EACH_TEAM,
-            ).time_window_days,
-            7,
+        hackney_gap = _find_limit(
+            spec.parameters.match_count_limits,
+            club="hackney",
+            venue_scope=fmodel.VenueScope.ALL,
+            apply_per=fmodel.ApplyPer.EACH_TEAM,
         )
+        assert isinstance(albany_gap, fmodel.RollingLimit)
+        assert isinstance(hackney_gap, fmodel.RollingLimit)
+        self.assertEqual(albany_gap.window_days, 14)
+        self.assertEqual(hackney_gap.window_days, 7)
 
     def test_match_count_limits_negative_max_rejected(self) -> None:
         path = self._write(
@@ -1546,8 +1561,8 @@ club_constraints:
             venue_scope=fmodel.VenueScope.HOME,
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
-        self.assertEqual(limit.max_matches, 3)
-        self.assertEqual(limit.max_playing_teams, 3)
+        self.assertEqual(_cap_base(limit.match_cap), 3)
+        self.assertEqual(_cap_base(limit.playing_teams_cap), 3)
 
     def test_match_count_limits_max_playing_teams_defaults_to_none(self) -> None:
         path = self._write(_MINIMAL_SPEC)
@@ -1558,7 +1573,7 @@ club_constraints:
             venue_scope=fmodel.VenueScope.HOME,
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
-        self.assertIsNone(limit.max_playing_teams)
+        self.assertIsNone(_cap_base(limit.playing_teams_cap))
 
     def test_match_count_limits_max_playing_teams_negative_rejected(self) -> None:
         path = self._write(
@@ -1594,8 +1609,9 @@ club_constraints:
             venue_scope=fmodel.VenueScope.HOME,
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
-        self.assertEqual(limit.max_playing_teams, 1)
-        self.assertEqual(limit.time_window_days, 7)
+        assert isinstance(limit, fmodel.RollingLimit)
+        self.assertEqual(_cap_base(limit.playing_teams_cap), 1)
+        self.assertEqual(limit.window_days, 7)
 
     def test_match_count_limits_max_playing_teams_allows_date_ranges(self) -> None:
         path = self._write(
@@ -1616,9 +1632,10 @@ club_constraints:
             venue_scope=fmodel.VenueScope.HOME,
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
-        self.assertEqual(limit.max_playing_teams, 0)
+        assert isinstance(limit, fmodel.RangeLimit)
+        self.assertEqual(_cap_base(limit.playing_teams_cap), 0)
         self.assertEqual(
-            limit.date_ranges,
+            limit.ranges,
             (fmodel.DateRange(date(2025, 9, 1), date(2025, 9, 7)),),
         )
 
@@ -1639,8 +1656,8 @@ club_constraints:
             venue_scope=fmodel.VenueScope.HOME,
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
-        self.assertIsNone(limit.max_matches)
-        self.assertEqual(limit.max_playing_teams, 2)
+        self.assertIsNone(_cap_base(limit.match_cap))
+        self.assertEqual(_cap_base(limit.playing_teams_cap), 2)
 
     def test_match_count_limits_max_playing_teams_alone_with_explicit_null(
         self,
@@ -1662,8 +1679,8 @@ club_constraints:
             venue_scope=fmodel.VenueScope.HOME,
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
-        self.assertIsNone(limit.max_matches)
-        self.assertEqual(limit.max_playing_teams, 2)
+        self.assertIsNone(_cap_base(limit.match_cap))
+        self.assertEqual(_cap_base(limit.playing_teams_cap), 2)
 
     def test_match_count_limits_max_matches_alone_is_allowed(self) -> None:
         """max_matches can carry a rule on its own, with 'max_playing_teams'
@@ -1682,8 +1699,8 @@ club_constraints:
             venue_scope=fmodel.VenueScope.HOME,
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
-        self.assertEqual(limit.max_matches, 3)
-        self.assertIsNone(limit.max_playing_teams)
+        self.assertEqual(_cap_base(limit.match_cap), 3)
+        self.assertIsNone(_cap_base(limit.playing_teams_cap))
 
     def test_match_count_limits_neither_max_field_rejected(self) -> None:
         """Neither 'max_matches' nor 'max_playing_teams', and no other way to carry
@@ -1718,9 +1735,9 @@ club_constraints:
             venue_scope=fmodel.VenueScope.HOME,
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
-        self.assertEqual(limit.max_playing_teams, 1)
+        self.assertEqual(_cap_base(limit.playing_teams_cap), 1)
         self.assertEqual(
-            limit.max_playing_teams_overrides,
+            _cap_overrides(limit.playing_teams_cap),
             {date(2025, 9, 1): 2, date(2025, 9, 8): None},
         )
 
@@ -1809,7 +1826,8 @@ club_constraints:
             venue_scope=fmodel.VenueScope.HOME,
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
-        self.assertEqual(limit.time_window_days, 7)
+        assert isinstance(limit, fmodel.RollingLimit)
+        self.assertEqual(limit.window_days, 7)
         self.assertEqual(
             limit.exclude_dates,
             frozenset({date(2025, 9, 1), date(2025, 9, 8)}),
@@ -1824,6 +1842,7 @@ club_constraints:
             venue_scope=fmodel.VenueScope.HOME,
             apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
+        assert isinstance(limit, fmodel.RollingLimit)
         self.assertEqual(limit.exclude_dates, frozenset())
 
     def test_match_count_limits_exclude_dates_invalid_date_rejected(self) -> None:
@@ -2169,8 +2188,10 @@ club_constraints:
         self.assertEqual(
             list(spec.parameters.match_count_limits),
             [
-                fmodel.MatchCountLimit(
-                    teams=[albany_1, albany_2], max_matches=1, time_window_days=1
+                fmodel.RollingLimit(
+                    teams=[albany_1, albany_2],
+                    match_cap=fmodel.Cap(1),
+                    window_days=1,
                 )
             ],
         )
@@ -2190,8 +2211,9 @@ club_constraints:
         )
         constraints = list(spec.parameters.match_count_limits)
         self.assertEqual(list(constraints[0].teams), [albany_1, albany_2])
-        self.assertEqual(constraints[0].max_matches, 3)
-        self.assertEqual(constraints[0].time_window_days, 7)
+        assert isinstance(constraints[0], fmodel.RollingLimit)
+        self.assertEqual(_cap_base(constraints[0].match_cap), 3)
+        self.assertEqual(constraints[0].window_days, 7)
 
     def test_match_count_limits_time_window_days_parsed(self) -> None:
         path = self._write(
@@ -2204,7 +2226,8 @@ club_constraints:
         )
         spec = fixturespec.load_spec(path)
         constraints = list(spec.parameters.match_count_limits)
-        self.assertEqual(constraints[0].time_window_days, 3)
+        assert isinstance(constraints[0], fmodel.RollingLimit)
+        self.assertEqual(constraints[0].window_days, 3)
 
     def test_match_count_limits_time_window_days_defaults_to_one(self) -> None:
         path = self._write(
@@ -2216,7 +2239,8 @@ club_constraints:
         )
         spec = fixturespec.load_spec(path)
         constraints = list(spec.parameters.match_count_limits)
-        self.assertEqual(constraints[0].time_window_days, 1)
+        assert isinstance(constraints[0], fmodel.RollingLimit)
+        self.assertEqual(constraints[0].window_days, 1)
 
     def test_match_count_limits_venue_scope_defaults_to_all(self) -> None:
         path = self._write(

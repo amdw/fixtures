@@ -432,7 +432,7 @@ class _ClubConstraints:
     home_dates_used: dict[str, fmodel.HomeDatesUsedBounds]
     team_home_dates: dict[fmodel.Team, list[date]]
     team_unavailable_away_dates: dict[fmodel.Team, list[date]]
-    match_count_limits: list[fmodel.MatchCountLimit]
+    match_count_limits: list[fmodel.MatchLimit]
 
 
 def _parse_club_constraints(
@@ -940,9 +940,10 @@ def _parse_match_count_limits(
                     f"{entry_context}: 'date_ranges' and "
                     "'max_playing_teams_overrides' can't be combined"
                 )
-            if max_ is None:
+            if max_ is None and max_playing_teams is None:
                 raise SpecError(
-                    f"{entry_context}.date_ranges needs an integer 'max_matches' (>= 0)"
+                    f"{entry_context}.date_ranges needs an integer 'max_matches' "
+                    "(>= 0) and/or a 'max_playing_teams'"
                 )
             date_ranges = _parse_match_count_date_ranges(
                 entry["date_ranges"], f"{entry_context}.date_ranges"
@@ -993,24 +994,38 @@ def _parse_match_count_limits(
     return limits
 
 
+def _resolved_cap(
+    base: int | None, overrides: Mapping[date, int | None]
+) -> fmodel.Cap | None:
+    """A fmodel.Cap for a parsed (base, overrides) pair -- 'max_matches'/
+    'max_matches_overrides' or 'max_playing_teams'/'max_playing_teams_overrides'
+    -- or None when neither carries an actual cap, so that measure is left
+    unconstrained on the resolved MatchLimit."""
+    if base is None and not overrides:
+        return None
+    return fmodel.Cap(base=base, overrides=dict(overrides))
+
+
 def _resolve_match_count_limits(
     default_limits: list[_ParsedMatchCountLimit],
     club_limits: Mapping[str, list[_ParsedMatchCountLimit]],
     clubs: Mapping[str, fmodel.Club],
     teams: Mapping[str, fmodel.Team],
     path: Path,
-) -> list[fmodel.MatchCountLimit]:
+) -> list[fmodel.MatchLimit]:
     """Combine the spec-wide default match_count_limits with each club's own, and
-    resolve every entry to a concrete fmodel.MatchCountLimit.
+    resolve every entry to a concrete fmodel.MatchLimit (a RangeLimit when the
+    entry carries 'date_ranges', otherwise a RollingLimit).
 
     A club entry whose 'override_key' names a default entry replaces that default
     for the club (an unknown key, or two club entries sharing one, is an error);
     every other club entry is additive. Entries that carry none of 'max_matches',
-    'max_matches_overrides' or 'max_playing_teams' (a pure cancel-the-default marker)
-    and entries that resolve to no teams are dropped.
+    'max_matches_overrides', 'max_playing_teams' or 'max_playing_teams_overrides'
+    (a pure cancel-the-default marker) and entries that resolve to no teams are
+    dropped.
     """
     default_keys = {pl.override_key for pl in default_limits}
-    resolved: list[fmodel.MatchCountLimit] = []
+    resolved: list[fmodel.MatchLimit] = []
     for club_id in clubs:
         own = list(club_limits.get(club_id, []))
         overridden: dict[str, _ParsedMatchCountLimit] = {}
@@ -1036,12 +1051,11 @@ def _resolve_match_count_limits(
 
         club_team_objs = [teams[tid] for tid in _club_team_ids(club_id, teams)]
         for pl in effective:
-            if (
-                pl.max_matches is None
-                and not pl.max_matches_overrides
-                and pl.max_playing_teams is None
-                and not pl.max_playing_teams_overrides
-            ):
+            match_cap = _resolved_cap(pl.max_matches, pl.max_matches_overrides)
+            playing_teams_cap = _resolved_cap(
+                pl.max_playing_teams, pl.max_playing_teams_overrides
+            )
+            if match_cap is None and playing_teams_cap is None:
                 continue
             team_objs = (
                 club_team_objs
@@ -1050,20 +1064,29 @@ def _resolve_match_count_limits(
             )
             if not team_objs:
                 continue
-            resolved.append(
-                fmodel.MatchCountLimit(
-                    teams=team_objs,
-                    max_matches=pl.max_matches,
-                    time_window_days=pl.time_window_days,
-                    venue_scope=pl.venue_scope,
-                    apply_per=pl.apply_per,
-                    max_matches_overrides=pl.max_matches_overrides,
-                    date_ranges=pl.date_ranges,
-                    max_playing_teams=pl.max_playing_teams,
-                    max_playing_teams_overrides=pl.max_playing_teams_overrides,
-                    exclude_dates=pl.exclude_dates,
+            if pl.date_ranges:
+                resolved.append(
+                    fmodel.RangeLimit(
+                        teams=team_objs,
+                        match_cap=match_cap,
+                        playing_teams_cap=playing_teams_cap,
+                        venue_scope=pl.venue_scope,
+                        apply_per=pl.apply_per,
+                        ranges=pl.date_ranges,
+                    )
                 )
-            )
+            else:
+                resolved.append(
+                    fmodel.RollingLimit(
+                        teams=team_objs,
+                        match_cap=match_cap,
+                        playing_teams_cap=playing_teams_cap,
+                        venue_scope=pl.venue_scope,
+                        apply_per=pl.apply_per,
+                        window_days=pl.time_window_days,
+                        exclude_dates=pl.exclude_dates,
+                    )
+                )
     return resolved
 
 
