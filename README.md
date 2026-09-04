@@ -52,6 +52,34 @@ steps (rather than one combined command) means the report can be regenerated
 slow) solver: just rerun the report build against the existing
 `solution.yaml`.
 
+`validate.py` checks a `solution.yaml` against a `spec.yaml` without re-solving:
+
+```bash
+python validate.py runs/2025-26-season/spec.yaml runs/2025-26-season/solution.yaml
+```
+
+It reports whether the solution is a valid solved schedule for that spec --
+exactly the required fixtures of every division, each on a date the constraint
+model accepts, with every constraint satisfied (one match per team per day,
+`home_dates_used` bounds, `match_count_limits`, `fixed_fixtures`) -- exiting 0
+if it complies and 1 (with a list of problems) if not. It works by building the
+same CP-SAT model `solve.py` uses (`fmodel.check_schedule`), pinning each
+candidate fixture/date variable to the value the solution implies and asking the
+solver whether that assignment satisfies the model, so the check can't drift
+from the solver's semantics. The flip side is that a fixture placed somewhere
+the spec can't schedule it is named, but any other constraint breach is reported
+just as "inconsistent with the spec's constraints", without a per-rule
+breakdown. Two uses:
+
+- after changing the solver/model, run it over the committed runs to confirm
+  their existing `solution.yaml` files still validate -- i.e. the semantics
+  didn't shift;
+- after changing a constraint spec, run it with the *new* spec against an *old*
+  solution to see whether that schedule would still comply. Validating against a
+  spec other than the one a solution was solved from is expected here; a
+  `spec_checksum` in the solution that doesn't match the given spec is reported
+  as a note, not as non-compliance.
+
 ### Spec format
 
 A minimal spec needs `clubs`, `teams`, `divisions` and `club_constraints`:

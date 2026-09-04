@@ -939,3 +939,69 @@ def solve(params: Parameters) -> SolveResult:
         solve_stats=solve_stats,
         spec_checksum=params.spec_checksum,
     )
+
+
+def check_schedule(
+    params: Parameters, fixtures: Collection[ScheduledFixture]
+) -> list[str]:
+    """Check `fixtures` against `params`, returning a list of reasons it is not a
+    valid solved schedule -- empty iff it is one.
+
+    The check is built straight on the solver's own model. _build_model()
+    constructs exactly the CP-SAT model solve() would; then every candidate
+    (fixture, date) variable is pinned -- to 1 if `fixtures` schedules it, to 0 if
+    not -- and the solver is asked whether that assignment satisfies the model.
+    Pinning the zeros as well means a missing or duplicated fixture surfaces as
+    infeasibility through the model's own "each required fixture exactly once"
+    constraint, so the only thing checked outside the model is whether each
+    supplied fixture names a real candidate slot at all.
+
+    The upside is that the check can't drift from solve()'s semantics -- it *is*
+    solve()'s model. The price is that a genuine constraint violation comes back
+    only as one generic "inconsistent with the spec's constraints", with no
+    per-rule breakdown.
+    """
+    try:
+        model, fixture_vars = _build_model(params)
+    except ValueError as e:
+        return [f"the spec has no feasible schedule at all: {e}"]
+
+    candidate_vars = fixture_vars.fixture_date_vars()
+
+    seen: set[tuple[Fixture, date]] = set()
+    scheduled: set[tuple[Fixture, date]] = set()
+    unknown: list[ScheduledFixture] = []
+    for sf in fixtures:
+        key = (sf.fixture, sf.date)
+        if key in seen:
+            continue  # a duplicate entry -- already accounted for
+        seen.add(key)
+        if key in candidate_vars:
+            scheduled.add(key)
+        else:
+            unknown.append(sf)
+
+    # A fixture whose (fixture, date) the model never created a variable for isn't
+    # a slot this spec offers: the two teams aren't paired in a division, the date
+    # isn't a home date for the home team, a date cutoff or an exclusion rules it
+    # out, or (with match_count_limits) an effective cap of 0 bars it. Its other
+    # candidates would be pinned to 0 below and make the model infeasible anyway,
+    # but naming it is more use than a bare "inconsistent".
+    if unknown:
+        return [
+            f"{sf.fixture.home_team.name} vs {sf.fixture.away_team.name} on "
+            f"{sf.date.isoformat()} is not a slot this spec can schedule"
+            for sf in unknown
+        ]
+
+    for key, var in candidate_vars.items():
+        model.add(var == (1 if key in scheduled else 0))
+
+    solver = cp_model.CpSolver()
+    status = solver.Solve(model)
+    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        return []
+    return [
+        "the schedule is inconsistent with the spec's constraints "
+        f"(solver status: {solver.StatusName(status)})"
+    ]
