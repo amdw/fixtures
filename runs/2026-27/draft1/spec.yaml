@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=../../../spec-schema.json
-name: "2026-27 Season"
+name: "2026-27 Season (attempt 1)"
 draft: true
 
 # Same-club "internal" fixtures (e.g. Hendon 1 v Hendon 2) must be settled by the
