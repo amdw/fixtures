@@ -9,7 +9,7 @@ fixtures:
   away: hendon-1
   date: 2026-09-17
 - home: hendon-3
-  away: metropolitan-1
+  away: harrow-1
   date: 2026-09-17
 - home: albany-1
   away: hammersmith-1
@@ -17,381 +17,384 @@ fixtures:
 - home: hammersmith-3
   away: hammersmith-4
   date: 2026-09-24
-- home: hendon-1
+- home: hendon-2
   away: hackney-1
   date: 2026-09-24
 - home: hendon-3
-  away: harrow-1
+  away: willesden-brent-1
   date: 2026-09-24
 - home: hammersmith-2
   away: kings-head-1
   date: 2026-10-01
-- home: kings-head-3
-  away: hendon-5
+- home: potters-bar-1
+  away: kings-head-3
   date: 2026-10-01
-- home: ealing-1
-  away: hendon-1
-  date: 2026-10-05
+- home: hackney-1
+  away: west-london-1
+  date: 2026-10-06
 - home: hackney-2
   away: harrow-1
   date: 2026-10-06
-- home: hammersmith-1
-  away: west-london-1
+- home: hendon-2
+  away: hammersmith-1
+  date: 2026-10-08
+- home: hendon-5
+  away: hendon-6
   date: 2026-10-08
 - home: kings-head-1
   away: kings-head-2
   date: 2026-10-08
-- home: albany-1
-  away: hackney-1
-  date: 2026-10-12
-- home: hackney-2
-  away: metropolitan-1
-  date: 2026-10-13
-- home: hackney-3
-  away: potters-bar-1
-  date: 2026-10-13
-- home: harrow-2
+- home: potters-bar-1
   away: ealing-2
+  date: 2026-10-08
+- home: albany-1
+  away: ealing-1
+  date: 2026-10-12
+- home: willesden-brent-1
+  away: metropolitan-1
+  date: 2026-10-14
+- home: harrow-1
+  away: hackney-2
   date: 2026-10-15
-- home: hendon-2
+- home: harrow-2
+  away: muswell-hill-2
+  date: 2026-10-15
+- home: hendon-1
   away: muswell-hill-1
   date: 2026-10-15
-- home: hendon-6
-  away: hendon-4
+- home: hendon-3
+  away: kings-head-2
   date: 2026-10-15
-- home: kings-head-2
-  away: harrow-1
-  date: 2026-10-15
-- home: hackney-2
-  away: willesden-brent-1
-  date: 2026-10-20
-- home: hackney-3
+- home: hendon-5
   away: hammersmith-3
-  date: 2026-10-20
-- home: west-london-1
+  date: 2026-10-15
+- home: ealing-1
   away: hackney-1
-  date: 2026-10-21
+  date: 2026-10-19
 - home: harrow-1
   away: hammersmith-2
   date: 2026-10-22
 - home: hendon-1
-  away: ealing-1
+  away: west-london-1
   date: 2026-10-22
 - home: hendon-4
-  away: hammersmith-4
+  away: hackney-3
   date: 2026-10-22
+- home: hendon-5
+  away: harrow-2
+  date: 2026-10-22
+- home: hackney-1
+  away: muswell-hill-1
+  date: 2026-10-27
+- home: hackney-2
+  away: kings-head-1
+  date: 2026-10-27
+- home: harrow-1
+  away: hendon-3
+  date: 2026-10-29
+- home: kings-head-2
+  away: metropolitan-1
+  date: 2026-10-29
 - home: potters-bar-1
   away: harrow-2
-  date: 2026-10-22
-- home: muswell-hill-2
-  away: hendon-6
-  date: 2026-10-27
-- home: willesden-brent-1
-  away: metropolitan-1
-  date: 2026-10-28
-- home: hammersmith-2
-  away: kings-head-2
   date: 2026-10-29
-- home: hammersmith-4
-  away: harrow-2
-  date: 2026-10-29
-- home: harrow-1
-  away: hackney-2
-  date: 2026-10-29
-- home: albany-1
-  away: hendon-2
+- home: ealing-1
+  away: hendon-1
   date: 2026-11-02
 - home: muswell-hill-2
-  away: hackney-3
+  away: hendon-4
   date: 2026-11-03
-- home: west-london-1
-  away: hammersmith-1
-  date: 2026-11-04
 - home: hammersmith-2
-  away: hendon-3
+  away: willesden-brent-1
   date: 2026-11-05
-- home: hackney-1
-  away: albany-1
-  date: 2026-11-10
 - home: hackney-2
   away: kings-head-2
   date: 2026-11-10
-- home: hendon-1
-  away: west-london-1
+- home: hackney-3
+  away: harrow-2
+  date: 2026-11-10
+- home: west-london-1
+  away: albany-1
+  date: 2026-11-11
+- home: hendon-2
+  away: muswell-hill-1
   date: 2026-11-12
-- home: hendon-5
-  away: hendon-6
+- home: hendon-6
+  away: hendon-4
   date: 2026-11-12
 - home: kings-head-1
   away: harrow-1
   date: 2026-11-12
-- home: muswell-hill-1
+- home: ealing-1
   away: hammersmith-1
-  date: 2026-11-17
-- home: harrow-1
-  away: willesden-brent-1
-  date: 2026-11-19
-- home: harrow-2
-  away: hammersmith-3
-  date: 2026-11-19
-- home: hendon-2
+  date: 2026-11-16
+- home: willesden-brent-1
+  away: hammersmith-2
+  date: 2026-11-18
+- home: hendon-1
   away: albany-1
   date: 2026-11-19
-- home: hendon-3
-  away: hackney-2
+- home: hendon-5
+  away: ealing-2
   date: 2026-11-19
 - home: hendon-6
-  away: kings-head-3
-  date: 2026-11-19
-- home: ealing-2
   away: hammersmith-4
-  date: 2026-11-23
-- home: muswell-hill-1
-  away: hackney-1
-  date: 2026-11-24
-- home: harrow-1
-  away: hendon-3
-  date: 2026-11-26
-- home: harrow-2
-  away: hendon-4
-  date: 2026-11-26
-- home: kings-head-1
-  away: hammersmith-2
-  date: 2026-11-26
+  date: 2026-11-19
+- home: kings-head-3
+  away: muswell-hill-2
+  date: 2026-11-19
 - home: metropolitan-1
-  away: hackney-2
-  date: 2026-11-26
-- home: albany-1
+  away: harrow-1
+  date: 2026-11-19
+- home: muswell-hill-1
   away: ealing-1
-  date: 2026-11-30
-- home: ealing-2
-  away: hendon-6
-  date: 2026-11-30
-- home: willesden-brent-1
-  away: kings-head-2
-  date: 2026-12-02
-- home: hammersmith-2
-  away: hackney-2
-  date: 2026-12-03
+  date: 2026-11-24
 - home: hammersmith-4
   away: hendon-5
-  date: 2026-12-03
-- home: willesden-brent-1
-  away: harrow-1
-  date: 2026-12-09
+  date: 2026-11-26
+- home: harrow-1
+  away: metropolitan-1
+  date: 2026-11-26
 - home: harrow-2
-  away: muswell-hill-2
-  date: 2026-12-10
-- home: hendon-2
-  away: hackney-1
-  date: 2026-12-10
-- home: hendon-3
+  away: ealing-2
+  date: 2026-11-26
+- home: kings-head-1
   away: hammersmith-2
+  date: 2026-11-26
+- home: albany-1
+  away: hackney-1
+  date: 2026-11-30
+- home: hammersmith-2
+  away: kings-head-2
+  date: 2026-12-03
+- home: hammersmith-4
+  away: hackney-3
+  date: 2026-12-03
+- home: albany-1
+  away: muswell-hill-1
+  date: 2026-12-07
+- home: hammersmith-1
+  away: hendon-1
   date: 2026-12-10
-- home: hendon-6
-  away: potters-bar-1
+- home: hammersmith-3
+  away: ealing-2
+  date: 2026-12-10
+- home: harrow-1
+  away: willesden-brent-1
+  date: 2026-12-10
+- home: harrow-2
+  away: hendon-6
   date: 2026-12-10
 - home: kings-head-2
   away: kings-head-1
   date: 2026-12-10
-- home: west-london-1
-  away: ealing-1
-  date: 2026-12-16
 - home: hammersmith-1
-  away: muswell-hill-1
+  away: hackney-1
+  date: 2026-12-17
+- home: hammersmith-4
+  away: potters-bar-1
   date: 2026-12-17
 - home: kings-head-3
-  away: muswell-hill-2
+  away: ealing-2
   date: 2026-12-17
 - home: metropolitan-1
   away: willesden-brent-1
   date: 2026-12-17
-- home: potters-bar-1
-  away: ealing-2
-  date: 2026-12-17
 - home: ealing-1
-  away: hackney-1
-  date: 2027-01-04
-- home: west-london-1
   away: hendon-2
+  date: 2027-01-04
+- home: ealing-2
+  away: hackney-3
+  date: 2027-01-04
+- home: muswell-hill-2
+  away: potters-bar-1
+  date: 2027-01-05
+- home: west-london-1
+  away: hackney-1
   date: 2027-01-06
-- home: metropolitan-1
-  away: hammersmith-2
+- home: hammersmith-2
+  away: metropolitan-1
   date: 2027-01-07
+- home: albany-1
+  away: hendon-2
+  date: 2027-01-11
+- home: ealing-2
+  away: hendon-6
+  date: 2027-01-11
+- home: willesden-brent-1
+  away: hendon-3
+  date: 2027-01-13
+- home: harrow-1
+  away: kings-head-1
+  date: 2027-01-14
+- home: harrow-2
+  away: hammersmith-3
+  date: 2027-01-14
 - home: ealing-2
   away: muswell-hill-2
-  date: 2027-01-11
-- home: hammersmith-2
-  away: harrow-1
-  date: 2027-01-14
-- home: hendon-2
-  away: west-london-1
-  date: 2027-01-14
-- home: hendon-3
-  away: kings-head-1
-  date: 2027-01-14
-- home: hendon-4
-  away: potters-bar-1
-  date: 2027-01-14
-- home: ealing-1
-  away: albany-1
   date: 2027-01-18
-- home: muswell-hill-2
-  away: hammersmith-4
+- home: hackney-1
+  away: albany-1
+  date: 2027-01-19
+- home: hackney-3
+  away: kings-head-3
+  date: 2027-01-19
+- home: muswell-hill-1
+  away: hendon-1
   date: 2027-01-19
 - home: harrow-2
-  away: hendon-6
-  date: 2027-01-21
-- home: kings-head-1
-  away: hendon-3
-  date: 2027-01-21
-- home: metropolitan-1
-  away: harrow-1
-  date: 2027-01-21
-- home: potters-bar-1
-  away: kings-head-3
-  date: 2027-01-21
-- home: ealing-1
-  away: hendon-2
-  date: 2027-01-25
-- home: muswell-hill-1
-  away: west-london-1
-  date: 2027-01-26
-- home: albany-1
-  away: hendon-1
-  date: 2027-02-01
-- home: ealing-1
-  away: hammersmith-1
-  date: 2027-02-01
-- home: muswell-hill-2
   away: hendon-4
-  date: 2027-02-02
-- home: willesden-brent-1
-  away: hendon-3
-  date: 2027-02-03
+  date: 2027-01-21
 - home: kings-head-1
   away: metropolitan-1
-  date: 2027-02-04
-- home: hackney-1
-  away: hendon-1
-  date: 2027-02-09
-- home: hackney-3
-  away: kings-head-3
-  date: 2027-02-09
-- home: muswell-hill-1
-  away: albany-1
-  date: 2027-02-09
-- home: kings-head-1
-  away: willesden-brent-1
-  date: 2027-02-11
+  date: 2027-01-21
 - home: potters-bar-1
-  away: hammersmith-3
-  date: 2027-02-11
-- home: muswell-hill-1
-  away: hendon-2
-  date: 2027-02-16
-- home: kings-head-2
-  away: metropolitan-1
-  date: 2027-02-18
+  away: hendon-5
+  date: 2027-01-21
+- home: ealing-1
+  away: west-london-1
+  date: 2027-01-25
 - home: hackney-1
-  away: hammersmith-1
-  date: 2027-02-23
+  away: hendon-2
+  date: 2027-01-26
 - home: hackney-2
-  away: hendon-3
-  date: 2027-02-23
-- home: muswell-hill-1
-  away: hendon-1
-  date: 2027-02-23
-- home: willesden-brent-1
-  away: hammersmith-2
-  date: 2027-02-24
+  away: willesden-brent-1
+  date: 2027-01-26
+- home: muswell-hill-2
+  away: hackney-3
+  date: 2027-01-26
 - home: hammersmith-3
   away: hendon-4
-  date: 2027-02-25
-- home: albany-1
-  away: west-london-1
-  date: 2027-03-01
-- home: hackney-1
-  away: hendon-2
-  date: 2027-03-02
+  date: 2027-01-28
+- home: ealing-2
+  away: hammersmith-4
+  date: 2027-02-01
+- home: hackney-2
+  away: metropolitan-1
+  date: 2027-02-02
 - home: hackney-3
   away: hendon-5
-  date: 2027-03-02
-- home: hammersmith-1
-  away: ealing-1
-  date: 2027-03-04
-- home: hammersmith-3
-  away: hendon-6
-  date: 2027-03-04
-- home: kings-head-3
-  away: ealing-2
-  date: 2027-03-04
-- home: albany-1
-  away: muswell-hill-1
-  date: 2027-03-08
-- home: hammersmith-2
-  away: willesden-brent-1
-  date: 2027-03-11
-- home: hendon-2
-  away: ealing-1
-  date: 2027-03-11
-- home: hendon-4
-  away: hackney-3
-  date: 2027-03-11
-- home: hendon-6
-  away: hammersmith-4
-  date: 2027-03-11
-- home: hackney-1
-  away: muswell-hill-1
-  date: 2027-03-16
-- home: hackney-2
-  away: kings-head-1
-  date: 2027-03-16
-- home: muswell-hill-2
-  away: potters-bar-1
-  date: 2027-03-16
-- home: hammersmith-3
-  away: ealing-2
-  date: 2027-03-18
-- home: harrow-1
-  away: kings-head-2
-  date: 2027-03-18
-- home: hendon-2
+  date: 2027-02-02
+- home: muswell-hill-1
+  away: hendon-2
+  date: 2027-02-02
+- home: west-london-1
   away: hammersmith-1
-  date: 2027-03-18
-- home: hendon-5
-  away: harrow-2
-  date: 2027-03-18
-- home: hendon-6
-  away: hackney-3
-  date: 2027-03-18
-- home: hackney-1
-  away: west-london-1
-  date: 2027-03-23
+  date: 2027-02-03
+- home: kings-head-1
+  away: hendon-3
+  date: 2027-02-04
 - home: hackney-2
   away: hammersmith-2
-  date: 2027-03-23
+  date: 2027-02-09
 - home: muswell-hill-1
+  away: hackney-1
+  date: 2027-02-09
+- home: hendon-2
+  away: albany-1
+  date: 2027-02-11
+- home: hendon-5
+  away: muswell-hill-2
+  date: 2027-02-11
+- home: hendon-6
+  away: kings-head-3
+  date: 2027-02-11
+- home: kings-head-1
+  away: willesden-brent-1
+  date: 2027-02-11
+- home: hackney-1
   away: ealing-1
+  date: 2027-02-16
+- home: hackney-3
+  away: hammersmith-3
+  date: 2027-02-16
+- home: west-london-1
+  away: muswell-hill-1
+  date: 2027-02-17
+- home: kings-head-2
+  away: willesden-brent-1
+  date: 2027-02-18
+- home: metropolitan-1
+  away: hendon-3
+  date: 2027-02-18
+- home: albany-1
+  away: hendon-1
+  date: 2027-02-22
+- home: ealing-2
+  away: hendon-4
+  date: 2027-02-22
+- home: hackney-1
+  away: hammersmith-1
+  date: 2027-02-23
+- home: hackney-3
+  away: potters-bar-1
+  date: 2027-02-23
+- home: west-london-1
+  away: ealing-1
+  date: 2027-02-24
+- home: hammersmith-2
+  away: harrow-1
+  date: 2027-02-25
+- home: hackney-1
+  away: hendon-1
+  date: 2027-03-02
+- home: hackney-2
+  away: hendon-3
+  date: 2027-03-02
+- home: hammersmith-1
+  away: albany-1
+  date: 2027-03-04
+- home: kings-head-3
+  away: hammersmith-3
+  date: 2027-03-04
+- home: willesden-brent-1
+  away: harrow-1
+  date: 2027-03-10
+- home: hendon-1
+  away: ealing-1
+  date: 2027-03-11
+- home: hendon-3
+  away: hammersmith-2
+  date: 2027-03-11
+- home: hendon-4
+  away: hammersmith-4
+  date: 2027-03-11
+- home: hammersmith-3
+  away: muswell-hill-2
+  date: 2027-03-18
+- home: hendon-1
+  away: hammersmith-1
+  date: 2027-03-18
+- home: hendon-3
+  away: hackney-2
+  date: 2027-03-18
+- home: hendon-4
+  away: potters-bar-1
+  date: 2027-03-18
+- home: kings-head-2
+  away: harrow-1
+  date: 2027-03-18
+- home: ealing-1
+  away: albany-1
+  date: 2027-03-22
+- home: muswell-hill-1
+  away: west-london-1
   date: 2027-03-23
 - home: willesden-brent-1
   away: kings-head-1
   date: 2027-03-24
-- home: hammersmith-1
-  away: hendon-2
-  date: 2027-03-25
-- home: harrow-1
-  away: metropolitan-1
-  date: 2027-03-25
 - home: kings-head-3
-  away: hammersmith-3
+  away: hendon-5
   date: 2027-03-25
-- home: hackney-1
-  away: ealing-1
+- home: metropolitan-1
+  away: hammersmith-2
+  date: 2027-03-25
+- home: muswell-hill-1
+  away: hammersmith-1
   date: 2027-03-30
-- home: hackney-3
-  away: harrow-2
-  date: 2027-03-30
+- home: west-london-1
+  away: hendon-2
+  date: 2027-03-31
 - home: hammersmith-4
   away: kings-head-3
   date: 2027-04-01
@@ -399,94 +402,91 @@ fixtures:
   away: hackney-2
   date: 2027-04-01
 - home: west-london-1
-  away: muswell-hill-1
+  away: hendon-1
   date: 2027-04-07
 - home: hammersmith-1
-  away: hendon-1
+  away: muswell-hill-1
   date: 2027-04-08
-- home: ealing-2
-  away: hackney-3
-  date: 2027-04-12
 - home: willesden-brent-1
-  away: hackney-2
+  away: kings-head-2
   date: 2027-04-14
-- home: hammersmith-2
+- home: hammersmith-1
+  away: ealing-1
+  date: 2027-04-15
+- home: hendon-1
+  away: hackney-1
+  date: 2027-04-15
+- home: hendon-3
   away: metropolitan-1
   date: 2027-04-15
-- home: hendon-1
-  away: albany-1
+- home: hendon-6
+  away: hackney-3
   date: 2027-04-15
-- home: hendon-3
-  away: kings-head-2
+- home: potters-bar-1
+  away: hammersmith-3
   date: 2027-04-15
-- home: hendon-5
-  away: muswell-hill-2
-  date: 2027-04-15
-- home: ealing-1
+- home: albany-1
   away: west-london-1
   date: 2027-04-19
-- home: hendon-1
-  away: hammersmith-1
-  date: 2027-04-22
-- home: hendon-3
-  away: willesden-brent-1
-  date: 2027-04-22
-- home: hendon-5
-  away: hammersmith-3
-  date: 2027-04-22
-- home: kings-head-2
+- home: muswell-hill-2
+  away: hammersmith-4
+  date: 2027-04-20
+- home: willesden-brent-1
   away: hackney-2
-  date: 2027-04-22
-- home: west-london-1
-  away: albany-1
-  date: 2027-04-28
+  date: 2027-04-21
 - home: hammersmith-1
-  away: hackney-1
+  away: hendon-2
+  date: 2027-04-22
+- home: hammersmith-3
+  away: hendon-6
+  date: 2027-04-22
+- home: harrow-1
+  away: kings-head-2
+  date: 2027-04-22
+- home: ealing-1
+  away: muswell-hill-1
+  date: 2027-04-26
+- home: hammersmith-2
+  away: hackney-2
   date: 2027-04-29
 - home: hammersmith-4
-  away: potters-bar-1
+  away: harrow-2
   date: 2027-04-29
-- home: hendon-1
-  away: muswell-hill-1
+- home: hendon-2
+  away: west-london-1
   date: 2027-04-29
 - home: hendon-4
   away: kings-head-3
   date: 2027-04-29
-- home: hendon-5
-  away: ealing-2
-  date: 2027-04-29
-- home: hammersmith-3
-  away: muswell-hill-2
+- home: muswell-hill-2
+  away: hendon-6
+  date: 2027-05-04
+- home: hammersmith-2
+  away: hendon-3
   date: 2027-05-06
 - home: kings-head-2
-  away: willesden-brent-1
+  away: hackney-2
   date: 2027-05-06
-- home: potters-bar-1
-  away: hendon-5
-  date: 2027-05-06
-- home: ealing-1
-  away: muswell-hill-1
-  date: 2027-05-10
-- home: ealing-2
-  away: hendon-4
-  date: 2027-05-10
-- home: west-london-1
-  away: hendon-1
-  date: 2027-05-12
-- home: hammersmith-1
+- home: muswell-hill-1
   away: albany-1
+  date: 2027-05-11
+- home: hammersmith-1
+  away: west-london-1
   date: 2027-05-13
-- home: hammersmith-4
-  away: hackney-3
+- home: hendon-2
+  away: ealing-1
   date: 2027-05-13
-- home: harrow-1
+- home: hendon-3
   away: kings-head-1
+  date: 2027-05-13
+- home: hendon-6
+  away: potters-bar-1
   date: 2027-05-13
 - home: kings-head-3
   away: harrow-2
   date: 2027-05-13
 - home: metropolitan-1
-  away: hendon-3
+  away: hackney-2
   date: 2027-05-13
 - home: kings-head-2
   away: hammersmith-2
@@ -500,31 +500,31 @@ fixtures:
 - home: metropolitan-1
   away: kings-head-1
   date: 2027-06-10
-spec_checksum: sha256:484427f88a3038bc69380e3b6885f74b25e68d3e3570ab9acfb910261cb5f7f5
+spec_checksum: sha256:6c0a6e9089b3af43170ed42aa8bdcb03adff0744cddeaab1439a90a5404497bf
 stats:
   model: |-
-    satisfaction model '': (model_fingerprint: 0x93b3d0f6dab24915)
-    #Variables: 3'023 (2'850 primary variables)
-      - 3'023 Booleans in [0,1]
-    #kLinear1: 11
-    #kLinear2: 520 (#enforced: 2)
-    #kLinear3: 245
-    #kLinearN: 2'958 (#enforced: 102) (#terms: 33'478)
+    satisfaction model '': (model_fingerprint: 0x99583e43ba037f2a)
+    #Variables: 2'944 (2'771 primary variables)
+      - 2'944 Booleans in [0,1]
+    #kLinear1: 13
+    #kLinear2: 510 (#enforced: 2)
+    #kLinear3: 235
+    #kLinearN: 2'912 (#enforced: 100) (#terms: 31'830)
   solve: |
     CpSolverResponse summary:
     status: OPTIMAL
     objective: 0
     best_bound: 0
-    integers: 1611
-    booleans: 2910
+    integers: 1581
+    booleans: 2848
     conflicts: 0
-    branches: 5820
-    propagations: 143208
-    integer_propagations: 82911
+    branches: 5696
+    propagations: 133862
+    integer_propagations: 77914
     restarts: 0
     lp_iterations: 0
-    walltime: 0.140774
-    usertime: 0.140774
-    deterministic_time: 0.167537
+    walltime: 0.135006
+    usertime: 0.135006
+    deterministic_time: 0.160284
     gap_integral: 0
-    solution_fingerprint: 0x6af4a9dfdb3a7678
+    solution_fingerprint: 0x7ec2b118ada9db8e

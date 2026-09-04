@@ -312,7 +312,8 @@ club_constraints:
       - "2027-02-25"
       - "2027-03-11"
       - "2027-03-18"
-      - "2027-03-25"
+      # Maundy Thursday: hold in reserve
+      # - "2027-03-25"
       - "2027-04-08"
       - "2027-04-15"
       - "2027-04-22"
@@ -343,6 +344,14 @@ club_constraints:
         max_matches: 0
         date_ranges:
           - { start_date: "2026-11-23", end_date: "2026-12-07" }
+      - teams: [hendon-2]
+        max_matches: 0
+        date_ranges:
+          - { start_date: "2026-10-12", end_date: "2026-10-16" }
+          - { start_date: "2026-10-19", end_date: "2026-11-02" }
+          - { start_date: "2027-01-06", end_date: "2027-01-06" }
+          - { start_date: "2027-02-15", end_date: "2027-02-19" }
+          - { start_date: "2027-03-22", end_date: "2027-03-26" }
       # Cap Hendon's overall load: no more than 3 teams playing in any
       # 7-consecutive-day period. 2026-09-10 is exempt: fixed_fixtures pins two
       # pre-season derbies there (Hendon 1 v 2 and Hendon 4 v 5 = 4 teams'-worth),
