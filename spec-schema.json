@@ -296,15 +296,15 @@
         "items": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["start_date", "end_date"],
+          "anyOf": [{ "required": ["start_date"] }, { "required": ["end_date"] }],
           "properties": {
             "start_date": {
               "$ref": "#/$defs/date",
-              "description": "First day of the range (inclusive)."
+              "description": "First day of the range (inclusive). Omit for a range open-ended at the start (no earliest date) -- 'end_date' must then be given instead."
             },
             "end_date": {
               "$ref": "#/$defs/date",
-              "description": "Last day of the range (inclusive); must be on or after 'start_date'."
+              "description": "Last day of the range (inclusive); must be on or after 'start_date'. Omit for a range open-ended at the end (no latest date) -- 'start_date' must then be given instead."
             }
           }
         }

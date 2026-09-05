@@ -183,25 +183,35 @@ class Division:
 
 @dataclasses.dataclass(frozen=True)
 class DateRange:
-    """An inclusive span of calendar dates, `start` on or before `end`.
+    """An inclusive span of calendar dates, `start` on or before `end`. Either may
+    be None for an open-ended bound (no earliest, or no latest, date) -- but not
+    both, since an unbounded-on-both-sides range is never what's meant.
 
     Used by RangeLimit.ranges to pin a cap to specific calendar periods (a
     school-holiday week, say) rather than a rolling window. `d in date_range`
     tests membership.
     """
 
-    start: date
-    end: date
+    start: date | None = None
+    end: date | None = None
 
     def __post_init__(self) -> None:
-        if self.start > self.end:
+        if self.start is None and self.end is None:
+            raise ValueError("DateRange needs a start and/or an end")
+        if self.start is not None and self.end is not None and self.start > self.end:
             raise ValueError(
                 f"DateRange start {self.start.isoformat()} is after end "
                 f"{self.end.isoformat()}"
             )
 
     def __contains__(self, d: object) -> bool:
-        return isinstance(d, date) and self.start <= d <= self.end
+        if not isinstance(d, date):
+            return False
+        if self.start is not None and d < self.start:
+            return False
+        if self.end is not None and d > self.end:
+            return False
+        return True
 
 
 class VenueScope(enum.Enum):

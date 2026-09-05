@@ -2112,6 +2112,22 @@ class TestMatchCountLimitDateRanges(unittest.TestCase):
         self.assertIn(date(2025, 1, 31), rng)
         self.assertNotIn(date(2025, 2, 1), rng)
 
+    def test_date_range_rejects_neither_start_nor_end(self) -> None:
+        with self.assertRaises(ValueError):
+            fmodel.DateRange()
+
+    def test_date_range_open_ended_start_contains_everything_up_to_end(self) -> None:
+        rng = fmodel.DateRange(end=date(2025, 1, 31))
+        self.assertIn(date(2020, 1, 1), rng)
+        self.assertIn(date(2025, 1, 31), rng)
+        self.assertNotIn(date(2025, 2, 1), rng)
+
+    def test_date_range_open_ended_end_contains_everything_from_start(self) -> None:
+        rng = fmodel.DateRange(start=date(2025, 1, 1))
+        self.assertIn(date(2025, 1, 1), rng)
+        self.assertIn(date(2099, 1, 1), rng)
+        self.assertNotIn(date(2024, 12, 31), rng)
+
     def test_max_zero_prunes_candidate_var(self) -> None:
         """A max_matches: 0 limit makes its candidates a certain zero, so _build_model
         never creates a decision variable for them -- observable because a
