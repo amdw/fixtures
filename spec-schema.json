@@ -191,7 +191,7 @@
         "unavailable_away_dates": {
           "type": "array",
           "default": [],
-          "description": "Dates this club's teams are unavailable to play away. Defaults to empty if omitted. For a contiguous span, or a block that applies to every club, a match_count_limits entry with 'max_matches: 0' and 'date_ranges' is usually tidier.",
+          "description": "Dates this club's teams are unavailable to play away. Defaults to empty if omitted. For a contiguous span, or a block that applies to every club, a match_count_limits entry with 'matches: {max: 0}' and 'date_ranges' is usually tidier.",
           "items": { "$ref": "#/$defs/date" },
           "uniqueItems": true
         },
@@ -224,7 +224,7 @@
         },
         "match_count_limits": {
           "type": "array",
-          "description": "The sole match-count constraint mechanism: each entry caps how many matches involving a set of this club's teams may fall within a rolling window of consecutive days -- or, when the entry sets 'date_ranges', within each of a few explicit calendar ranges. Covers a per-team weekly gap ('apply_per: each_team', 'max_matches: 1', 'time_window_days: 7'), a venue's concurrent-match capacity ('apply_per: across_teams', 'venue_scope: home', typically paired with 'max_playing_teams' to also cap distinct teams playing -- see 'match_count_limit_fields/max_playing_teams'), keeping adjacent-division teams apart ('teams: [...]', 'max_matches: 1'), and holding a club's load down over a named holiday week ('date_ranges: [...]', 'max_matches: 1', or 'max_matches: 0' to bar it entirely). Additive, with as many entries as needed; combined with any inherited from club_constraints.defaults -- an entry with an 'override_key' replaces the like-keyed default for this club instead.",
+          "description": "The sole match-count constraint mechanism: each entry bounds how many matches involving a set of this club's teams may fall within a rolling window of consecutive days -- or, when the entry sets 'date_ranges', within each of a few explicit calendar ranges -- from above ('max'), below ('min'), or both. Covers a per-team weekly gap ('apply_per: each_team', 'matches: {max: 1}', 'time_window_days: 7'), a venue's concurrent-match capacity ('apply_per: across_teams', 'venue_scope: home', typically paired with 'playing_teams' to also cap distinct teams playing -- see 'match_count_limit_fields/playing_teams'), keeping adjacent-division teams apart ('teams: [...]', 'matches: {max: 1}'), a floor on activity ('matches: {min: 1}', e.g. at least one match in a congress fortnight), and holding a club's load down over a named holiday week ('date_ranges: [...]', 'matches: {max: 1}', or 'matches: {max: 0}' to bar it entirely). Additive, with as many entries as needed; combined with any inherited from club_constraints.defaults -- an entry with an 'override_key' replaces the like-keyed default for this club instead.",
           "items": { "$ref": "#/$defs/match_count_limit_entry" }
         }
       }
@@ -248,20 +248,81 @@
       }
     },
     "match_count_limit_fields": {
-      "max_matches": {
+      "bound_max": {
         "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }],
-        "description": "The most matches (of the kind selected by 'venue_scope') allowed within any window of 'time_window_days' consecutive days (or, with 'date_ranges', within each listed range). At least one of this and 'max_playing_teams' must be given (or another way to supply the cap -- see the entry-level description), so an entry is never accidentally a no-op. Omitted or null means no plain cap -- only useful alongside 'max_matches_overrides' or 'max_playing_teams', or (on a club entry with an 'override_key') to cancel a default. 'max_matches: 1' forbids a second match in a window; a higher value caps density. 'max_matches: 0' is only meaningful together with 'date_ranges' (a full blackout of those ranges); in the rolling-window form use 'max_matches: 1' or higher."
+        "description": "Shared shape of 'matches.max' and 'playing_teams.max': a non-negative ceiling, or null for none."
       },
-      "max_playing_teams": {
-        "type": "integer",
-        "minimum": 0,
-        "description": "A cap on how many teams'-worth of players from 'teams' a window asks for, as opposed to 'max_matches' (a count of matches). Each counted match adds one of 'teams' playing, or two if it's an internal match between two of 'teams' -- e.g. a same-club derby counted by that club's own venue-capacity rule: one match towards 'max_matches', but two teams from the set on to play, both counted towards 'max_playing_teams'. A venue that can physically host 3 simultaneous matches but only has 3 teams' worth of players to field wants both 'max_matches: 3' and 'max_playing_teams: 3' -- otherwise 3 matches, one an internal derby, would need 4 teams' worth of players. Optional; omit for no such cap. Over a wider window (a multi-day 'time_window_days', or 'date_ranges'), the same pair meeting twice counts twice: it's a running tally of teams asked to play, not a count of distinct teams touched. See 'max_playing_teams_overrides' for per-date replacements."
+      "bound_min": {
+        "oneOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }],
+        "description": "Shared shape of 'matches.min' and 'playing_teams.min': a floor of >= 1, or null for none -- a floor of 0 is never meaningful (it can never bind), so there's no lower value to allow the way 'max' allows 0."
+      },
+      "bound_min_overrides": {
+        "type": "object",
+        "description": "Shared shape of 'matches.min_overrides' and 'playing_teams.min_overrides': per-date replacements, each an integer >= 1, or null to lift the floor that day.",
+        "additionalProperties": {
+          "oneOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }]
+        }
+      },
+      "bound_max_overrides": {
+        "type": "object",
+        "description": "Shared shape of 'matches.max_overrides' and 'playing_teams.max_overrides': per-date replacements, each an integer >= 0, or null to lift the cap that day -- 0 bars every counted match/team that one date, the single-day equivalent of a 'date_ranges' blackout.",
+        "additionalProperties": {
+          "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }]
+        }
+      },
+      "matches": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "description": "Bounds on how many matches (of the kind selected by 'venue_scope') fall within a window of 'time_window_days' consecutive days (or, with 'date_ranges', within each listed range). At least one of this and 'playing_teams' must be given (or another way to supply the bound -- see the entry-level description), so an entry is never accidentally a no-op.",
+        "properties": {
+          "max": {
+            "$ref": "#/$defs/match_count_limit_fields/bound_max",
+            "description": "The most matches allowed within a window. Omitted or null means no ceiling -- only useful alongside 'max_overrides', 'min'/'min_overrides', or (on a club entry with an 'override_key') to cancel a default. 'max: 1' forbids a second match in a window; a higher value caps density. 'max: 0' is only meaningful together with 'date_ranges' (a full blackout of those ranges); in the rolling-window form use 'max: 1' or higher."
+          },
+          "max_overrides": {
+            "$ref": "#/$defs/match_count_limit_fields/bound_max_overrides",
+            "description": "Per-date replacements of 'max', keyed by date; each value an integer >= 0, or null to lift the cap that day (0 bars every counted match that one date -- the single-day equivalent of a 'date_ranges' blackout). Only allowed when 'time_window_days' is 1 (so each window is a single date); not combinable with 'date_ranges'."
+          },
+          "min": {
+            "$ref": "#/$defs/match_count_limit_fields/bound_min",
+            "description": "The fewest matches required within a window. A floor of 0 is never meaningful (it can never bind), so omit 'min' (or leave it null) for no such requirement instead -- there's no 'date_ranges'-shaped exception the way 'max' has one. Combine with 'max' to pin a window's count to a range; when both are given, 'min' may not exceed 'max'."
+          },
+          "min_overrides": {
+            "$ref": "#/$defs/match_count_limit_fields/bound_min_overrides",
+            "description": "Per-date replacements of 'min', keyed by date; each value an integer >= 1, or null to lift the floor that day -- mirroring 'max_overrides'. Only allowed when 'time_window_days' is 1; not combinable with 'date_ranges'."
+          }
+        }
+      },
+      "playing_teams": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "description": "The same four sub-keys as 'matches' ('max', 'max_overrides', 'min', 'min_overrides'), but bounding how many teams'-worth of players from 'teams' a window asks for, as opposed to 'matches' (a count of matches). Each counted match adds one of 'teams' playing, or two if it's an internal match between two of 'teams' -- e.g. a same-club derby counted by that club's own venue-capacity rule: one match towards 'matches.max', but two teams from the set on to play, both counted here. A venue that can physically host 3 simultaneous matches but only has 3 teams' worth of players to field wants both 'matches: {max: 3}' and 'playing_teams: {max: 3}' -- otherwise 3 matches, one an internal derby, would need 4 teams' worth of players. Over a wider window (a multi-day 'time_window_days', or 'date_ranges'), the same pair meeting twice counts twice: it's a running tally of teams asked to play, not a count of distinct teams touched. Unlike 'matches.max', 'max' here may be 0 regardless of 'date_ranges' -- 'nobody from this set plays' is meaningful either way.",
+        "properties": {
+          "max": {
+            "$ref": "#/$defs/match_count_limit_fields/bound_max",
+            "description": "A cap on how many teams'-worth of players from 'teams' a window asks for. Omitted or null means no such cap. See 'max_overrides' for per-date replacements."
+          },
+          "max_overrides": {
+            "$ref": "#/$defs/match_count_limit_fields/bound_max_overrides",
+            "description": "Per-date replacements of 'max', keyed by date; each value an integer >= 0, or null to lift the cap that day. Only allowed when 'time_window_days' is 1 (so each window is a single date); not combinable with 'date_ranges'. Useful for a one-off exception to a standing venue-capacity rule (e.g. a busy week where two derbies must double up, needing more than the usual number of teams playing at once)."
+          },
+          "min": {
+            "$ref": "#/$defs/match_count_limit_fields/bound_min",
+            "description": "The fewest teams'-worth of players from 'teams' a window must ask for. A floor of 0 is never meaningful, so omit 'min' (or leave it null) for no such requirement. When both 'max' and 'min' are given, 'min' may not exceed 'max'."
+          },
+          "min_overrides": {
+            "$ref": "#/$defs/match_count_limit_fields/bound_min_overrides",
+            "description": "Per-date replacements of 'min', keyed by date; each value an integer >= 1, or null to lift the floor that day. Only allowed when 'time_window_days' is 1; not combinable with 'date_ranges'."
+          }
+        }
       },
       "apply_per": {
         "type": "string",
         "enum": ["across_teams", "each_team"],
         "default": "across_teams",
-        "description": "'across_teams' (the default): the counted teams share one budget of 'max_matches'/'max_playing_teams' per window (a venue capacity, or a keep-apart rule). 'each_team': enforced separately for each team -- typically with 'teams' left as every team of the club and 'max_matches: 1', i.e. a per-team gap."
+        "description": "'across_teams' (the default): the counted teams share one budget per window (a venue capacity, or a keep-apart rule). 'each_team': enforced separately for each team -- typically with 'teams' left as every team of the club and 'matches: {max: 1}', i.e. a per-team gap."
       },
       "time_window_days": {
         "type": "integer",
@@ -275,24 +336,10 @@
         "default": "all",
         "description": "Which of the counted teams' matches the cap counts: 'home' only their home matches, 'away' only their away matches, or 'all' (the default) every match they play. E.g. 'away' counts only away fixtures, still allowing one team to play away on a night another is hosting. An internal match (both teams the same club) is never counted under 'away' scope -- its 'away' team is playing at its own club's venue, so it isn't away for an away-load cap; it still counts under 'home' and 'all'."
       },
-      "max_matches_overrides": {
-        "type": "object",
-        "description": "Per-date replacements of 'max_matches', keyed by date; each value an integer >= 1, or null to lift the cap that day. Only allowed when 'time_window_days' is 1 (so each window is a single date).",
-        "additionalProperties": {
-          "oneOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }]
-        }
-      },
-      "max_playing_teams_overrides": {
-        "type": "object",
-        "description": "Per-date replacements of 'max_playing_teams', keyed by date; each value an integer >= 0, or null to lift the cap that day -- mirroring 'max_matches_overrides'. Only allowed when 'time_window_days' is 1 (so each window is a single date); not combinable with 'date_ranges'. Useful for a one-off exception to a standing venue-capacity rule (e.g. a busy week where two derbies must double up, needing more than the usual number of teams playing at once).",
-        "additionalProperties": {
-          "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }]
-        }
-      },
       "date_ranges": {
         "type": "array",
         "minItems": 1,
-        "description": "Restricts this rule to one or more explicit, inclusive calendar ranges instead of every rolling 'time_window_days' window: the caps ('max_matches' and/or 'max_playing_teams') then apply to the counted matches whose date falls within each listed range, each range enforced independently. Use for a limit tied to specific weeks -- a school-holiday week, a congress fortnight -- that a rolling window cannot target. Allowed on club and 'defaults' entries alike; not combinable with 'time_window_days', 'max_matches_overrides' or 'max_playing_teams_overrides' (both tied to a single date), nor (on a club entry) with 'override_key'. With 'date_ranges' set, 'max_matches' must be an integer >= 0 ('max_matches: 0' bars every counted match in the range; a whole-club 'defaults' entry with 'max_matches: 0' is the spec-wide 'nobody plays these dates' block).",
+        "description": "Restricts this rule to one or more explicit, inclusive calendar ranges instead of every rolling 'time_window_days' window: the bounds ('matches' and/or 'playing_teams') then apply to the counted matches whose date falls within each listed range, each range enforced independently. Use for a limit tied to specific weeks -- a school-holiday week, a congress fortnight -- that a rolling window cannot target. Allowed on club and 'defaults' entries alike; not combinable with 'time_window_days' or any '*_overrides' sub-key (all tied to a single date), nor (on a club entry) with 'override_key'. With 'date_ranges' set, 'matches.max' must be an integer >= 0 ('matches: {max: 0}' bars every counted match in the range; a whole-club 'defaults' entry with 'matches: {max: 0}' is the spec-wide 'nobody plays these dates' block).",
         "items": {
           "type": "object",
           "additionalProperties": false,
@@ -312,7 +359,7 @@
       "exclude_dates": {
         "type": "array",
         "minItems": 1,
-        "description": "Dates whose counted matches this rule ignores entirely -- every window is evaluated as if nothing counted falls on them. Use to exempt a date the rule would otherwise make infeasible, typically one whose load is already pinned by fixed_fixtures and governed by a 'max_matches_overrides' entry (e.g. two pre-season derbies on one night, four teams'-worth, under a rolling 'max_playing_teams: 3'). Applies to both 'max_matches' and 'max_playing_teams'; not combinable with 'date_ranges' (list ranges that skip the date instead).",
+        "description": "Dates whose counted matches this rule ignores entirely -- every window is evaluated as if nothing counted falls on them. Use to exempt a date the rule would otherwise make infeasible, typically one whose load is already pinned by fixed_fixtures and governed by a 'max_overrides' entry (e.g. two pre-season derbies on one night, four teams'-worth, under a rolling 'playing_teams: {max: 3}'). Applies to both 'matches' and 'playing_teams'; not combinable with 'date_ranges' (list ranges that skip the date instead).",
         "items": { "$ref": "#/$defs/date" },
         "uniqueItems": true
       },
@@ -324,11 +371,11 @@
     "match_count_limit_entry": {
       "type": "object",
       "additionalProperties": false,
-      "description": "One per-club match_count_limits entry. Needs at least one of 'max_matches' or 'max_playing_teams' -- either alone is fine -- unless 'max_matches_overrides', 'date_ranges', or 'override_key' (cancelling a default) supplies the actual cap instead.",
+      "description": "One per-club match_count_limits entry. Needs a 'matches' and/or 'playing_teams' mapping carrying an actual bound -- either alone is fine -- unless 'date_ranges' or 'override_key' (cancelling a default) is what's meant instead.",
       "properties": {
-        "max_matches": { "$ref": "#/$defs/match_count_limit_fields/max_matches" },
-        "max_playing_teams": {
-          "$ref": "#/$defs/match_count_limit_fields/max_playing_teams"
+        "matches": { "$ref": "#/$defs/match_count_limit_fields/matches" },
+        "playing_teams": {
+          "$ref": "#/$defs/match_count_limit_fields/playing_teams"
         },
         "teams": {
           "type": "array",
@@ -342,12 +389,6 @@
           "$ref": "#/$defs/match_count_limit_fields/time_window_days"
         },
         "venue_scope": { "$ref": "#/$defs/match_count_limit_fields/venue_scope" },
-        "max_matches_overrides": {
-          "$ref": "#/$defs/match_count_limit_fields/max_matches_overrides"
-        },
-        "max_playing_teams_overrides": {
-          "$ref": "#/$defs/match_count_limit_fields/max_playing_teams_overrides"
-        },
         "date_ranges": {
           "$ref": "#/$defs/match_count_limit_fields/date_ranges"
         },
@@ -363,23 +404,17 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["override_key"],
-      "description": "A club_constraints.defaults.match_count_limits entry: like a per-club match_count_limits entry but without 'teams' (defaults apply to every team of every club) and with a required, list-unique 'override_key'. A club's own entry naming that 'override_key' replaces this one for the club wholesale. A 'max_matches: 0' entry with 'date_ranges' is the spec-wide way to say no club plays on those dates (a club can opt back in by overriding the key). Needs at least one of 'max_matches' or 'max_playing_teams' -- either alone is fine -- unless 'max_matches_overrides', 'date_ranges', or a bare cancelling entry (only 'override_key') is what's meant.",
+      "description": "A club_constraints.defaults.match_count_limits entry: like a per-club match_count_limits entry but without 'teams' (defaults apply to every team of every club) and with a required, list-unique 'override_key'. A club's own entry naming that 'override_key' replaces this one for the club wholesale. A 'matches: {max: 0}' entry with 'date_ranges' is the spec-wide way to say no club plays on those dates (a club can opt back in by overriding the key). Needs a 'matches' and/or 'playing_teams' mapping carrying an actual bound -- either alone is fine -- unless 'date_ranges', or a bare cancelling entry (only 'override_key'), is what's meant.",
       "properties": {
-        "max_matches": { "$ref": "#/$defs/match_count_limit_fields/max_matches" },
-        "max_playing_teams": {
-          "$ref": "#/$defs/match_count_limit_fields/max_playing_teams"
+        "matches": { "$ref": "#/$defs/match_count_limit_fields/matches" },
+        "playing_teams": {
+          "$ref": "#/$defs/match_count_limit_fields/playing_teams"
         },
         "apply_per": { "$ref": "#/$defs/match_count_limit_fields/apply_per" },
         "time_window_days": {
           "$ref": "#/$defs/match_count_limit_fields/time_window_days"
         },
         "venue_scope": { "$ref": "#/$defs/match_count_limit_fields/venue_scope" },
-        "max_matches_overrides": {
-          "$ref": "#/$defs/match_count_limit_fields/max_matches_overrides"
-        },
-        "max_playing_teams_overrides": {
-          "$ref": "#/$defs/match_count_limit_fields/max_playing_teams_overrides"
-        },
         "date_ranges": {
           "$ref": "#/$defs/match_count_limit_fields/date_ranges"
         },

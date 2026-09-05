@@ -155,10 +155,12 @@ club_constraints:
       - override_key: weekly-gap     # each team plays at most once a week
         apply_per: each_team
         time_window_days: 7
-        max: 1
+        matches:
+          max: 1
       - override_key: venue-capacity # at most two home matches a night
         venue_scope: home
-        max: 2
+        matches:
+          max: 2
   albany:
     home_dates: [2025-09-01, 2025-09-15, 2025-09-29]
   hackney:
@@ -167,19 +169,24 @@ club_constraints:
       - override_key: weekly-gap     # a fortnight between this club's matches
         apply_per: each_team          # (replaces the like-keyed spec-wide default)
         time_window_days: 14
-        max: 1
+        matches:
+          max: 1
 ```
 
-`match_count_limits` is the one match-count constraint: each entry caps how many
+`match_count_limits` is the one match-count constraint: each entry bounds how many
 matches involving a set of teams may fall in any window of `time_window_days`
-consecutive days. It expresses a per-team gap (`apply_per: each_team`), a venue's
-concurrent-match capacity (`venue_scope: home`, with per-date
-`date_max_overrides`), and a keep-these-teams-apart rule (`teams: [...]`) alike.
-An entry can instead set `date_ranges` (a list of `{start_date, end_date}`
-inclusive ranges) to cap matches within specific calendar periods -- a
-school-holiday week, say -- rather than a rolling window, with `max: 0` to bar
-them outright; a whole-club `max: 0` `date_ranges` entry under `defaults` is how
-a spec-wide "nobody plays these dates" block (e.g. Christmas) is expressed. Every
+consecutive days, via a `matches` mapping (`max`/`max_overrides` from above,
+`min`/`min_overrides` from below) and/or a `playing_teams` one of the same shape,
+which counts teams'-worth of players instead of matches. It expresses a per-team
+gap (`apply_per: each_team`), a venue's concurrent-match capacity (`venue_scope:
+home`, with per-date `matches.max_overrides`), a keep-these-teams-apart rule
+(`teams: [...]`), and a floor on activity (`matches: {min: 1}`, e.g. at least one
+match in a congress fortnight) alike. An entry can instead set `date_ranges` (a
+list of `{start_date, end_date}` inclusive ranges, either end open-ended) to
+bound matches within specific calendar periods -- a school-holiday week, say --
+rather than a rolling window, with `matches: {max: 0}` to bar them outright; a
+whole-club `matches: {max: 0}` `date_ranges` entry under `defaults` is how a
+spec-wide "nobody plays these dates" block (e.g. Christmas) is expressed. Every
 spec-wide default entry carries a unique `override_key`; a club entry repeating
 one replaces that default for the club, and a club entry
 with no `override_key` is additive.

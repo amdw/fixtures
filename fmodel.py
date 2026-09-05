@@ -224,11 +224,11 @@ class VenueScope(enum.Enum):
 
 
 class ApplyPer(enum.Enum):
-    """How a MatchCountLimit's caps (`match_cap`/`playing_teams_cap`) apply to its
-    `teams`. ACROSS_TEAMS: one shared budget for the whole set (a venue capacity, or
-    a keep-these-teams-apart rule). EACH_TEAM: the cap is enforced separately for
-    every team in the set (a per-team gap -- `teams` is then typically every team of
-    a club and `match_cap` is `Cap(1)`).
+    """How a MatchCountLimit's caps (`match_max`/`match_min`/`playing_teams_max`/
+    `playing_teams_min`) apply to its `teams`. ACROSS_TEAMS: one shared budget for
+    the whole set (a venue capacity, or a keep-these-teams-apart rule). EACH_TEAM:
+    the cap is enforced separately for every team in the set (a per-team gap --
+    `teams` is then typically every team of a club and `match_max` is `Cap(1)`).
     """
 
     EACH_TEAM = "each_team"
@@ -257,11 +257,13 @@ def _fixture_counts_for_scope(
 
 @dataclasses.dataclass(frozen=True)
 class Cap:
-    """A per-window integer ceiling: `base` (None = unbounded) together with
-    optional per-date `overrides`.
+    """A per-window integer bound: `base` (None = unbounded) together with
+    optional per-date `overrides`. Used as either a ceiling (MatchCountLimit's
+    `match_max`/`playing_teams_max`) or a floor (`match_min`/`playing_teams_min`)
+    -- the direction lives in which field it's assigned to, not in Cap itself.
 
     An override applies only where a window is a single date (see for_window) --
-    it names that date's replacement ceiling (an int, or None to lift the cap for
+    it names that date's replacement bound (an int, or None to lift the bound for
     that date). Overrides are therefore only meaningful, and only accepted, on a
     RollingLimit with window_days == 1: an override names one date, which lines up
     with exactly one window only then.
@@ -285,7 +287,7 @@ class Cap:
                 )
 
     def for_window(self, window: Collection[date]) -> int | None:
-        """This cap's effective ceiling for `window`: an `overrides` entry when the
+        """This cap's effective bound for `window`: an `overrides` entry when the
         window is a single overridden date, otherwise `base`."""
         if self.overrides and len(window) == 1:
             (d,) = tuple(window)
@@ -295,7 +297,8 @@ class Cap:
     def zero_on(self, d: date) -> bool:
         """Whether this cap is an effective 0 on `d`: a `base` of 0 (every day), or
         an `overrides` entry of 0 for `d` specifically. Feeds the up-front
-        candidate pruning in MatchCountLimit.forbids."""
+        candidate pruning in MatchCountLimit.forbids (a ceiling-only concept -- see
+        MatchCountLimit._active_max_caps)."""
         return self.base == 0 or self.overrides.get(d) == 0
 
 
@@ -355,32 +358,63 @@ class MatchCountLimit(abc.ABC):
       separately for every team (EACH_TEAM -- `teams` is then typically a whole
       club and the cap a per-team gap).
 
-      `match_cap` caps the number of counted matches in a window; `playing_teams_cap`
-      caps how many teams'-worth of players it asks for -- each counted match
+      `match_max` caps the number of counted matches in a window from above;
+      `match_min` floors it from below (e.g. "each team must play at least once
+      every 14 days"). `playing_teams_max`/`playing_teams_min` do the same for how
+      many teams'-worth of players a window asks for -- each counted match
       contributes one, or two if it's an internal match between two of `teams`
       (e.g. a same-club derby counted by that club's own venue-capacity rule): one
-      entry towards `match_cap`, but two teams from the set on to play. Either may
-      be None (that measure left uncapped); at least one must be set. A venue that
-      can physically host 3 simultaneous matches but only has 3 teams' worth of
-      players to field wants both `match_cap=Cap(3)` and `playing_teams_cap=Cap(3)`
-      -- a `match_cap` alone can't tell that 3 matches, one an internal derby,
-      need 4 teams' worth of players. Over a window spanning more than a single
-      date, the same pair meeting twice counts twice towards `playing_teams_cap`:
-      it is a running tally of teams'-worth of players asked to play, not a count
-      of distinct teams touched.
+      entry towards the matches measure, but two teams from the set on to play.
+      Any of the four may be None (that bound left unset); at least one must be
+      set. A venue that can physically host 3 simultaneous matches but only has 3
+      teams' worth of players to field wants both `match_max=Cap(3)` and
+      `playing_teams_max=Cap(3)` -- a matches cap alone can't tell that 3 matches,
+      one an internal derby, need 4 teams' worth of players. Over a window
+      spanning more than a single date, the same pair meeting twice counts twice
+      towards a playing-teams bound: it is a running tally of teams'-worth of
+      players asked to play, not a count of distinct teams touched.
+
+      A floor of 0 is never meaningful (it can never bind), so `match_min`/
+      `playing_teams_min` are expected to always carry a `base`/override `>= 1`;
+      unlike the max side, callers are responsible for that -- Cap itself only
+      rejects negative values. When both a max and a min are set for the same
+      measure and both have a `base`, the min's `base` may not exceed the max's.
     """
 
     teams: Collection[Team]
-    match_cap: Cap | None = None
-    playing_teams_cap: Cap | None = None
+    match_max: Cap | None = None
+    match_min: Cap | None = None
+    playing_teams_max: Cap | None = None
+    playing_teams_min: Cap | None = None
     venue_scope: VenueScope = VenueScope.ALL
     apply_per: ApplyPer = ApplyPer.ACROSS_TEAMS
 
     def __post_init__(self) -> None:
-        if self.match_cap is None and self.playing_teams_cap is None:
+        if (
+            self.match_max is None
+            and self.match_min is None
+            and self.playing_teams_max is None
+            and self.playing_teams_min is None
+        ):
             raise ValueError(
-                "MatchCountLimit needs a match_cap and/or a playing_teams_cap"
+                "MatchCountLimit needs at least one of match_max, match_min, "
+                "playing_teams_max or playing_teams_min"
             )
+        for label, max_cap, min_cap in (
+            ("match", self.match_max, self.match_min),
+            ("playing_teams", self.playing_teams_max, self.playing_teams_min),
+        ):
+            if (
+                max_cap is not None
+                and min_cap is not None
+                and max_cap.base is not None
+                and min_cap.base is not None
+                and min_cap.base > max_cap.base
+            ):
+                raise ValueError(
+                    f"{label}_min base {min_cap.base} exceeds {label}_max base "
+                    f"{max_cap.base}"
+                )
 
     def counts_fixture(self, fixture: Fixture) -> bool:
         """Whether this limit counts `fixture` at all: its home team (for a HOME or
@@ -406,9 +440,9 @@ class MatchCountLimit(abc.ABC):
             # Every candidate this rule counts (per its venue_scope), grouped by
             # date. A match between two teams both in `team_set` (e.g. a same-club
             # derby counted by that club's own rule) appears once here, under one
-            # variable -- counted once towards match_cap below, but twice towards
-            # playing_teams_cap (see _Measure.PLAYING_TEAMS), since it puts two of
-            # `team_set` on to play.
+            # variable -- counted once towards the matches measure below, but
+            # twice towards the playing-teams measure (see
+            # _Measure.PLAYING_TEAMS), since it puts two of `team_set` on to play.
             counted_by_date = self._counted_by_date(
                 _counted_fixtures_by_date(fixture_date_vars, team_set, self.venue_scope)
             )
@@ -416,7 +450,7 @@ class MatchCountLimit(abc.ABC):
                 window_fixture_dates = [
                     (fixture, d) for d in window for fixture in counted_by_date[d]
                 ]
-                for measure, cap in self._active_caps():
+                for measure, cap in self._active_max_caps():
                     ceiling = cap.for_window(window)
                     if ceiling is None:
                         continue
@@ -439,6 +473,19 @@ class MatchCountLimit(abc.ABC):
                     if measure is _Measure.MATCHES and len(terms) <= ceiling:
                         continue
                     model.add(cp_model.LinearExpr.Sum(terms) <= ceiling)
+                for measure, cap in self._active_min_caps():
+                    floor = cap.for_window(window)
+                    if floor is None:
+                        continue
+                    terms = [
+                        measure.term(fixture_vars, fixture, d, team_set)
+                        for fixture, d in window_fixture_dates
+                    ]
+                    # Unlike the max side, an empty `terms` here is not a no-op --
+                    # a floor with nothing at all to count towards it is genuinely
+                    # infeasible, and the constraint must still be added so the
+                    # solver reports that rather than silently ignoring it.
+                    model.add(cp_model.LinearExpr.Sum(terms) >= floor)
 
     def _team_groups(self) -> list[set[Team]]:
         """The groups this rule's caps apply to: one singleton set per team under
@@ -447,12 +494,22 @@ class MatchCountLimit(abc.ABC):
             return [{team} for team in self.teams]
         return [set(self.teams)]
 
-    def _active_caps(self) -> Iterable[tuple[_Measure, Cap]]:
-        """This rule's set caps, paired with the measure each bounds."""
-        if self.match_cap is not None:
-            yield _Measure.MATCHES, self.match_cap
-        if self.playing_teams_cap is not None:
-            yield _Measure.PLAYING_TEAMS, self.playing_teams_cap
+    def _active_max_caps(self) -> Iterable[tuple[_Measure, Cap]]:
+        """This rule's set ceilings, paired with the measure each bounds. Used by
+        add_to_model and by forbids/_covers_zero -- a floor can never make a
+        single candidate impossible outright the way a ceiling of 0 does, so
+        those stay ceiling-only."""
+        if self.match_max is not None:
+            yield _Measure.MATCHES, self.match_max
+        if self.playing_teams_max is not None:
+            yield _Measure.PLAYING_TEAMS, self.playing_teams_max
+
+    def _active_min_caps(self) -> Iterable[tuple[_Measure, Cap]]:
+        """This rule's set floors, paired with the measure each bounds."""
+        if self.match_min is not None:
+            yield _Measure.MATCHES, self.match_min
+        if self.playing_teams_min is not None:
+            yield _Measure.PLAYING_TEAMS, self.playing_teams_min
 
     def _counted_by_date(
         self, counted_by_date: Mapping[date, list[Fixture]]
@@ -491,10 +548,10 @@ class RollingLimit(MatchCountLimit):
 
     `exclude_dates` drops every counted match falling on one of the listed dates
     from this rule: each window is evaluated as if nothing counted happened then,
-    for both `match_cap` and `playing_teams_cap`. Unlike a Cap override it is not
-    tied to a single-date window, so it is the way to exempt one date from a
-    multi-day rolling cap -- typically a date whose load is already pinned by
-    `fixed_fixtures` and bounded by its own Cap override.
+    for every one of `match_max`/`match_min`/`playing_teams_max`/`playing_teams_min`.
+    Unlike a Cap override it is not tied to a single-date window, so it is the way
+    to exempt one date from a multi-day rolling cap -- typically a date whose load
+    is already pinned by `fixed_fixtures` and bounded by its own Cap override.
 
     A Cap with per-date `overrides` requires `window_days == 1` (see Cap).
     """
@@ -509,7 +566,10 @@ class RollingLimit(MatchCountLimit):
                 f"RollingLimit.window_days must be >= 1, got {self.window_days}"
             )
         if self.window_days != 1 and any(
-            cap.overrides for _, cap in self._active_caps()
+            cap.overrides
+            for _, cap in itertools.chain(
+                self._active_max_caps(), self._active_min_caps()
+            )
         ):
             raise ValueError(
                 "RollingLimit per-date Cap overrides require window_days == 1"
@@ -537,16 +597,17 @@ class RollingLimit(MatchCountLimit):
         return None
 
     def _covers_zero(self, d: date) -> bool:
-        return any(cap.zero_on(d) for _, cap in self._active_caps())
+        return any(cap.zero_on(d) for _, cap in self._active_max_caps())
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class RangeLimit(MatchCountLimit):
     """A MatchCountLimit whose windows are exactly the given inclusive calendar
     `ranges`, each counted independently, instead of a rolling window. A
-    `match_cap` of `Cap(0)` bars every counted match across the ranges -- a
-    whole-club, all-teams RangeLimit with `match_cap=Cap(0)` is how a spec-wide
-    "nobody plays these dates" block is expressed.
+    `match_max` of `Cap(0)` bars every counted match across the ranges -- a
+    whole-club, all-teams RangeLimit with `match_max=Cap(0)` is how a spec-wide
+    "nobody plays these dates" block is expressed. A `match_min`/`playing_teams_min`
+    instead requires at least that many within each range.
 
     Caps here carry no per-date overrides, and there is no `exclude_dates`: both
     are meaningless once the windows are already explicit calendar ranges --
@@ -559,7 +620,12 @@ class RangeLimit(MatchCountLimit):
         super().__post_init__()
         if not self.ranges:
             raise ValueError("RangeLimit needs at least one DateRange")
-        if any(cap.overrides for _, cap in self._active_caps()):
+        if any(
+            cap.overrides
+            for _, cap in itertools.chain(
+                self._active_max_caps(), self._active_min_caps()
+            )
+        ):
             raise ValueError(
                 "RangeLimit caps can't carry per-date overrides (leave the date "
                 "out of the ranges instead)"
@@ -570,7 +636,7 @@ class RangeLimit(MatchCountLimit):
         return [[d for d in dates if d in rng] for rng in self.ranges]
 
     def _covers_zero(self, d: date) -> bool:
-        return any(cap.zero_on(d) for _, cap in self._active_caps()) and any(
+        return any(cap.zero_on(d) for _, cap in self._active_max_caps()) and any(
             d in rng for rng in self.ranges
         )
 
@@ -807,7 +873,7 @@ class _FixtureVars:
         candidate in a window gives exactly how many teams'-worth of players from
         `teams` the window asks for -- once per match a team plays in, not just once
         per team, so the same pair meeting twice in the window counts twice (see
-        MatchCountLimit's playing_teams_cap)."""
+        MatchCountLimit's playing_teams_max/playing_teams_min)."""
         count = (fixture.home_team in teams) + (fixture.away_team in teams)
         if count == 0:
             return 0
@@ -884,9 +950,9 @@ def _add_match_count_limit_constraints(
 ) -> None:
     """Apply every match-count limit (see MatchCountLimit.add_to_model): within
     each of a rule's windows -- rolling runs of `window_days` consecutive days for
-    a RollingLimit, or the listed calendar ranges for a RangeLimit -- no more than
-    its `match_cap` matches from the counted set, nor more than its
-    `playing_teams_cap` teams'-worth of players, may be scheduled.
+    a RollingLimit, or the listed calendar ranges for a RangeLimit -- the counted
+    set is bounded above by `match_max`/`playing_teams_max` and/or below by
+    `match_min`/`playing_teams_min`, as configured.
     """
     for rule in limits:
         rule.add_to_model(model, fixture_vars)

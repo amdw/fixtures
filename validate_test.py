@@ -139,7 +139,7 @@ class TestCheckSchedule(unittest.TestCase):
             unavailable_away_dates={},
             match_count_limits=[
                 fmodel.RollingLimit(
-                    teams=[_A1, _B1], match_cap=fmodel.Cap(1), window_days=7
+                    teams=[_A1, _B1], match_max=fmodel.Cap(1), window_days=7
                 )
             ],
         )
@@ -230,7 +230,8 @@ club_constraints:
     match_count_limits:
       - override_key: venue-capacity
         venue_scope: home
-        max_matches: 1
+        matches:
+          max: 1
   albany:
     home_dates: [2025-09-01, 2025-09-29]
   hackney:

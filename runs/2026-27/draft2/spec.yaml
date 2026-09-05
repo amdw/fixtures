@@ -270,21 +270,24 @@ club_constraints:
       - override_key: weekly-gap
         apply_per: each_team
         time_window_days: 7
-        max_matches: 1
+        matches:
+          max: 1
       # Spec-wide venue capacity: one home match a night. Clubs with a bigger
       # venue replace this via 'override_key: venue-capacity'.
       - override_key: venue-capacity
         venue_scope: home
-        max_matches: 1
+        matches:
+          max: 1
       # Christmas/New Year: no club schedules any fixture - home or away - in the
       # fortnight from Monday 2026-12-21 through Sunday 2027-01-03, on the
-      # assumption nobody wants to play then. A whole-club max_matches: 0 date_ranges
+      # assumption nobody wants to play then. A whole-club matches: {max: 0} date_ranges
       # default blocks it everywhere, so individual clubs don't repeat it in
       # their own unavailable_away_dates; a club could opt back in by overriding
       # 'no-play-dates'. (Home dates a club lists inside the range just go
       # unused; the weekend dates in the range never carry fixtures anyway.)
       - override_key: no-play-dates
-        max_matches: 0
+        matches:
+          max: 0
         date_ranges:
           - { start_date: "2026-12-21", end_date: "2027-01-03" }
   hendon:
@@ -332,34 +335,40 @@ club_constraints:
       # the spec-wide one-a-night default).
       - override_key: venue-capacity
         venue_scope: home
-        max_matches: 3
+        matches:
+          max: 3
       # Hendon 1 and Hendon 2 (both division 1) draw on the same players, so keep
       # their matches at least a week apart (matches exactly 7 days apart are
       # still allowed).
       - teams: [hendon-1, hendon-2]
         time_window_days: 7
-        max_matches: 1
+        matches:
+          max: 1
       # London Chess Classic (24 Nov - 7 Dec 2026): no Hendon 1 or Hendon 2
       # match, home or away, during the Classic.
       - teams: [hendon-1, hendon-2]
-        max_matches: 0
+        matches:
+          max: 0
         date_ranges:
           - { start_date: "2026-11-24", end_date: "2026-12-07" }
       # Cap Hendon's overall load: no more than 3 teams playing in any
       # 7-consecutive-day period. 2026-09-10 is exempt: fixed_fixtures pins two
       # pre-season derbies there (Hendon 1 v 2 and Hendon 4 v 5 = 4 teams'-worth),
-      # which that date's own max_matches_overrides entry (2) already covers.
+      # which that date's own matches.max_overrides entry (2) already covers.
       - time_window_days: 7
-        max_playing_teams: 3
+        playing_teams:
+          max: 3
         exclude_dates:
           - "2026-09-10"
       # No matches (even away matches) the week we have a seasonal break for Christmas
-      - max_matches: 0
+      - matches:
+          max: 0
         date_ranges:
           - { start_date: "2026-12-14", end_date: "2026-12-20" }
       # Camden school-holiday weeks - Andrew wants Hendon's fixture load kept
       # down across these.
-      - max_matches: 1
+      - matches:
+          max: 1
         date_ranges:
           - { start_date: "2026-10-26", end_date: "2026-11-01" } # Oct half term
           - { start_date: "2027-02-15", end_date: "2027-02-21" } # Feb half term
@@ -368,7 +377,7 @@ club_constraints:
           - { start_date: "2027-04-05", end_date: "2027-04-11" } # Easter
           - { start_date: "2027-05-31", end_date: "2027-06-06" } # May half term
       # Per-date caps on Hendon's total matches (home + away) on a night, layered
-      # on top of the 7-day cap above (max_matches: null = no cap except on the listed
+      # on top of the 7-day cap above (matches: {max: null} = no cap except on the listed
       # dates):
       #
       #  - First Thursday of each month (= 1): the date of Hendon's monthly
@@ -383,23 +392,24 @@ club_constraints:
       #    club (many members still renewing), so we keep the load down then.
       #    Add any further September dates here if the reserve ones are ever
       #    uncommented.
-      - max_matches: null
-        max_matches_overrides:
-          "2026-09-03": 1
-          "2026-09-10": 2
-          "2026-09-17": 2
-          "2026-09-24": 2
-          "2026-10-01": 1
-          "2026-11-05": 1
-          "2026-12-03": 1
-          "2027-01-07": 1
-          "2027-02-04": 1
-          "2027-03-04": 1
-          "2027-04-01": 1
-          "2027-05-06": 1
-          "2027-06-03": 1
-          "2027-07-01": 1
-          "2027-08-05": 1
+      - matches:
+          max: null
+          max_overrides:
+            "2026-09-03": 1
+            "2026-09-10": 2
+            "2026-09-17": 2
+            "2026-09-24": 2
+            "2026-10-01": 1
+            "2026-11-05": 1
+            "2026-12-03": 1
+            "2027-01-07": 1
+            "2027-02-04": 1
+            "2027-03-04": 1
+            "2027-04-01": 1
+            "2027-05-06": 1
+            "2027-06-03": 1
+            "2027-07-01": 1
+            "2027-08-05": 1
   west-london:
     home_dates:
       - "2026-10-07"
@@ -453,7 +463,8 @@ club_constraints:
       # 24 Nov - 7 Dec; the range starts the Monday of that week (2026-11-23)
       # per Andy's "last week of November" ask. The two Wednesdays in the span
       # (2026-11-25, 2026-12-02) are also dropped from home_dates above.
-      - max_matches: 0
+      - matches:
+          max: 0
         venue_scope: away
         date_ranges:
           - { start_date: "2026-11-23", end_date: "2026-12-07" }
@@ -519,7 +530,8 @@ club_constraints:
       # rundown), and w/c 29 Mar + w/c 5 Apr (Easter, and a club-level ask -
       # adjacent weeks, so one range). The Wednesday of each (2027-01-06,
       # 2027-03-31, 2027-04-07) is likewise dropped from home_dates above.
-      - max_matches: 0
+      - matches:
+          max: 0
         venue_scope: away
         date_ranges:
           - { start_date: "2027-01-04", end_date: "2027-01-10" } # w/c 4 Jan
@@ -590,7 +602,8 @@ club_constraints:
       # Mon-Fri of a blocked week (weekends never carry fixtures), with runs of
       # consecutive blocked weeks merged across the weekend between them. This
       # replaces ~95 individually listed weekday dates.
-      - max_matches: 0
+      - matches:
+          max: 0
         venue_scope: away
         date_ranges:
           - { start_date: "2026-09-28", end_date: "2026-10-09" } # w/c 28 Sep + 5 Oct
@@ -633,7 +646,7 @@ club_constraints:
     # here. But the real limit already comes from the match_count_limits entries
     # below: with adjacent teams (1-2, 2-3, 3-4) barred from sharing a date, at
     # most 2 of the 4 can ever coschedule (e.g. 1+3, 1+4 or 2+4), so the
-    # venue-capacity default is simply cancelled (max_matches: null, see
+    # venue-capacity default is simply cancelled (matches: {max: null}, see
     # match_count_limits below) rather than restating that bound as a number
     # that would need to stay in sync with it (and would otherwise need updating
     # if Hammersmith confirms their venue's actual concurrent-match capacity
@@ -959,17 +972,21 @@ club_constraints:
       # top of this club's block).
       - override_key: venue-capacity
         venue_scope: home
-        max_matches: null
+        matches:
+          max: null
       # Adjacent Hammersmith teams (by team index: 1-2, 2-3, 3-4) shouldn't play
       # on the same date, per the club's preference (2026-08-24) - they only asked
       # for same-date avoidance, so time_window_days is left at its default of 1
       # rather than keeping them apart by more than that.
       - teams: [hammersmith-1, hammersmith-2]
-        max_matches: 1
+        matches:
+          max: 1
       - teams: [hammersmith-2, hammersmith-3]
-        max_matches: 1
+        matches:
+          max: 1
       - teams: [hammersmith-3, hammersmith-4]
-        max_matches: 1
+        matches:
+          max: 1
   muswell-hill:
     # Club night is Tuesday. Available for home matches October and
     # November 2026, then January to around mid-May 2027 (2026-08-25
@@ -1053,7 +1070,8 @@ club_constraints:
       # one-home-match-a-night default).
       - override_key: venue-capacity
         venue_scope: home
-        max_matches: 2
+        matches:
+          max: 2
     home_dates:
       - "2026-10-06"
       - "2026-10-13"
@@ -1180,7 +1198,8 @@ club_constraints:
       # 2026-09-01 - see the note above), nor in November 2026 or the first week
       # of December. The home side of both spans is handled by home_dates above
       # skipping them.
-      - max_matches: 0
+      - matches:
+          max: 0
         venue_scope: away
         date_ranges:
           - { start_date: "2026-09-01", end_date: "2026-09-30" }
@@ -1199,7 +1218,7 @@ club_constraints:
     #
     # Exceptions: on these dates the venue already has another (non-Middlesex)
     # fixture, so only one Middlesex match can be hosted on each - expressed as
-    # per-date 'max_matches_overrides' of the limit of 2. Leslie Pringle first gave
+    # per-date 'matches.max_overrides' of the limit of 2. Leslie Pringle first gave
     # 2026-09-21, 2026-10-05 and 2026-10-12 (2026-08-28), then supplied the
     # full list in an update as of Sunday evening 2026-08-30, adding
     # 2026-10-26, 2026-11-02, 2027-02-08 and 2027-04-19 ("most of it clear"
@@ -1215,18 +1234,20 @@ club_constraints:
     match_count_limits:
       - override_key: venue-capacity
         venue_scope: home
-        max_matches: 2
-        max_matches_overrides:
-          "2026-10-05": 1
-          "2026-10-12": 1
-          "2026-10-26": 1
-          "2026-11-02": 1
-          "2027-02-08": 1
-          "2027-04-19": 1
+        matches:
+          max: 2
+          max_overrides:
+            "2026-10-05": 1
+            "2026-10-12": 1
+            "2026-10-26": 1
+            "2026-11-02": 1
+            "2027-02-08": 1
+            "2027-04-19": 1
       # No away matches before the club's 5th October season start (Leslie
       # Pringle, 2026-09-02). The home side is handled by home_dates below
       # skipping the three preceding Mondays.
-      - max_matches: 0
+      - matches:
+          max: 0
         venue_scope: away
         date_ranges:
           - { start_date: "2026-09-01", end_date: "2026-10-04" }
@@ -1235,7 +1256,8 @@ club_constraints:
       # Dec, 11 Jan or 8 Feb - blocked here (home and away) for Ealing 1
       # only. w/c 11 Jan already contains 2027-01-12, so moving it out of
       # that week is enough; no separate single-date exclusion is needed.
-      - max_matches: 0
+      - matches:
+          max: 0
         teams: [ealing-1]
         date_ranges:
           - { start_date: "2026-11-09", end_date: "2026-11-13" }
@@ -1251,7 +1273,8 @@ club_constraints:
       # her). Both matches should move, avoiding w/c 26 Oct, 9 Nov
       # and the week containing 11 March (w/c 8 Mar, since the 11th is a
       # Thursday) - blocked here (home and away) for Ealing 2 only.
-      - max_matches: 0
+      - matches:
+          max: 0
         teams: [ealing-2]
         date_ranges:
           - { start_date: "2026-10-26", end_date: "2026-10-30" }
@@ -1571,12 +1594,14 @@ club_constraints:
       # spec-wide one-home-match-a-night default.
       - override_key: venue-capacity
         venue_scope: home
-        max_matches: 5
+        matches:
+          max: 5
       # Away matches only: keep Harrow 1 and Harrow 2 from playing away on
       # the same date, per Surjit, without constraining their home dates.
       - teams: [harrow-1, harrow-2]
         venue_scope: away
-        max_matches: 1
+        matches:
+          max: 1
       # Front-load Harrow's fixtures into 2026 (see the club note above). Both
       # teams are held to about the same fraction of their matches in 2027, not
       # the same count: harrow-1 and harrow-2 play a different total (14 vs
@@ -1595,12 +1620,14 @@ club_constraints:
       # cap alone.
       - teams: [harrow-1]
         apply_per: each_team
-        max_matches: 5
+        matches:
+          max: 5
         date_ranges:
           - { start_date: "2027-01-01", end_date: "2027-12-31" }
       - teams: [harrow-2]
         apply_per: each_team
-        max_matches: 4
+        matches:
+          max: 4
         date_ranges:
           - { start_date: "2027-01-01", end_date: "2027-12-31" }
   kings-head:
@@ -1626,7 +1653,7 @@ club_constraints:
     #     that team did not list as playable (home or away).
     #   - Away availability is handled in match_count_limits: each team may play
     #     away only on the Thursdays it listed or inside the away windows it
-    #     gave Colin, so a 'max_matches: 0' / 'venue_scope: away' / 'date_ranges' entry
+    #     gave Colin, so a 'matches: {max: 0}' / 'venue_scope: away' / 'date_ranges' entry
     #     per team bars every other weekday (same idiom as Metropolitan and West
     #     London). Ranges are Mon-Fri spans with consecutive blocked weeks
     #     merged across the weekend between them, and run through June so the
@@ -1836,14 +1863,16 @@ club_constraints:
       # as it stands.
       - teams: [kings-head-1, kings-head-2]
         time_window_days: 2
-        max_matches: 1
+        matches:
+          max: 1
       # KH2 <-> KH3: at most one match in any 7-day window across the pair (a
       # 7-day cap already forbids same-day / consecutive-day pairings).
       # apply_per defaults to across_teams: the pair shares a single match
       # per window. This one solves comfortably.
       - teams: [kings-head-2, kings-head-3]
         time_window_days: 7
-        max_matches: 1
+        matches:
+          max: 1
       # Per-team away-availability windows (Colin, 2026-08-31). Each team may
       # play away only on the Thursdays it listed or within the away windows
       # it gave; these ranges bar every other weekday. Mon-Fri spans,
@@ -1852,7 +1881,8 @@ club_constraints:
       # 28 Sep) through June (to cover the June away Thursdays if the season
       # overruns).
       - teams: [kings-head-1]
-        max_matches: 0
+        matches:
+          max: 0
         venue_scope: away
         date_ranges:
           - { start_date: "2026-09-01", end_date: "2026-09-25" }
@@ -1877,7 +1907,8 @@ club_constraints:
           - { start_date: "2027-04-13", end_date: "2027-05-07" }
           - { start_date: "2027-06-15", end_date: "2027-06-18" }
       - teams: [kings-head-2]
-        max_matches: 0
+        matches:
+          max: 0
         venue_scope: away
         date_ranges:
           - { start_date: "2026-09-01", end_date: "2026-09-25" }
@@ -1911,7 +1942,8 @@ club_constraints:
           - { start_date: "2027-06-09", end_date: "2027-06-11" }
           - { start_date: "2027-06-15", end_date: "2027-06-18" }
       - teams: [kings-head-3]
-        max_matches: 0
+        matches:
+          max: 0
         venue_scope: away
         date_ranges:
           - { start_date: "2026-09-01", end_date: "2026-09-25" }
@@ -2001,5 +2033,5 @@ fixed_fixtures:
     date: "2026-12-10"
 
 # Christmas/New Year is blocked spec-wide by the 'no-play-dates' entry under
-# club_constraints.defaults.match_count_limits above (a max_matches: 0 date range over
+# club_constraints.defaults.match_count_limits above (a matches: {max: 0} date range over
 # 2026-12-21 to 2027-01-03).
