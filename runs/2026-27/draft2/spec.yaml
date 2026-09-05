@@ -278,13 +278,14 @@ club_constraints:
         venue_scope: home
         matches:
           max: 1
-      # Christmas/New Year: no club schedules any fixture - home or away - in the
-      # fortnight from Monday 2026-12-21 through Sunday 2027-01-03, on the
-      # assumption nobody wants to play then. A whole-club matches: {max: 0} date_ranges
-      # default blocks it everywhere, so individual clubs don't repeat it in
-      # their own unavailable_away_dates; a club could opt back in by overriding
-      # 'no-play-dates'. (Home dates a club lists inside the range just go
-      # unused; the weekend dates in the range never carry fixtures anyway.)
+      # Christmas/New Year: no club schedules any fixture - home or away - in
+      # the fortnight from Monday 2026-12-21 through Sunday 2027-01-03, on the
+      # assumption nobody wants to play then. A whole-club matches: {max: 0}
+      # date_ranges default blocks it everywhere, so individual clubs don't
+      # repeat it in their own away blackouts; a club could opt back in by
+      # overriding 'no-play-dates'. (Home dates a club lists inside the range
+      # just go unused; the weekend dates in the range never carry fixtures
+      # anyway.)
       - override_key: no-play-dates
         matches:
           max: 0
@@ -442,22 +443,26 @@ club_constraints:
       - "2027-04-28"
       - "2027-05-05"
       - "2027-05-12"
-    unavailable_away_dates:
-      # Club-level date to avoid (Andy Hayler).
-      - "2026-09-30"
-      # draft1 placed the away match at Albany on 2026-10-19; Andy Hayler
-      # asked (2026-09-02) to move it to another date.
-      - "2026-10-19"
-      # Either side of the 2027-04-14 home date the club wants to avoid
-      # (see home_dates above). This also covers Andy Hayler's 2026-09-02
-      # request to block out the whole w/c 12 April week as a precaution -
-      # already fully blocked (no home_dates entry for 2027-04-14, and
-      # 04-12/04-13/04-15 below), so no further change was needed for that.
-      - "2027-04-12"
-      - "2027-04-13"
-      - "2027-04-15"
-      # Christmas/New Year is handled by the spec-wide 'no-play-dates' default.
     match_count_limits:
+      # Club-level dates West London's teams can't travel:
+      #  - 2026-09-30 (Andy Hayler);
+      #  - 2026-10-19 (draft1 placed the away match at Albany here; Andy Hayler
+      #    asked 2026-09-02 to move it);
+      #  - either side of the 2027-04-14 home date the club wants to avoid (see
+      #    home_dates above). This also covers Andy Hayler's 2026-09-02 request
+      #    to block out the whole w/c 12 April week as a precaution - already
+      #    fully blocked (no home_dates entry for 2027-04-14, and
+      #    04-12/04-13/04-15 here), so no further change was needed for that.
+      # Christmas/New Year is handled by the spec-wide 'no-play-dates' default.
+      - venue_scope: away
+        matches:
+          max: 0
+        dates:
+          - "2026-09-30"
+          - "2026-10-19"
+          - "2027-04-12"
+          - "2027-04-13"
+          - "2027-04-15"
       # London Chess Classic precaution (Andy Hayler): no away matches the last
       # week of November / first week of December 2026. The 2026 Classic runs
       # 24 Nov - 7 Dec; the range starts the Monday of that week (2026-11-23)
@@ -478,11 +483,12 @@ club_constraints:
     #   - Mandatory avoid weeks: w/c 21 Dec, 28 Dec, 4 Jan (Christmas/New
     #     Year) and 29 Mar (Easter). Christmas/New Year is also covered by
     #     the spec-wide 'no-play-dates' default; the w/c 4 Jan and w/c 29 Mar
-    #     away-side blocks are in unavailable_away_dates below since they
-    #     aren't.
+    #     away-side blocks are the 'venue_scope: away' match_count_limits entry
+    #     below since they aren't.
     #   - Optional ("if possible") avoid weeks: w/c 5th October and w/c 15th
     #     March, both Simon Liebesny's personal (not team) preference, and
-    #     w/c 5th April, a club-level ask (see unavailable_away_dates below).
+    #     w/c 5th April, a club-level ask (see the away match_count_limits entry
+    #     below).
     #     w/c 5th October needs no separate exclusion, being already outside
     #     the season window above; w/c 15th March's Wednesday (2027-03-17) is
     #     dropped from home_dates below to honour it.
@@ -504,8 +510,8 @@ club_constraints:
       - "2026-12-09"
       - "2026-12-16"
       # 2026-12-23 and 2026-12-30 skipped: Christmas/New Year (the spec-wide
-      # 'no-play-dates' default covers this club too, so no unavailable_away_dates
-      # entry is needed below).
+      # 'no-play-dates' default covers this club too, so no away-block
+      # match_count_limits entry is needed below).
       # 2027-01-06 skipped: w/c 4 Jan, mandatory avoid week (New Year rundown).
       - "2027-01-13"
       - "2027-01-20"
@@ -545,9 +551,9 @@ club_constraints:
     # free Thursdays - "on all other weeks the same group of players already
     # have a match or our home venue has too many matches etc" is taken to
     # mean the whole Mon-Fri weekday span of every other week is blocked for
-    # them, not just the Thursday, so unavailable_away_dates below lists all
-    # five weekdays of each non-free week (weekends excluded as matches are
-    # never played then).
+    # them, not just the Thursday, so the away blackout below covers all five
+    # weekdays of each non-free week (weekends excluded as matches are never
+    # played then).
     #
     # Two further free Thursdays, 2027-06-03 and 2027-06-10, are included in
     # home_dates below. They fall beyond every other club's home_dates but
@@ -570,8 +576,8 @@ club_constraints:
     # 2027-03-04, 2027-03-11, 2027-04-22) and four new free dates were added
     # (2026-12-17, 2027-01-21, 2027-03-25, 2027-04-15). Same interpretation as
     # before - home on the listed Thursday, or away anywhere in that week; the
-    # Mon-Fri span of each newly-blocked week is added to
-    # unavailable_away_dates and each newly-free week's span removed.
+    # Mon-Fri span of each newly-blocked week is added to the away
+    # match_count_limits block below and each newly-free week's span removed.
     #
     # Bug found in draft1 (John Kitchen, 2026-09-02): the away-block ranges
     # jumped straight from "w/c 19 Apr - 3 May" to the 3/10 June free weeks,
@@ -631,9 +637,9 @@ club_constraints:
     #
     # 2026-09-03 falls before the season window above, but is included as a home
     # date regardless since Adam's spreadsheet (2026-08-30) marks all 4 teams
-    # unavailable that day for both home and away (see each team's
-    # unavailable_home_dates/unavailable_away_dates below) - it's listed here
-    # for an accurate record even though every team's own unavailability already
+    # unavailable that day for both home and away (see each team's home and away
+    # blackouts below) - it's listed here for an accurate record even though
+    # every team's own unavailability already
     # makes it unusable. (Any date this early is also excluded from new
     # scheduling by the spec's earliest_match_date cutoff, which defaults to
     # today when omitted, as it is here.)
@@ -705,27 +711,31 @@ club_constraints:
     # - '2027-06-17'
     # - '2027-06-24'
 
-    # Per-team refinements to the club-wide home_dates/unavailable_away_dates
-    # above, since Hammersmith's 4 teams gave separate per-team (un)availability.
-    # Spreadsheet supplied 2026-08-24, rechecked against updated copies from Adam
-    # on 2026-08-26 and 2026-08-27, then re-derived in full from the revised
-    # spreadsheet Adam sent on 2026-08-30 after the London League fixtures were
-    # reissued to avoid Middlesex clashes (this shifted a number of away dates
-    # for every team). Each team's unavailable_home_dates below lists the
-    # Thursdays, from the club-wide home_dates above, that the spreadsheet marks
-    # unavailable for that specific team (its effective home dates are the
-    # club-wide list minus these); each team's unavailable_away_dates is
-    # additional to the club-wide unavailable_away_dates above (currently empty)
-    # and lists every weekday (Mon-Fri; matches are never scheduled on weekends,
-    # and the spreadsheet's red weekend cells are ignored) that team's
-    # spreadsheet marks unavailable, Christmas/New Year fortnight excluded
-    # (already covered by the spec-wide 'no-play-dates' default). Dates beyond
-    # the active home_dates cutoff (the post-14-May reserve Thursdays, and weekday away
-    # dates into June 2027) are still recorded where the spreadsheet marks them,
-    # so they take effect automatically if the season ever needs to extend.
-    teams:
-      hammersmith-1:
-        unavailable_home_dates:
+    # Per-team refinements to the club-wide home_dates above, since Hammersmith's
+    # 4 teams gave separate per-team (un)availability. Spreadsheet supplied
+    # 2026-08-24, rechecked against updated copies from Adam on 2026-08-26 and
+    # 2026-08-27, then re-derived in full from the revised spreadsheet Adam sent
+    # on 2026-08-30 after the London League fixtures were reissued to avoid
+    # Middlesex clashes (this shifted a number of away dates for every team).
+    #
+    # Expressed as match_count_limits blackouts, one pair per team:
+    #   - a 'venue_scope: home' / 'matches: {max: 0}' entry listing the
+    #     Thursdays (from the club-wide home_dates above) the spreadsheet marks
+    #     unavailable for that team's own hosting;
+    #   - a 'venue_scope: away' / 'matches: {max: 0}' entry listing every weekday
+    #     (Mon-Fri; matches are never scheduled on weekends, and the
+    #     spreadsheet's red weekend cells are ignored) that team can't travel,
+    #     Christmas/New Year fortnight excluded (already covered by the spec-wide
+    #     'no-play-dates' default).
+    # Dates beyond the active home_dates cutoff (the post-14-May reserve
+    # Thursdays, and weekday away dates into June 2027) are still recorded where
+    # the spreadsheet marks them, so they take effect automatically if the season
+    # ever needs to extend.
+    match_count_limits:
+      - teams: [hammersmith-1]
+        venue_scope: home
+        matches: { max: 0 }
+        dates:
           - "2026-09-03"
           - "2026-09-17"
           - "2026-09-24"
@@ -735,9 +745,9 @@ club_constraints:
           - "2026-11-05"
           - "2026-11-12"
           - "2026-11-19"
-          # 2026-11-26 and 2026-12-03: London Chess Classic fortnight (see
-          # unavailable_away_dates below); added per Adam's updated
-          # availability table (hammersmith.html).
+          # 2026-11-26 and 2026-12-03: London Chess Classic fortnight (see the
+          # away blackout below); added per Adam's updated availability table
+          # (hammersmith.html).
           - "2026-11-26"
           - "2026-12-03"
           - "2027-01-07"
@@ -752,7 +762,10 @@ club_constraints:
           - "2027-05-06"
           # Reserve Thursday (post-14-May), recorded now so it applies if activated.
           - "2027-05-27"
-        unavailable_away_dates:
+      - teams: [hammersmith-1]
+        venue_scope: away
+        matches: { max: 0 }
+        dates:
           - "2026-09-03"
           - "2026-09-17"
           - "2026-09-24"
@@ -816,8 +829,10 @@ club_constraints:
           - "2027-06-08"
           - "2027-06-09"
           - "2027-06-15"
-      hammersmith-2:
-        unavailable_home_dates:
+      - teams: [hammersmith-2]
+        venue_scope: home
+        matches: { max: 0 }
+        dates:
           - "2026-09-03"
           - "2026-09-10"
           - "2026-09-17"
@@ -830,7 +845,10 @@ club_constraints:
           - "2027-02-11"
           - "2027-02-18"
           - "2027-04-01"
-        unavailable_away_dates:
+      - teams: [hammersmith-2]
+        venue_scope: away
+        matches: { max: 0 }
+        dates:
           - "2026-09-03"
           - "2026-09-10"
           - "2026-09-17"
@@ -861,8 +879,10 @@ club_constraints:
           - "2027-06-09"
           - "2027-06-15"
           - "2027-06-16"
-      hammersmith-3:
-        unavailable_home_dates:
+      - teams: [hammersmith-3]
+        venue_scope: home
+        matches: { max: 0 }
+        dates:
           - "2026-09-03"
           - "2026-09-10"
           # 2026-09-17 ruled out for HAM 3/4 for now (former alt derby date); see fixed_fixtures note.
@@ -876,7 +896,10 @@ club_constraints:
           - "2027-04-08"
           # Reserve Thursday (post-14-May), recorded now so it applies if activated.
           - "2027-06-24"
-        unavailable_away_dates:
+      - teams: [hammersmith-3]
+        venue_scope: away
+        matches: { max: 0 }
+        dates:
           - "2026-09-03"
           - "2026-09-10"
           - "2026-09-14"
@@ -917,8 +940,10 @@ club_constraints:
           - "2027-06-15"
           - "2027-06-16"
           - "2027-06-24"
-      hammersmith-4:
-        unavailable_home_dates:
+      - teams: [hammersmith-4]
+        venue_scope: home
+        matches: { max: 0 }
+        dates:
           - "2026-09-03"
           - "2026-09-10"
           # 2026-09-17 ruled out for HAM 3/4 for now (former alt derby date); see fixed_fixtures note.
@@ -929,7 +954,10 @@ club_constraints:
           - "2027-04-08"
           # Reserve Thursday (post-14-May), recorded now so it applies if activated.
           - "2027-06-24"
-        unavailable_away_dates:
+      - teams: [hammersmith-4]
+        venue_scope: away
+        matches: { max: 0 }
+        dates:
           - "2026-09-03"
           - "2026-09-10"
           - "2026-09-14"
@@ -966,8 +994,6 @@ club_constraints:
           - "2027-06-09"
           - "2027-06-16"
           - "2027-06-24"
-
-    match_count_limits:
       # Cancel the spec-wide one-home-match-a-night default (see the note at the
       # top of this club's block).
       - override_key: venue-capacity
@@ -996,7 +1022,7 @@ club_constraints:
     # The spec-wide one-home-match-a-night default (the 'venue-capacity' entry
     # under club_constraints.defaults) already matches their "one match per home
     # night, in a separate room" limit, so no override is needed here.
-    # No unavailable_away_dates: the club has no away-match restrictions,
+    # No away blackout: the club has no away-match restrictions,
     # playing only in the Middlesex League.
     home_dates:
       - "2026-10-06"
@@ -1053,18 +1079,18 @@ club_constraints:
     #
     # The 11 London League fixture dates supplied by Bob Eames - originally
     # 2026-08-25, revised 2026-08-30 once the London League fixtures were
-    # reissued to avoid Middlesex clashes - are recorded under teams.hackney-1
-    # below, not at club level: Bob clarified (follow-up to his 2026-08-30
-    # list) that they only clash for Hackney 1, as there's no player crossover
-    # with Hackney 2 or 3 (and most of the LL fixtures are on Wednesdays
-    # anyway). "Wed 16 Nov" in Bob's revised list is recorded as 2026-12-16 (a
-    # Wednesday, fitting the list's otherwise chronological order) per Andrew's
-    # 2026-08-30 confirmation. Of the 11, only 2027-01-05 falls on Hackney's
-    # own Tuesday home night within the active season: it stays in home_dates
-    # below (usable by Hackney 2 and 3) and is listed in hackney-1's
-    # unavailable_home_dates. 2027-05-18 is likewise a Tuesday but falls in
-    # the post-14-May reserve block; 2026-12-16 is a Wednesday additionally
-    # covered by December being excluded from home_dates throughout.
+    # reissued to avoid Middlesex clashes - are recorded as hackney-1-scoped
+    # match_count_limits blackouts below, not club-wide: Bob clarified
+    # (follow-up to his 2026-08-30 list) that they only clash for Hackney 1, as
+    # there's no player crossover with Hackney 2 or 3 (and most of the LL
+    # fixtures are on Wednesdays anyway). "Wed 16 Nov" in Bob's revised list is
+    # recorded as 2026-12-16 (a Wednesday, fitting the list's otherwise
+    # chronological order) per Andrew's 2026-08-30 confirmation. Of the 11, only
+    # 2027-01-05 falls on Hackney's own Tuesday home night within the active
+    # season: it stays in home_dates below (usable by Hackney 2 and 3) and is in
+    # hackney-1's 'venue_scope: home' blackout. 2027-05-18 is likewise a Tuesday
+    # but falls in the post-14-May reserve block; 2026-12-16 is a Wednesday
+    # additionally covered by December being excluded from home_dates throughout.
     match_count_limits:
       # Venue takes two 6-board matches at once (replaces the spec-wide
       # one-home-match-a-night default).
@@ -1072,6 +1098,37 @@ club_constraints:
         venue_scope: home
         matches:
           max: 2
+      # The 11 London League fixture dates (Bob Eames's 2026-08-30 reissued
+      # list; "Wed 16 Nov" read as 2026-12-16 per Andrew's 2026-08-30
+      # confirmation). Per Bob's follow-up they only clash for Hackney 1 - no
+      # player crossover with Hackney 2 or 3 - so they're scoped to hackney-1
+      # rather than the whole club. Hackney 1's players are unavailable on these
+      # regardless of venue, so each is blocked for both home and away.
+      #
+      # 2027-01-05 is the only one that is an active Tuesday home date;
+      # 2027-05-18 is a reserve Tuesday (post-14-May), recorded now so it
+      # applies automatically if that date is ever activated.
+      - teams: [hackney-1]
+        venue_scope: home
+        matches: { max: 0 }
+        dates:
+          - "2027-01-05"
+          - "2027-05-18"
+      - teams: [hackney-1]
+        venue_scope: away
+        matches: { max: 0 }
+        dates:
+          - "2026-11-18"
+          - "2026-12-16"
+          - "2027-01-05"
+          - "2027-03-01"
+          - "2027-03-11"
+          - "2027-04-07"
+          - "2027-04-14"
+          - "2027-04-21"
+          - "2027-05-06"
+          - "2027-05-18"
+          - "2027-06-09"
     home_dates:
       - "2026-10-06"
       - "2026-10-13"
@@ -1115,33 +1172,6 @@ club_constraints:
     # - '2027-06-15'
     # - '2027-06-22'
     # - '2027-06-29'
-    teams:
-      hackney-1:
-        # The 11 London League fixture dates (Bob Eames's 2026-08-30 reissued
-        # list; "Wed 16 Nov" read as 2026-12-16 per Andrew's 2026-08-30
-        # confirmation). Per Bob's follow-up they only clash for Hackney 1 -
-        # no player crossover with Hackney 2 or 3 - so they sit here rather
-        # than at club level. Hackney 1's players are unavailable on these
-        # regardless of which club would be hosting, so each is blocked for
-        # both home and away purposes.
-        unavailable_home_dates:
-          # 2027-01-05 is the only one of the 11 that is an active Tuesday home
-          # date; 2027-05-18 is a reserve Tuesday (post-14-May), recorded now
-          # so it applies automatically if that date is ever activated.
-          - "2027-01-05"
-          - "2027-05-18"
-        unavailable_away_dates:
-          - "2026-11-18"
-          - "2026-12-16"
-          - "2027-01-05"
-          - "2027-03-01"
-          - "2027-03-11"
-          - "2027-04-07"
-          - "2027-04-14"
-          - "2027-04-21"
-          - "2027-05-06"
-          - "2027-05-18"
-          - "2027-06-09"
   potters-bar:
     # One team, as last season. Very flexible on match night - Thursday is given
     # as the nominal home night below (matching most other clubs, who have now
@@ -1325,9 +1355,9 @@ club_constraints:
     # 2027-02-15, 2027-03-15, 2027-04-07, 2027-05-05 and 2027-06-14 - i.e.
     # the weeks commencing Mon 5 Oct, 26 Oct, 14 Dec, 4 Jan, 25 Jan, 15 Feb,
     # 15 Mar, 5 Apr, 3 May and 14 Jun 2027. Each such week's Monday is
-    # dropped from home_dates and its whole Mon-Fri span is added to
-    # unavailable_away_dates below (w/c 14 Jun is past the season end but is
-    # recorded so it applies if the reserve dates are ever used). This list
+    # dropped from home_dates and its whole Mon-Fri span is added to the away
+    # blackout below (w/c 14 Jun is past the season end but is recorded so it
+    # applies if the reserve dates are ever used). This list
     # replaces the earlier set of unavailable weeks (w/c 19 Oct, 16 Nov, 18
     # Jan, 8 Feb, 15 Mar, 26 Apr, 24 May): only w/c 15 Mar carries over, and
     # the other earlier weeks are now available.
@@ -1389,93 +1419,96 @@ club_constraints:
     # reserve home Mondays these fall after the preferred 14th May season end
     # (30th June allowed this season, see top-of-file note), so they only
     # matter if the season has to extend into June. Rather than
-    # being commented anywhere they are simply left out of
-    # unavailable_away_dates below, so they take effect automatically if a
-    # June home date is ever activated at another club; until then, with no
+    # being commented anywhere they are simply left out of the away blackout
+    # below, so they take effect automatically if a June home date is ever
+    # activated at another club; until then, with no
     # June home_dates anywhere, they have no effect. 2027-06-17 stays blocked,
     # within the w/c 14 Jun span below.
     #
-    # unavailable_away_dates below is therefore: every Thursday from
-    # 2026-09-10 to 2027-06-30 that isn't in that whitelist or one of the
-    # three June reserve away Thursdays above, plus every weekday (Mon-Fri) of
-    # each unavailable week above, with the Christmas/New Year dates omitted
-    # (already covered by the spec-wide 'no-play-dates' default).
-    unavailable_away_dates:
-      - "2026-09-10"
-      - "2026-09-17"
-      - "2026-09-24"
-      - "2026-10-01"
-      - "2026-10-05"
-      - "2026-10-06"
-      - "2026-10-07"
-      - "2026-10-08"
-      - "2026-10-09"
-      - "2026-10-15"
-      - "2026-10-22"
-      - "2026-10-26"
-      - "2026-10-27"
-      - "2026-10-28"
-      - "2026-10-29"
-      - "2026-10-30"
-      - "2026-11-05"
-      - "2026-11-12"
-      - "2026-11-26"
-      - "2026-12-10"
-      - "2026-12-14"
-      - "2026-12-15"
-      - "2026-12-16"
-      - "2026-12-17"
-      - "2026-12-18"
-      - "2027-01-04"
-      - "2027-01-05"
-      - "2027-01-06"
-      - "2027-01-07"
-      - "2027-01-08"
-      - "2027-01-14"
-      - "2027-01-21"
-      - "2027-01-25"
-      - "2027-01-26"
-      - "2027-01-27"
-      - "2027-01-28"
-      - "2027-01-29"
-      - "2027-02-04"
-      - "2027-02-15"
-      - "2027-02-16"
-      - "2027-02-17"
-      - "2027-02-18"
-      - "2027-02-19"
-      - "2027-02-25"
-      - "2027-03-11"
-      - "2027-03-15"
-      - "2027-03-16"
-      - "2027-03-17"
-      - "2027-03-18"
-      - "2027-03-19"
-      - "2027-03-25"
-      - "2027-04-05"
-      - "2027-04-06"
-      - "2027-04-07"
-      - "2027-04-08"
-      - "2027-04-09"
-      - "2027-04-29"
-      - "2027-05-03"
-      - "2027-05-04"
-      - "2027-05-05"
-      - "2027-05-06"
-      - "2027-05-07"
-      - "2027-05-20"
-      # 2027-06-03, 2027-06-10 and 2027-06-24 are reserve away Thursdays (see
-      # the comment above) - deliberately not listed here.
-      - "2027-06-14"
-      - "2027-06-15"
-      - "2027-06-16"
-      - "2027-06-17"
-      - "2027-06-18"
-      - "2027-06-28"
-      - "2027-06-29"
-      - "2027-06-30"
-      - "2027-07-01"
-      - "2027-07-02"
+    # The away blackout below is therefore: every Thursday from 2026-09-10 to
+    # 2027-06-30 that isn't in that whitelist or one of the three June reserve
+    # away Thursdays above, plus every weekday (Mon-Fri) of each unavailable
+    # week above, with the Christmas/New Year dates omitted (already covered by
+    # the spec-wide 'no-play-dates' default).
+    match_count_limits:
+      - venue_scope: away
+        matches: { max: 0 }
+        dates:
+          - "2026-09-10"
+          - "2026-09-17"
+          - "2026-09-24"
+          - "2026-10-01"
+          - "2026-10-05"
+          - "2026-10-06"
+          - "2026-10-07"
+          - "2026-10-08"
+          - "2026-10-09"
+          - "2026-10-15"
+          - "2026-10-22"
+          - "2026-10-26"
+          - "2026-10-27"
+          - "2026-10-28"
+          - "2026-10-29"
+          - "2026-10-30"
+          - "2026-11-05"
+          - "2026-11-12"
+          - "2026-11-26"
+          - "2026-12-10"
+          - "2026-12-14"
+          - "2026-12-15"
+          - "2026-12-16"
+          - "2026-12-17"
+          - "2026-12-18"
+          - "2027-01-04"
+          - "2027-01-05"
+          - "2027-01-06"
+          - "2027-01-07"
+          - "2027-01-08"
+          - "2027-01-14"
+          - "2027-01-21"
+          - "2027-01-25"
+          - "2027-01-26"
+          - "2027-01-27"
+          - "2027-01-28"
+          - "2027-01-29"
+          - "2027-02-04"
+          - "2027-02-15"
+          - "2027-02-16"
+          - "2027-02-17"
+          - "2027-02-18"
+          - "2027-02-19"
+          - "2027-02-25"
+          - "2027-03-11"
+          - "2027-03-15"
+          - "2027-03-16"
+          - "2027-03-17"
+          - "2027-03-18"
+          - "2027-03-19"
+          - "2027-03-25"
+          - "2027-04-05"
+          - "2027-04-06"
+          - "2027-04-07"
+          - "2027-04-08"
+          - "2027-04-09"
+          - "2027-04-29"
+          - "2027-05-03"
+          - "2027-05-04"
+          - "2027-05-05"
+          - "2027-05-06"
+          - "2027-05-07"
+          - "2027-05-20"
+          # 2027-06-03, 2027-06-10 and 2027-06-24 are reserve away Thursdays (see
+          # the comment above) - deliberately not listed here.
+          - "2027-06-14"
+          - "2027-06-15"
+          - "2027-06-16"
+          - "2027-06-17"
+          - "2027-06-18"
+          - "2027-06-28"
+          - "2027-06-29"
+          - "2027-06-30"
+          - "2027-07-01"
+          - "2027-07-02"
   harrow:
     # Details from Surjit Dhemrait (2026-08-27). Home night is Thursday, 19:30
     # start (venue and assumed 75+15 time limit are in the clubs section above).
@@ -1491,13 +1524,14 @@ club_constraints:
     # home_dates: Thursdays across the season window (2026-09-10 to 2027-05-13,
     # matching the other clubs), minus -
     #   - all of September 2026: Harrow can't host then, though they can still
-    #     play away, so September is dropped from home_dates but not added to
-    #     unavailable_away_dates;
+    #     play away, so September is dropped from home_dates but not from away
+    #     play;
     #   - the first Thursday of every month, the Harrow Swiss - Surjit confirmed
     #     (2026-08-27 follow-up) this date is fully reserved, no match home or
-    #     away, so these Thursdays are also in unavailable_away_dates below.
-    #     (October's first two Thursdays are already covered by the Blitz below;
-    #     September's first Thursday, 2026-09-03, is before the season window.)
+    #     away, so these Thursdays are also in the whole-club away blackout
+    #     below. (October's first two Thursdays are already covered by the Blitz
+    #     below; September's first Thursday, 2026-09-03, is before the season
+    #     window.)
     #   - the first two Thursdays of October 2026 (2026-10-01, 2026-10-08), the
     #     Harrow Blitz - blocked home AND away;
     #   - 2026-12-17, the Christmas Lightning - blocked home AND away;
@@ -1549,46 +1583,50 @@ club_constraints:
       - "2027-04-22"
       - "2027-04-29"
       - "2027-05-13"
-    unavailable_away_dates:
-      # 2026-09-03: Harrow Swiss (first Thursday of September). Before the
-      # season window, so currently inert; listed for completeness.
-      - "2026-09-03"
-      # 2026-10-01 and 2026-10-08: Harrow Blitz (first two Thursdays of
-      # October 2026) - blocked home and away. 2026-10-01 is also a Harrow
-      # Swiss first-Thursday date.
-      - "2026-10-01"
-      - "2026-10-08"
-      # First Thursday of each month: Harrow Swiss - fully reserved, no match
-      # home or away (Surjit confirmed 2026-08-27 follow-up). These are also
-      # kept out of home_dates above.
-      - "2026-11-05"
-      - "2026-12-03"
-      # 2026-12-17: Christmas Lightning - blocked home and away.
-      - "2026-12-17"
-      - "2027-01-07"
-      - "2027-02-04"
-      - "2027-03-04"
-      - "2027-04-01"
-      - "2027-05-06"
-    teams:
+    match_count_limits:
+      # Whole-club away blackout. First Thursday of each month: Harrow Swiss -
+      # fully reserved, no match home or away (Surjit confirmed 2026-08-27
+      # follow-up); these are also kept out of home_dates above. 2026-09-03 is
+      # before the season window, so currently inert; listed for completeness.
+      # 2026-10-01 and 2026-10-08 are the Harrow Blitz (first two Thursdays of
+      # October 2026), blocked home and away. 2026-12-17 is the Christmas
+      # Lightning, blocked home and away.
+      - venue_scope: away
+        matches: { max: 0 }
+        dates:
+          - "2026-09-03"
+          - "2026-10-01"
+          - "2026-10-08"
+          - "2026-11-05"
+          - "2026-12-03"
+          - "2026-12-17"
+          - "2027-01-07"
+          - "2027-02-04"
+          - "2027-03-04"
+          - "2027-04-01"
+          - "2027-05-06"
       # Per Surjit Dhemrait (2026-08-31): these four dates are now taken for
       # Harrow 2 (division 2 / "M2"). Captains sharing the same players have
       # committed them in other leagues, so no Harrow 2 match - home or away -
       # may be scheduled on them:
       #   Thu 2026-11-12, Wed 2026-11-25, Tue 2027-02-09, Thu 2027-02-25.
-      # The two Thursdays are Harrow home_dates above, so they're listed under
-      # unavailable_home_dates too; the Wed/Tue dates are never home nights and
-      # so only need the away list.
-      harrow-2:
-        unavailable_home_dates:
+      # The two Thursdays are Harrow home_dates above, so they're in the
+      # 'venue_scope: home' entry too; the Wed/Tue dates are never home nights
+      # and so only need the away entry.
+      - teams: [harrow-2]
+        venue_scope: home
+        matches: { max: 0 }
+        dates:
           - "2026-11-12"
           - "2027-02-25"
-        unavailable_away_dates:
+      - teams: [harrow-2]
+        venue_scope: away
+        matches: { max: 0 }
+        dates:
           - "2026-11-12"
           - "2026-11-25"
           - "2027-02-09"
           - "2027-02-25"
-    match_count_limits:
       # Venue capacity: 5 concurrent home matches (Surjit). Harrow field only
       # 2 teams so this can't bind yet, but it's the real figure. Replaces the
       # spec-wide one-home-match-a-night default.
@@ -1646,12 +1684,13 @@ club_constraints:
     # Metropolitan's June dates they are past the preferred 14th May finish but
     # inside the League Secretary's approved window (to 30th June - see the
     # top-of-file note). Kings Head's three teams draw on overlapping squads and
-    # gave DIFFERENT availability, so the per-team 'teams:' section below
-    # narrows the club list for each:
+    # gave DIFFERENT availability, so per-team match_count_limits entries below
+    # narrow the club list for each:
     #
-    #   - unavailable_home_dates subtracts, for each team, every club Thursday
-    #     that team did not list as playable (home or away).
-    #   - Away availability is handled in match_count_limits: each team may play
+    #   - a 'venue_scope: home' / 'matches: {max: 0}' entry per team bars, for
+    #     that team's own hosting, every club Thursday it did not list as
+    #     playable (home or away).
+    #   - Away availability is handled the same way: each team may play
     #     away only on the Thursdays it listed or inside the away windows it
     #     gave Colin, so a 'matches: {max: 0}' / 'venue_scope: away' / 'date_ranges' entry
     #     per team bars every other weekday (same idiom as Metropolitan and West
@@ -1664,14 +1703,14 @@ club_constraints:
     #     not for KH2 (unless nothing else works)". It is therefore taken as
     #     firm for KH1 only (home and away) and held unavailable for KH2 and
     #     KH3. 2027-03-25 (Maundy Thursday) is now in use for KH3 (freed from
-    #     its unavailable_home_dates and away date_ranges): it is the extra
+    #     its home blackout and away date_ranges): it is the extra
     #     KH3 Thursday the sixth Hendon team in division 3 needs (see the
     #     divisions note). It stays held unavailable for KH1 and KH2 -
     #     freeing it there removes no late date and does not widen the KH1/KH2
     #     gap (see the keep-apart note below).
     #   - "At a pinch" for KH2 (Colin, 2026-09-01): 2026-12-17 and 2027-04-22.
     #     2027-04-22 is now freed for KH2 (removed from its
-    #     unavailable_home_dates and carved out of its away date_ranges) as the
+    #     home blackout and carved out of its away date_ranges) as the
     #     extra Thursday needed to switch on the no-consecutive-days KH1/KH2
     #     rule - see the keep-apart note below. 2026-12-17 stays held
     #     unavailable; it would have done the job equally well, and we may ask
@@ -1763,15 +1802,21 @@ club_constraints:
       # applied - same situation as Metropolitan's June dates.
       - "2027-05-20"
       - "2027-05-27"
-    teams:
-      kings-head-1:
-        # KH1 listed (home or away): 1 Oct, 12 Nov, 26 Nov, 14 Jan, 21 Jan,
-        # 4 Feb, 11 Feb, 18 Mar, 1 Apr, 13/20/27 May, plus 8 Oct (KH1's home
-        # leg of the KH2 derby). 14 Jan was one of Colin's "possibly" dates,
-        # now firm for KH1 (Colin 2026-09-01: OK for KH1, not KH2) - it keeps
-        # the KH1<->KH2 same-day keep-apart rule feasible (see
-        # match_count_limits). Every other club Thursday is unavailable.
-        unavailable_home_dates:
+    match_count_limits:
+      # Per-team home blackouts: each Kings Head team may host only on the
+      # Thursdays it listed (home or away); every other club Thursday is barred
+      # for that team's own hosting. Away availability is handled by the
+      # 'venue_scope: away' entries further down.
+      #
+      # KH1 listed (home or away): 1 Oct, 12 Nov, 26 Nov, 14 Jan, 21 Jan,
+      # 4 Feb, 11 Feb, 18 Mar, 1 Apr, 13/20/27 May, plus 8 Oct (KH1's home
+      # leg of the KH2 derby). 14 Jan was one of Colin's "possibly" dates,
+      # now firm for KH1 (Colin 2026-09-01: OK for KH1, not KH2) - it keeps
+      # the KH1<->KH2 same-day keep-apart rule feasible (see below).
+      - teams: [kings-head-1]
+        venue_scope: home
+        matches: { max: 0 }
+        dates:
           - "2026-10-15"
           - "2026-10-22"
           - "2026-10-29"
@@ -1792,16 +1837,18 @@ club_constraints:
           - "2027-04-22"
           - "2027-04-29"
           - "2027-05-06"
-      kings-head-2:
-        # KH2 listed (home or away): 1 Oct, 15 Oct, 29 Oct, 3 Dec, 21 Jan,
-        # 11 Feb, 18 Feb, 18 Mar, 1 Apr, 15 Apr, 22 Apr, 6 May,
-        # 13/20/27 May, plus 10 Dec (KH2's home leg of the KH1 derby).
-        # 22 Apr was an "at a pinch" offer (Colin 2026-09-01) and is now in
-        # use, to make the no-consecutive-days KH1/KH2 rule feasible (see
-        # match_count_limits). Per Colin (2026-09-01) 14 Jan is NOT available
-        # for KH2 ("unless nothing else works"), and 17 Dec is "at a pinch"
-        # only - both held unavailable below.
-        unavailable_home_dates:
+      # KH2 listed (home or away): 1 Oct, 15 Oct, 29 Oct, 3 Dec, 21 Jan,
+      # 11 Feb, 18 Feb, 18 Mar, 1 Apr, 15 Apr, 22 Apr, 6 May,
+      # 13/20/27 May, plus 10 Dec (KH2's home leg of the KH1 derby).
+      # 22 Apr was an "at a pinch" offer (Colin 2026-09-01) and is now in
+      # use, to make the no-consecutive-days KH1/KH2 rule feasible (see below).
+      # Per Colin (2026-09-01) 14 Jan is NOT available for KH2 ("unless
+      # nothing else works"), and 17 Dec is "at a pinch" only - both held
+      # unavailable below.
+      - teams: [kings-head-2]
+        venue_scope: home
+        matches: { max: 0 }
+        dates:
           - "2026-10-08"
           - "2026-10-22"
           - "2026-11-05"
@@ -1819,14 +1866,16 @@ club_constraints:
           - "2027-03-25" # "possibly" (Maundy Thu) - held unavailable
           - "2027-04-08"
           - "2027-04-29"
-      kings-head-3:
-        # KH3 listed (home or away): 1 Oct, 15 Oct, 29 Oct, 19 Nov, 3 Dec,
-        # 17 Dec, 21 Jan, 11 Feb, 18 Feb, 4 Mar, 25 Mar, 1 Apr, 15 Apr,
-        # 29 Apr, 6 May, 13/20/27 May. 25 Mar (Maundy Thursday) was a
-        # "possibly" date; it is now in use, as the extra KH3 Thursday the
-        # sixth Hendon team in division 3 requires (see the divisions note
-        # and the "possibly" bullet in the club note above).
-        unavailable_home_dates:
+      # KH3 listed (home or away): 1 Oct, 15 Oct, 29 Oct, 19 Nov, 3 Dec,
+      # 17 Dec, 21 Jan, 11 Feb, 18 Feb, 4 Mar, 25 Mar, 1 Apr, 15 Apr,
+      # 29 Apr, 6 May, 13/20/27 May. 25 Mar (Maundy Thursday) was a
+      # "possibly" date; it is now in use, as the extra KH3 Thursday the
+      # sixth Hendon team in division 3 requires (see the divisions note
+      # and the "possibly" bullet in the club note above).
+      - teams: [kings-head-3]
+        venue_scope: home
+        matches: { max: 0 }
+        dates:
           - "2026-10-08"
           - "2026-10-22"
           - "2026-11-05"
@@ -1842,7 +1891,6 @@ club_constraints:
           - "2027-03-18"
           - "2027-04-08"
           - "2027-04-22"
-    match_count_limits:
       # Colin (2026-08-31): 1st & 2nd teams must not play the same day or on
       # consecutive days, nor must 2nd & 3rd, and "preferably not in the same
       # week".
@@ -1964,8 +2012,8 @@ club_constraints:
           - { start_date: "2027-02-23", end_date: "2027-02-26" }
           - { start_date: "2027-03-05", end_date: "2027-03-05" }
           - { start_date: "2027-03-09", end_date: "2027-03-19" }
-          # 2027-03-25 (Maundy Thursday) freed for KH3 - see kings-head-3
-          # unavailable_home_dates; the away block resumes the next day.
+          # 2027-03-25 (Maundy Thursday) freed for KH3 - see the kings-head-3
+          # home blackout above; the away block resumes the next day.
           - { start_date: "2027-03-26", end_date: "2027-03-31" }
           - { start_date: "2027-04-02", end_date: "2027-04-02" }
           - { start_date: "2027-04-06", end_date: "2027-04-09" }
@@ -2002,12 +2050,13 @@ fixed_fixtures:
   # Andrew he'd prefer 2026-09-24, so that leg is pinned here.
   #
   # 2026-09-17, the other former candidate, is for now ruled out for
-  # Hammersmith 3 and 4 entirely - it's in both teams' unavailable_home_dates
-  # and unavailable_away_dates below, so the whole w/c 2026-09-14 is blocked
-  # for them bar the 2026-09-24 derby itself. If scheduling later proves hard
-  # we could free 2026-09-17 again for other Hammersmith 3/4 fixtures (a gap
-  # of exactly 7 days from the 2026-09-24 derby is allowed by the spec-wide
-  # per-team weekly limit) by dropping those four entries.
+  # Hammersmith 3 and 4 entirely - it's in both teams' home and away blackouts
+  # above (the per-team match_count_limits entries), so the whole w/c
+  # 2026-09-14 is blocked for them bar the 2026-09-24 derby itself. If
+  # scheduling later proves hard we could free 2026-09-17 again for other
+  # Hammersmith 3/4 fixtures (a gap of exactly 7 days from the 2026-09-24 derby
+  # is allowed by the spec-wide per-team weekly limit) by dropping those four
+  # dates.
   #
   # NB this w/c 2026-09-14 block is a deliberate spec-side choice, kept on
   # review against Adam's updated availability table (hammersmith.html,

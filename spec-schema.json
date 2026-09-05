@@ -72,7 +72,7 @@
     },
     "club_constraints": {
       "type": "object",
-      "description": "Every constraint that can vary by club -- home_dates, unavailable_away_dates, home_dates_used, latest_match_date, teams and match_count_limits -- keyed by that club's own ID, alongside an optional 'defaults' entry.",
+      "description": "Every constraint that can vary by club -- home_dates, home_dates_used, latest_match_date and match_count_limits -- keyed by that club's own ID, alongside an optional 'defaults' entry. Dates a club (or one of its teams) can't play away, and dates a team can't host, are match_count_limits entries: 'matches: {max: 0}' with 'venue_scope: away' (or 'home'), a 'dates' list, and 'teams' where it isn't club-wide.",
       "additionalProperties": { "$ref": "#/$defs/club_constraints_entry" },
       "properties": {
         "defaults": {
@@ -92,7 +92,7 @@
     "fixed_fixtures": {
       "type": "array",
       "default": [],
-      "description": "Pins specific fixtures (by home/away team ID) to a specific date, forcing them into the solved schedule as given rather than letting the solver choose. For each entry, 'home' and 'away' must be teams in the same division, and 'date' must be one of the home team's allowed home dates (its club's home_dates, minus any club_constraints.<club>.teams.<team>.unavailable_home_dates for that team). A fixture can't be both fixed and excluded (see exclude_fixtures).",
+      "description": "Pins specific fixtures (by home/away team ID) to a specific date, forcing them into the solved schedule as given rather than letting the solver choose. For each entry, 'home' and 'away' must be teams in the same division, and 'date' must be one of the home team's club's home_dates. A pin a match_count_limits blackout would forbid (the home team barred from hosting, or the away team from travelling, that day) is caught when the model is built. A fixture can't be both fixed and excluded (see exclude_fixtures).",
       "items": { "$ref": "#/$defs/fixed_fixture" }
     },
     "exclude_fixtures": {
@@ -188,13 +188,6 @@
           "items": { "$ref": "#/$defs/date" },
           "uniqueItems": true
         },
-        "unavailable_away_dates": {
-          "type": "array",
-          "default": [],
-          "description": "Dates this club's teams are unavailable to play away. Defaults to empty if omitted. For a contiguous span, or a block that applies to every club, a match_count_limits entry with 'matches: {max: 0}' and 'date_ranges' is usually tidier.",
-          "items": { "$ref": "#/$defs/date" },
-          "uniqueItems": true
-        },
         "home_dates_used": {
           "type": "object",
           "additionalProperties": false,
@@ -217,33 +210,10 @@
           "$ref": "#/$defs/date",
           "description": "Latest date any fixture involving one of this club's teams -- home or away -- may be scheduled. Useful when a club's venue or players stop being available partway through the common season window (e.g. a hall booking that ends earlier than most). Omit for no cutoff. Distinct from the spec-wide 'latest_internal_match_date', which only limits same-club derby fixtures; this limits every match the club plays. Any 'fixed_fixtures' entry involving the club must not be dated after it."
         },
-        "teams": {
-          "type": "object",
-          "description": "Per-team exclusions, for clubs whose teams don't all share the same availability (e.g. different squads of players). Home dates are always specified at the club level above; per-team variations are supported only via exclusions here. A team not listed here just uses its club's dates as normal.",
-          "additionalProperties": { "$ref": "#/$defs/club_team_constraints_entry" }
-        },
         "match_count_limits": {
           "type": "array",
-          "description": "The sole match-count constraint mechanism: each entry bounds how many matches involving a set of this club's teams may fall within a rolling window of consecutive days -- or, when the entry sets 'date_ranges', within each of a few explicit calendar ranges -- from above ('max'), below ('min'), or both. Covers a per-team weekly gap ('apply_per: each_team', 'matches: {max: 1}', 'time_window_days: 7'), a venue's concurrent-match capacity ('apply_per: across_teams', 'venue_scope: home', typically paired with 'playing_teams' to also cap distinct teams playing -- see 'match_count_limit_fields/playing_teams'), keeping adjacent-division teams apart ('teams: [...]', 'matches: {max: 1}'), a floor on activity ('matches: {min: 1}', e.g. at least one match in a congress fortnight), and holding a club's load down over a named holiday week ('date_ranges: [...]', 'matches: {max: 1}', or 'matches: {max: 0}' to bar it entirely). Additive, with as many entries as needed; combined with any inherited from club_constraints.defaults -- an entry with an 'override_key' replaces the like-keyed default for this club instead.",
+          "description": "The sole match-count constraint mechanism: each entry bounds how many matches involving a set of this club's teams may fall within a rolling window of consecutive days -- or, when the entry sets 'date_ranges' (or its 'dates' sugar), within each of a few explicit calendar ranges -- from above ('max'), below ('min'), or both. Covers a per-team weekly gap ('apply_per: each_team', 'matches: {max: 1}', 'time_window_days: 7'), a venue's concurrent-match capacity ('apply_per: across_teams', 'venue_scope: home', typically paired with 'playing_teams' to also cap distinct teams playing -- see 'match_count_limit_fields/playing_teams'), keeping adjacent-division teams apart ('teams: [...]', 'matches: {max: 1}'), a floor on activity ('matches: {min: 1}', e.g. at least one match in a congress fortnight), holding a club's load down over a named holiday week ('date_ranges: [...]', 'matches: {max: 1}'), and barring play outright on specific dates -- the dates a team can't host ('venue_scope: home', 'matches: {max: 0}', 'dates: [...]') or a club's teams can't travel ('venue_scope: away', 'matches: {max: 0}', 'dates: [...]'). Additive, with as many entries as needed; combined with any inherited from club_constraints.defaults -- an entry with an 'override_key' replaces the like-keyed default for this club instead.",
           "items": { "$ref": "#/$defs/match_count_limit_entry" }
-        }
-      }
-    },
-    "club_team_constraints_entry": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "unavailable_home_dates": {
-          "type": "array",
-          "description": "Excludes these dates from this club's own 'home_dates', for this team only. An entry that isn't currently one of the club's own home_dates (e.g. a date held in reserve, commented out) is allowed -- it just has no effect until that date is added -- though fixturespec.py logs a warning for it.",
-          "items": { "$ref": "#/$defs/date" },
-          "uniqueItems": true
-        },
-        "unavailable_away_dates": {
-          "type": "array",
-          "description": "Additional to this club's own 'unavailable_away_dates' -- not a replacement for it.",
-          "items": { "$ref": "#/$defs/date" },
-          "uniqueItems": true
         }
       }
     },
@@ -356,10 +326,17 @@
           }
         }
       },
+      "dates": {
+        "type": "array",
+        "minItems": 1,
+        "description": "Sugar for a 'date_ranges' list of one single-day range per date: the tidy way to pin this rule to a scattered set of individual dates rather than a contiguous span. Typical use is a blackout -- 'matches: {max: 0}' with 'venue_scope: away' for the dates a club's teams can't travel, or 'venue_scope: home' (scoped to a single team) for the dates that team can't host. Same rules and effect as 'date_ranges'; not combinable with it.",
+        "items": { "$ref": "#/$defs/date" },
+        "uniqueItems": true
+      },
       "exclude_dates": {
         "type": "array",
         "minItems": 1,
-        "description": "Dates whose counted matches this rule ignores entirely -- every window is evaluated as if nothing counted falls on them. Use to exempt a date the rule would otherwise make infeasible, typically one whose load is already pinned by fixed_fixtures and governed by a 'max_overrides' entry (e.g. two pre-season derbies on one night, four teams'-worth, under a rolling 'playing_teams: {max: 3}'). Applies to both 'matches' and 'playing_teams'; not combinable with 'date_ranges' (list ranges that skip the date instead).",
+        "description": "Dates whose counted matches this rule ignores entirely -- every window is evaluated as if nothing counted falls on them. Use to exempt a date the rule would otherwise make infeasible, typically one whose load is already pinned by fixed_fixtures and governed by a 'max_overrides' entry (e.g. two pre-season derbies on one night, four teams'-worth, under a rolling 'playing_teams: {max: 3}'). Applies to both 'matches' and 'playing_teams'; not combinable with 'date_ranges'/'dates' (list ranges that skip the date instead).",
         "items": { "$ref": "#/$defs/date" },
         "uniqueItems": true
       },
@@ -371,7 +348,7 @@
     "match_count_limit_entry": {
       "type": "object",
       "additionalProperties": false,
-      "description": "One per-club match_count_limits entry. Needs a 'matches' and/or 'playing_teams' mapping carrying an actual bound -- either alone is fine -- unless 'date_ranges' or 'override_key' (cancelling a default) is what's meant instead.",
+      "description": "One per-club match_count_limits entry. Needs a 'matches' and/or 'playing_teams' mapping carrying an actual bound -- either alone is fine -- unless 'date_ranges'/'dates' or 'override_key' (cancelling a default) is what's meant instead.",
       "properties": {
         "matches": { "$ref": "#/$defs/match_count_limit_fields/matches" },
         "playing_teams": {
@@ -392,6 +369,9 @@
         "date_ranges": {
           "$ref": "#/$defs/match_count_limit_fields/date_ranges"
         },
+        "dates": {
+          "$ref": "#/$defs/match_count_limit_fields/dates"
+        },
         "exclude_dates": {
           "$ref": "#/$defs/match_count_limit_fields/exclude_dates"
         },
@@ -404,7 +384,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["override_key"],
-      "description": "A club_constraints.defaults.match_count_limits entry: like a per-club match_count_limits entry but without 'teams' (defaults apply to every team of every club) and with a required, list-unique 'override_key'. A club's own entry naming that 'override_key' replaces this one for the club wholesale. A 'matches: {max: 0}' entry with 'date_ranges' is the spec-wide way to say no club plays on those dates (a club can opt back in by overriding the key). Needs a 'matches' and/or 'playing_teams' mapping carrying an actual bound -- either alone is fine -- unless 'date_ranges', or a bare cancelling entry (only 'override_key'), is what's meant.",
+      "description": "A club_constraints.defaults.match_count_limits entry: like a per-club match_count_limits entry but without 'teams' (defaults apply to every team of every club) and with a required, list-unique 'override_key'. A club's own entry naming that 'override_key' replaces this one for the club wholesale. A 'matches: {max: 0}' entry with 'date_ranges' (or its 'dates' sugar) is the spec-wide way to say no club plays on those dates (a club can opt back in by overriding the key). Needs a 'matches' and/or 'playing_teams' mapping carrying an actual bound -- either alone is fine -- unless 'date_ranges'/'dates', or a bare cancelling entry (only 'override_key'), is what's meant.",
       "properties": {
         "matches": { "$ref": "#/$defs/match_count_limit_fields/matches" },
         "playing_teams": {
@@ -417,6 +397,9 @@
         "venue_scope": { "$ref": "#/$defs/match_count_limit_fields/venue_scope" },
         "date_ranges": {
           "$ref": "#/$defs/match_count_limit_fields/date_ranges"
+        },
+        "dates": {
+          "$ref": "#/$defs/match_count_limit_fields/dates"
         },
         "exclude_dates": {
           "$ref": "#/$defs/match_count_limit_fields/exclude_dates"
