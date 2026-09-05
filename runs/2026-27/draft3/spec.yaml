@@ -1,5 +1,11 @@
 # yaml-language-server: $schema=../../../spec-schema.json
-name: "2026-27 Season (attempt 3)"
+name: "2026-27 Season (attempt 3 - FINAL)"
+is_final: true
+
+description: >
+  This is the outcome of a one-shot start-of-season fixture planning process. It
+  does not reflect any changes subsequently agreed between clubs. For up-to-date
+  match dates, please refer to the ECF League Management System.
 
 # Don't schedule matches before the Fixtures Meeting.
 earliest_match_date: "2026-09-15"
