@@ -109,14 +109,23 @@ _MINIMAL_SPEC_NO_CONCURRENCY = (
 club_constraints:
   albany:
     home_dates: [2025-09-01, 2025-09-29]
-    unavailable_away_dates: [2025-12-25]
   hackney:
     home_dates: [2025-09-15]
 """
 )
 
+# _MINIMAL_SPEC adds a spec-wide venue-capacity default and, on albany, a
+# match_count_limits away blackout for 2025-12-25 (the dates albany's teams
+# can't travel) -- the successor to the old club-level unavailable_away_dates.
 _MINIMAL_SPEC = (
-    _MINIMAL_SPEC_NO_CONCURRENCY
+    _MINIMAL_SPEC_NO_CONCURRENCY.replace(
+        "  albany:\n    home_dates: [2025-09-01, 2025-09-29]\n",
+        "  albany:\n    home_dates: [2025-09-01, 2025-09-29]\n"
+        "    match_count_limits:\n"
+        "      - venue_scope: away\n"
+        "        matches: {max: 0}\n"
+        "        dates: [2025-12-25]\n",
+    )
     + "  defaults:\n    match_count_limits:\n      - override_key: venue-capacity\n        venue_scope: home\n        matches:\n          max: 1\n"
 )
 
@@ -204,11 +213,30 @@ class TestLoadSpec(unittest.TestCase):
             spec.parameters.home_dates["albany"], [date(2025, 9, 1), date(2025, 9, 29)]
         )
         self.assertEqual(spec.parameters.home_dates["hackney"], [date(2025, 9, 15)])
-        self.assertEqual(
-            spec.parameters.unavailable_away_dates["albany"], [date(2025, 12, 25)]
+        # albany's "can't travel on 2025-12-25" is a match_count_limits away
+        # blackout: a whole-club RangeLimit with match_max 0 over that single day.
+        away_block = _find_limit(
+            spec.parameters.match_count_limits,
+            club="albany",
+            venue_scope=fmodel.VenueScope.AWAY,
+            apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
         )
-        # hackney has no unavailable_away_dates entry, should default to empty
-        self.assertEqual(spec.parameters.unavailable_away_dates["hackney"], [])
+        assert isinstance(away_block, fmodel.RangeLimit)
+        self.assertEqual(_cap_base(away_block.match_max), 0)
+        self.assertEqual(
+            away_block.ranges,
+            (fmodel.DateRange(start=date(2025, 12, 25), end=date(2025, 12, 25)),),
+        )
+        # hackney has no away blackout at all.
+        self.assertEqual(
+            [
+                limit
+                for limit in spec.parameters.match_count_limits
+                if all(t.club == "hackney" for t in limit.teams)
+                and limit.venue_scope is fmodel.VenueScope.AWAY
+            ],
+            [],
+        )
         # Neither club has its own match_count_limits, so both inherit
         # _MINIMAL_SPEC's club_constraints.defaults entry (home limit 1).
         for club in ("albany", "hackney"):
@@ -1376,7 +1404,7 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "duplicate date"):
             fixturespec.load_spec(path)
 
-    def test_duplicate_date_in_unavailable_away_dates_rejected(self) -> None:
+    def test_duplicate_date_in_match_count_limits_dates_rejected(self) -> None:
         path = self._write("""
 clubs:
   albany:
@@ -1395,7 +1423,10 @@ divisions:
     teams: [albany-1]
 club_constraints:
   albany:
-    unavailable_away_dates: [2025-09-01, 2025-09-01]
+    match_count_limits:
+      - venue_scope: away
+        matches: {max: 0}
+        dates: [2025-09-01, 2025-09-01]
 """)
         with self.assertRaisesRegex(fixturespec.SpecError, "duplicate date"):
             fixturespec.load_spec(path)
@@ -2318,139 +2349,133 @@ club_constraints:
         with self.assertRaisesRegex(fixturespec.SpecError, "home dates"):
             fixturespec.load_spec(path)
 
-    def _with_albany_teams(self, teams_block: str) -> str:
-        """_MINIMAL_SPEC with the given 'teams:' block (already indented as it should
-        appear) nested under club_constraints.albany, alongside its home_dates."""
-        return _MINIMAL_SPEC.replace(
-            "    home_dates: [2025-09-01, 2025-09-29]\n"
-            "    unavailable_away_dates: [2025-12-25]\n",
-            "    home_dates: [2025-09-01, 2025-09-29]\n"
-            "    unavailable_away_dates: [2025-12-25]\n" + teams_block,
-        )
-
-    def test_team_constraints_absent(self) -> None:
-        path = self._write(_MINIMAL_SPEC)
-        spec = fixturespec.load_spec(path)
-        self.assertEqual(spec.parameters.team_home_dates, {})
-        self.assertEqual(spec.parameters.team_unavailable_away_dates, {})
-
-    def test_team_constraints_unavailable_home_dates_excludes_from_clubs(self) -> None:
+    def test_match_count_limits_dates_is_sugar_for_single_day_ranges(self) -> None:
+        """A 'dates' list resolves to a RangeLimit with one single-day DateRange
+        per date -- identical to writing them out as 'date_ranges'."""
         path = self._write(
-            self._with_albany_teams(
-                "    teams:\n      albany-1:\n"
-                "        unavailable_home_dates: [2025-09-29]\n"
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
+                "      - teams: [albany-1]\n"
+                "        venue_scope: away\n"
+                "        matches: {max: 0}\n"
+                "        dates: [2025-10-01, 2025-11-01]\n"
             )
         )
         spec = fixturespec.load_spec(path)
-        albany_1 = next(t for t in spec.parameters.teams if t.club == "albany")
-        # albany's club-level home_dates is [2025-09-01, 2025-09-29]; excluding
-        # 2025-09-29 for albany-1 leaves just 2025-09-01.
+        albany_1 = next(
+            t for t in spec.parameters.teams if t.club == "albany" and t.index == 1
+        )
         self.assertEqual(
-            spec.parameters.team_home_dates, {albany_1: [date(2025, 9, 1)]}
+            list(spec.parameters.match_count_limits),
+            [
+                fmodel.RangeLimit(
+                    teams=[albany_1],
+                    match_max=fmodel.Cap(0),
+                    venue_scope=fmodel.VenueScope.AWAY,
+                    ranges=(
+                        fmodel.DateRange(
+                            start=date(2025, 10, 1), end=date(2025, 10, 1)
+                        ),
+                        fmodel.DateRange(
+                            start=date(2025, 11, 1), end=date(2025, 11, 1)
+                        ),
+                    ),
+                )
+            ],
         )
 
-    def test_team_constraints_unavailable_home_dates_not_yet_in_clubs_logs_warning(
-        self,
-    ) -> None:
-        """An unavailable_home_dates entry not currently in the club's home_dates
-        (e.g. a date held in reserve, commented out) is accepted rather than
-        rejected -- it just has no effect yet -- but logs a warning so the mismatch
-        isn't silently missed."""
+    def test_match_count_limits_dates_and_date_ranges_rejected(self) -> None:
         path = self._write(
-            self._with_albany_teams(
-                "    teams:\n      albany-1:\n"
-                # 2025-09-16 is not one of albany's home_dates in _MINIMAL_SPEC
-                "        unavailable_home_dates: [2025-09-16]\n"
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
+                "      - matches: {max: 0}\n"
+                "        dates: [2025-10-01]\n"
+                "        date_ranges: [{start_date: 2025-11-01, end_date: 2025-11-02}]\n"
             )
         )
-        with self.assertLogs("fixturespec", level="WARNING") as logs:
-            spec = fixturespec.load_spec(path)
-        self.assertIn("2025-09-16", logs.output[0])
-        self.assertIn("albany", logs.output[0])
-        albany_1 = next(t for t in spec.parameters.teams if t.club == "albany")
-        # The exclusion has no effect since 2025-09-16 isn't one of albany's
-        # home_dates in the first place: albany-1's effective home dates are just
-        # albany's full home_dates list, unchanged.
-        self.assertEqual(
-            spec.parameters.team_home_dates,
-            {albany_1: [date(2025, 9, 1), date(2025, 9, 29)]},
-        )
+        with self.assertRaisesRegex(
+            fixturespec.SpecError, "'date_ranges' and 'dates' can't be combined"
+        ):
+            fixturespec.load_spec(path)
 
-    def test_team_constraints_unavailable_away_dates_additive(self) -> None:
+    def test_match_count_limits_dates_empty_rejected(self) -> None:
         path = self._write(
-            self._with_albany_teams(
-                "    teams:\n      albany-1:\n"
-                "        unavailable_away_dates: [2025-10-01]\n"
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
+                "      - matches: {max: 0}\n"
+                "        dates: []\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "non-empty list"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_dates_with_time_window_days_rejected(self) -> None:
+        path = self._write(
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
+                "      - matches: {max: 0}\n"
+                "        dates: [2025-10-01]\n"
+                "        time_window_days: 7\n"
+            )
+        )
+        with self.assertRaisesRegex(
+            fixturespec.SpecError, "'dates' and 'time_window_days' can't"
+        ):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_dates_duplicate_rejected(self) -> None:
+        path = self._write(
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
+                "      - matches: {max: 0}\n"
+                "        dates: [2025-10-01, 2025-10-01]\n"
+            )
+        )
+        with self.assertRaisesRegex(fixturespec.SpecError, "duplicate date"):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_dates_max_zero_allowed_like_date_ranges(self) -> None:
+        """'matches: {max: 0}' -- meaningless in the rolling-window form -- is
+        accepted with 'dates', exactly as it is with 'date_ranges'."""
+        path = self._write(
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
+                "      - matches: {max: 0}\n"
+                "        dates: [2025-10-01]\n"
             )
         )
         spec = fixturespec.load_spec(path)
-        albany_1 = next(t for t in spec.parameters.teams if t.club == "albany")
-        self.assertEqual(
-            spec.parameters.team_unavailable_away_dates,
-            {albany_1: [date(2025, 10, 1)]},
-        )
-        # Additive: the club-level unavailable_away_dates entry is untouched.
-        self.assertEqual(
-            spec.parameters.unavailable_away_dates["albany"], [date(2025, 12, 25)]
-        )
+        (limit,) = spec.parameters.match_count_limits
+        assert isinstance(limit, fmodel.RangeLimit)
+        self.assertEqual(limit.match_max, fmodel.Cap(0))
 
-    def test_team_constraints_unknown_team(self) -> None:
+    def test_fixed_fixtures_on_a_per_team_home_blackout_date_still_parses(self) -> None:
+        """A per-team 'venue_scope: home' / 'matches: {max: 0}' blackout no longer
+        feeds the fixed_fixtures pre-check (which only looks at the club's
+        home_dates); a pin the blackout forbids is caught when the model is
+        built, not by load_spec."""
         path = self._write(
-            self._with_albany_teams(
-                "    teams:\n      nonexistent:\n"
-                "        unavailable_home_dates: [2025-09-01]\n"
-            )
-        )
-        with self.assertRaisesRegex(fixturespec.SpecError, "nonexistent"):
-            fixturespec.load_spec(path)
-
-    def test_team_constraints_team_belongs_to_different_club(self) -> None:
-        """A team can only be listed under its own club's club_constraints entry."""
-        path = self._write(
-            self._with_albany_teams(
-                "    teams:\n      hackney-1:\n"
-                "        unavailable_home_dates: [2025-09-01]\n"
-            )
-        )
-        with self.assertRaisesRegex(fixturespec.SpecError, "hackney-1"):
-            fixturespec.load_spec(path)
-
-    def test_team_constraints_unsupported_field(self) -> None:
-        path = self._write(
-            self._with_albany_teams(
-                "    teams:\n      albany-1:\n        max_concurrent_matches:\n          home: 2\n"
-            )
-        )
-        with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
-            fixturespec.load_spec(path)
-
-    def test_team_constraints_home_dates_not_supported(self) -> None:
-        """Per-team home_dates are not supported; only exclusions via
-        unavailable_home_dates are. home_dates at the team level should be
-        rejected as an unsupported field."""
-        path = self._write(
-            self._with_albany_teams(
-                "    teams:\n      albany-1:\n        home_dates: [2025-09-01]\n"
-            )
-        )
-        with self.assertRaisesRegex(fixturespec.SpecError, "not supported"):
-            fixturespec.load_spec(path)
-
-    def test_fixed_fixtures_date_must_be_one_of_teams_own_home_dates(self) -> None:
-        """When a team has a club_constraints[club].teams[team].unavailable_home_dates
-        entry, fixed_fixtures validates against the club's home_dates minus that
-        exclusion, not the club's full home_dates list."""
-        path = self._write(
-            self._with_albany_teams(
-                "    teams:\n      albany-1:\n"
-                "        unavailable_home_dates: [2025-09-29]\n"
+            self._with_albany_match_count_limits(
+                "    match_count_limits:\n"
+                "      - teams: [albany-1]\n"
+                "        venue_scope: home\n"
+                "        matches: {max: 0}\n"
+                "        dates: [2025-09-01]\n"
             )
             + "fixed_fixtures:\n"
             "  - home: albany-1\n"
+            "    away: albany-2\n"
+            "    date: 2025-09-01\n"  # a club home_date, but albany-1's home blackout
+        )
+        spec = fixturespec.load_spec(path)
+        self.assertEqual(len(spec.parameters.fixed_fixtures), 1)
+
+    def test_fixed_fixtures_date_not_one_of_clubs_home_dates_rejected(self) -> None:
+        path = self._write(
+            _MINIMAL_SPEC + "fixed_fixtures:\n"
+            "  - home: albany-1\n"
             "    away: hackney-1\n"
-            # 2025-09-29 is one of albany's club-level home_dates but excluded for
-            # albany-1 above.
-            "    date: 2025-09-29\n"
+            "    date: 2025-09-16\n"  # not one of albany's home dates
         )
         with self.assertRaisesRegex(fixturespec.SpecError, "home dates"):
             fixturespec.load_spec(path)

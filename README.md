@@ -182,17 +182,21 @@ gap (`apply_per: each_team`), a venue's concurrent-match capacity (`venue_scope:
 home`, with per-date `matches.max_overrides`), a keep-these-teams-apart rule
 (`teams: [...]`), and a floor on activity (`matches: {min: 1}`, e.g. at least one
 match in a congress fortnight) alike. An entry can instead set `date_ranges` (a
-list of `{start_date, end_date}` inclusive ranges, either end open-ended) to
-bound matches within specific calendar periods -- a school-holiday week, say --
-rather than a rolling window, with `matches: {max: 0}` to bar them outright; a
-whole-club `matches: {max: 0}` `date_ranges` entry under `defaults` is how a
-spec-wide "nobody plays these dates" block (e.g. Christmas) is expressed. Every
-spec-wide default entry carries a unique `override_key`; a club entry repeating
-one replaces that default for the club, and a club entry
-with no `override_key` is additive.
+list of `{start_date, end_date}` inclusive ranges, either end open-ended), or its
+`dates` sugar (a plain list of individual dates), to bound matches within
+specific calendar periods -- a school-holiday week, or the scattered dates a
+club's teams can't travel -- rather than a rolling window, with `matches: {max:
+0}` to bar them outright. A `venue_scope: away`/`matches: {max: 0}`/`dates`
+entry is how a club (or, scoped with `teams: [...]`, one of its teams) says it
+can't play away on those dates; the `venue_scope: home` form says a team can't
+host; and a whole-club `matches: {max: 0}` `date_ranges` entry under `defaults`
+is how a spec-wide "nobody plays these dates" block (e.g. Christmas) is
+expressed. Every spec-wide default entry carries a unique `override_key`; a club
+entry repeating one replaces that default for the club, and a club entry with no
+`override_key` is additive.
 
-That's only a fraction of what the format supports -- per-club/per-team date
-exclusions, pinned and withheld fixtures, and more. For the full field-by-field
+That's only a fraction of what the format supports -- pinned and withheld
+fixtures, per-club match-date cutoffs, and more. For the full field-by-field
 reference, see:
 
 - **[spec-schema.json](spec-schema.json)**, the JSON Schema every field is

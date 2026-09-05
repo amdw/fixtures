@@ -49,8 +49,7 @@ def _generate(
     full fmodel.Parameters just to exercise htmlreport.generate_report()."""
     parameters = fmodel.Parameters(
         teams=list(teams),
-        home_dates={},
-        unavailable_away_dates={},
+        home_dates={t.club: [] for t in teams},
         excluded_fixtures=excluded_fixtures,
         division_schemes=division_schemes or {},
     )

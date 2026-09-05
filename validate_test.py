@@ -41,10 +41,20 @@ def _params(**overrides: object) -> fmodel.Parameters:
     kwargs: dict[str, object] = {
         "teams": [_A1, _B1, _C1],
         "home_dates": {"a": [_D1, _D2], "b": [_D3, _D4], "c": [_D1]},
-        "unavailable_away_dates": {},
     }
     kwargs.update(overrides)
     return fmodel.Parameters(**kwargs)  # type: ignore[arg-type]
+
+
+def _away_blackout(club_team: fmodel.Team, *dates: date) -> fmodel.RangeLimit:
+    """A `match_max=Cap(0)` away RangeLimit over `dates` for `club_team` -- the
+    "can't travel on these dates" building block."""
+    return fmodel.RangeLimit(
+        teams=[club_team],
+        match_max=fmodel.Cap(0),
+        venue_scope=fmodel.VenueScope.AWAY,
+        ranges=tuple(fmodel.DateRange(start=d, end=d) for d in dates),
+    )
 
 
 def _sf(home: fmodel.Team, away: fmodel.Team, d: date) -> fmodel.ScheduledFixture:
@@ -66,10 +76,10 @@ class TestCheckSchedule(unittest.TestCase):
 
     def test_infeasible_spec_is_reported(self) -> None:
         # a and b have no overlapping schedulable date for one direction: a's only
-        # home date is also b's only unavailable away date.
+        # home date is one b's teams can't travel on.
         params = _params(
             home_dates={"a": [_D1], "b": [_D3, _D4], "c": [_D1]},
-            unavailable_away_dates={"b": [_D1]},
+            match_count_limits=[_away_blackout(_B1, _D1)],
         )
         problems = fmodel.check_schedule(params, _VALID)
         self.assertEqual(len(problems), 1)
@@ -114,8 +124,8 @@ class TestCheckSchedule(unittest.TestCase):
         )
         self.assertEqual(problems, [f"a 1 vs b 1 on 2025-09-02 {_NOT_A_SLOT}"])
 
-    def test_fixture_on_unavailable_away_date_is_not_a_slot(self) -> None:
-        params = _params(unavailable_away_dates={"b": [_D1]})
+    def test_fixture_on_away_blackout_date_is_not_a_slot(self) -> None:
+        params = _params(match_count_limits=[_away_blackout(_B1, _D1)])
         problems = fmodel.check_schedule(
             params, [_sf(_A1, _B1, _D1), _sf(_B1, _A1, _D3)]
         )
@@ -136,7 +146,6 @@ class TestCheckSchedule(unittest.TestCase):
                 "a": [_D1, date(2025, 9, 8)],
                 "b": [date(2025, 9, 4), _D4],
             },
-            unavailable_away_dates={},
             match_count_limits=[
                 fmodel.RollingLimit(
                     teams=[_A1, _B1], match_max=fmodel.Cap(1), window_days=7

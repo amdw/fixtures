@@ -45,8 +45,7 @@ def _generate_csv(
     fmodel.Parameters just to exercise csvreport.generate_csv()."""
     parameters = fmodel.Parameters(
         teams=list(teams),
-        home_dates={},
-        unavailable_away_dates={},
+        home_dates={t.club: [] for t in teams},
         excluded_fixtures=excluded_fixtures,
     )
     spec = fixturespec.Spec(parameters=parameters, clubs=clubs)

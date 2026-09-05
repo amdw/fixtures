@@ -179,6 +179,18 @@ _MATCH_COUNT_LIMITS += [
     )
     for club_teams in _TEAMS_BY_CLUB.values()
 ]
+# Dates a club's teams can't travel: a whole-club away RangeLimit capped at 0
+# over those single days (the successor to the old unavailable_away_dates).
+_MATCH_COUNT_LIMITS += [
+    fmodel.RangeLimit(
+        teams=_TEAMS_BY_CLUB[club],
+        match_max=fmodel.Cap(0),
+        venue_scope=fmodel.VenueScope.AWAY,
+        ranges=tuple(fmodel.DateRange(start=d, end=d) for d in dates),
+    )
+    for club, dates in _UNAVAILABLE_AWAY_DATES.items()
+    if dates
+]
 
 
 def print_fixtures(fixtures: Collection[fmodel.ScheduledFixture]) -> None:
@@ -240,7 +252,6 @@ def build_params() -> fmodel.Parameters:
     return fmodel.Parameters(
         teams=_TEAMS,
         home_dates=_HOME_DATES,
-        unavailable_away_dates=_UNAVAILABLE_AWAY_DATES,
         match_count_limits=_MATCH_COUNT_LIMITS,
     )
 

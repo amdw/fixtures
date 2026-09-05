@@ -96,7 +96,6 @@ club_constraints:
 
   albany:
     home_dates: [2025-09-01, 2025-09-15, 2025-09-29]
-    unavailable_away_dates: [2025-12-25]
     latest_match_date: 2026-04-30
     match_count_limits:
       - override_key: weekly-gap
@@ -108,6 +107,10 @@ club_constraints:
         venue_scope: home
         matches:
           max: 3
+      - venue_scope: away
+        matches:
+          max: 0
+        dates: [2025-12-25]
 
   hackney:
     home_dates: [2025-09-08, 2025-09-22]
@@ -138,13 +141,19 @@ club_constraints:
             end_date: 2025-10-26
           - start_date: 2026-02-16
             end_date: 2026-02-22
+      # Per-team blackouts (the successors to the old teams.<team>
+      # unavailable_home_dates / unavailable_away_dates sub-section).
+      - teams: [hackney-5]
+        venue_scope: home
+        matches: {max: 0}
+        dates: [2025-09-08]
+      - teams: [hackney-5]
+        venue_scope: away
+        matches: {max: 0}
+        dates: [2025-09-22]
     home_dates_used:
       min: 1
       max: 2
-    teams:
-      hackney-5:
-        unavailable_home_dates: [2025-09-08]
-        unavailable_away_dates: [2025-09-22]
 
 fixed_fixtures:
   - home: albany-1
