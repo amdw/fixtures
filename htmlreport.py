@@ -44,10 +44,10 @@ _STYLE = """
     .banner { background: #eee; color: #333; font-weight: 600; text-align: center;
               padding: 0.6rem 1rem; margin-bottom: 1.5rem; font-size: 1.25rem;
               border-radius: 4px; }
-    .banner.draft { background: #b00020; color: #fff; }
+    .banner.not-final { background: #b00020; color: #fff; }
     .banner.compliance-warning { background: #b25f00; color: #fff; font-size: 1rem;
               text-align: left; }
-    .draft-label { font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+    .not-final-label { font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
                     margin-right: 0.5rem; }
     .table-scroll { overflow-x: auto; margin-bottom: 2rem; }
     table { border-collapse: collapse; width: 100%; max-width: 80rem; }
@@ -86,14 +86,14 @@ def _fmt_date(d: date) -> str:
     return d.strftime("%a %d %b %Y")
 
 
-def _head_title(title: str, run_name: str, draft: bool, is_run_home: bool) -> str:
+def _head_title(title: str, run_name: str, is_final: bool, is_run_home: bool) -> str:
     """The text for the page's <title> element.
 
     A run's home page gets just the run name; every other page in the run gets
     the run name followed by that page's own title (a club or division name, or
-    "All matches"). A trailing "(DRAFT)" is added whenever the run is a draft.
-    Pages with no run name (e.g. the top-level list of runs) fall back to their
-    own title alone.
+    "All matches"). A trailing "(NOT FINAL)" is added whenever the run is not
+    marked final. Pages with no run name (e.g. the top-level list of runs) fall
+    back to their own title alone.
     """
     if run_name and is_run_home:
         text = run_name
@@ -101,14 +101,14 @@ def _head_title(title: str, run_name: str, draft: bool, is_run_home: bool) -> st
         text = f"{run_name} – {title}"
     else:
         text = title
-    return f"{text} (DRAFT)" if draft else text
+    return text if is_final else f"{text} (NOT FINAL)"
 
 
 def _page(
     title: str,
     body: str,
     run_name: str = "",
-    draft: bool = False,
+    is_final: bool = True,
     description: str = "",
     *,
     is_run_home: bool = False,
@@ -116,13 +116,13 @@ def _page(
     compliance_note: str = "",
 ) -> str:
     banner_html = ""
-    if run_name or draft:
+    if run_name or not is_final:
         parts = []
-        if draft:
-            parts.append('<span class="draft-label">DRAFT</span>')
+        if not is_final:
+            parts.append('<span class="not-final-label">NOT FINAL</span>')
         if run_name:
             parts.append(f'<span class="run-name">{html.escape(run_name)}</span>')
-        classes = "banner draft" if draft else "banner"
+        classes = "banner" if is_final else "banner not-final"
         banner_html = f'<div class="{classes}">{" ".join(parts)}</div>\n'
     back_link_html = ""
     if back_link:
@@ -145,7 +145,7 @@ def _page(
         "<head>\n"
         '<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-        f"<title>{html.escape(_head_title(title, run_name, draft, is_run_home))}</title>\n"
+        f"<title>{html.escape(_head_title(title, run_name, is_final, is_run_home))}</title>\n"
         f"<style>{_STYLE}</style>\n"
         "</head>\n"
         "<body>\n"
@@ -482,7 +482,7 @@ def generate_report(
     them, into output_dir.
 
     `spec` supplies everything about the season except the solved dates -- teams,
-    clubs, the run name/draft/description banners, each division's fixture scheme,
+    clubs, the run name/is_final/description banners, each division's fixture scheme,
     and any excluded_fixtures (withheld from scheduling entirely, to be arranged
     in a later run; these are appended to the bottom of every relevant table with
     "TBC" in place of a date). `result` is the solved schedule for that spec,
@@ -509,7 +509,7 @@ def generate_report(
     clubs = spec.clubs
     excluded_fixtures = spec.parameters.excluded_fixtures
     schemes = spec.parameters.division_schemes
-    name, draft, description = spec.name, spec.draft, spec.description
+    name, is_final, description = spec.name, spec.is_final, spec.description
 
     fixtures_by_division: dict[int, list[fmodel.ScheduledFixture]] = defaultdict(list)
     for sf in fixtures:
@@ -549,7 +549,7 @@ def generate_report(
             )
             + _venues_section(all_match_club_ids, clubs),
             name,
-            draft,
+            is_final,
             description,
             back_link=_RUN_INDEX_BACK_LINK,
             compliance_note=compliance_note,
@@ -580,7 +580,7 @@ def generate_report(
                 )
                 + _venues_section(division_club_ids, clubs),
                 name,
-                draft,
+                is_final,
                 description,
                 back_link=_RUN_INDEX_BACK_LINK,
                 compliance_note=compliance_note,
@@ -635,7 +635,7 @@ def generate_report(
                 club_name,
                 body,
                 name,
-                draft,
+                is_final,
                 description,
                 back_link=_RUN_INDEX_BACK_LINK,
                 compliance_note=compliance_note,
@@ -651,7 +651,7 @@ def generate_report(
             _run_index_body(all_matches_links, division_links, club_links)
             + _solver_diagnostics(result.model_stats, result.solve_stats),
             name,
-            draft,
+            is_final,
             description,
             is_run_home=True,
             compliance_note=compliance_note,

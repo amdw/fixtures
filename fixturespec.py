@@ -73,7 +73,7 @@ class Spec:
     parameters: fmodel.Parameters
     clubs: Mapping[str, fmodel.Club]
     name: str = ""
-    draft: bool = False
+    is_final: bool = False
     description: str = ""
 
 
@@ -378,7 +378,7 @@ _CLUB_CONSTRAINT_DEFAULTS_KEYS = {"match_count_limits"}
 
 _TOP_LEVEL_KEYS = {
     "name",
-    "draft",
+    "is_final",
     "description",
     "latest_internal_match_date",
     "earliest_match_date",
@@ -1510,12 +1510,12 @@ def load_spec(spec_path: str | Path) -> Spec:
         **kwargs,
     )
     name = _require_str(data.get("name", ""), f"{path}: 'name'")
-    draft = _require_bool(data.get("draft", False), f"{path}: 'draft'")
+    is_final = _require_bool(data.get("is_final", False), f"{path}: 'is_final'")
     description = _require_str(data.get("description", ""), f"{path}: 'description'")
     return Spec(
         parameters=parameters,
         clubs=clubs,
         name=name,
-        draft=draft,
+        is_final=is_final,
         description=description,
     )

@@ -1,6 +1,5 @@
 # yaml-language-server: $schema=../../../spec-schema.json
 name: "2026-27 Season (attempt 2)"
-draft: true
 
 # Don't schedule matches before this, to make sure all clubs have time to raise teams.
 # Adam Cranston from Hammersmith expressed a preference to have a match on 2026-09-10 if possible

@@ -12,10 +12,10 @@
       "default": "",
       "description": "Shown as a subtitle banner on every HTML report page (including index.html, which recovers it from one of the other report files). Defaults to no subtitle."
     },
-    "draft": {
+    "is_final": {
       "type": "boolean",
       "default": false,
-      "description": "If true, the name banner (see 'name') is made prominent and prefixed 'DRAFT'."
+      "description": "Set true once this is the finalised fixture list. While false (the default), every HTML report page carries a prominent 'NOT FINAL' banner and a '(NOT FINAL)' suffix in the page title."
     },
     "description": {
       "type": "string",
