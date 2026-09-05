@@ -907,7 +907,21 @@ class TestLoadSpec(unittest.TestCase):
         with self.assertRaisesRegex(fixturespec.SpecError, "is after end"):
             fixturespec.load_spec(path)
 
-    def test_match_count_limits_date_ranges_reject_missing_end_date(self) -> None:
+    def test_match_count_limits_date_ranges_reject_missing_both_dates(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - max_matches: 1\n"
+            "        date_ranges:\n"
+            "          - {}\n"
+        )
+        with self.assertRaisesRegex(
+            fixturespec.SpecError, "start_date.*and/or.*end_date"
+        ):
+            fixturespec.load_spec(path)
+
+    def test_match_count_limits_date_ranges_open_ended_start(self) -> None:
         path = self._write(
             _BOILERPLATE + "club_constraints:\n"
             "  albany:\n"
@@ -916,8 +930,34 @@ class TestLoadSpec(unittest.TestCase):
             "        date_ranges:\n"
             "          - start_date: 2025-10-27\n"
         )
-        with self.assertRaisesRegex(fixturespec.SpecError, "end_date"):
-            fixturespec.load_spec(path)
+        spec = fixturespec.load_spec(path)
+        limit = _find_limit(
+            spec.parameters.match_count_limits,
+            club="albany",
+            venue_scope=fmodel.VenueScope.ALL,
+            apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
+        )
+        assert isinstance(limit, fmodel.RangeLimit)
+        self.assertEqual(limit.ranges, (fmodel.DateRange(start=date(2025, 10, 27)),))
+
+    def test_match_count_limits_date_ranges_open_ended_end(self) -> None:
+        path = self._write(
+            _BOILERPLATE + "club_constraints:\n"
+            "  albany:\n"
+            "    match_count_limits:\n"
+            "      - max_matches: 1\n"
+            "        date_ranges:\n"
+            "          - end_date: 2025-11-02\n"
+        )
+        spec = fixturespec.load_spec(path)
+        limit = _find_limit(
+            spec.parameters.match_count_limits,
+            club="albany",
+            venue_scope=fmodel.VenueScope.ALL,
+            apply_per=fmodel.ApplyPer.ACROSS_TEAMS,
+        )
+        assert isinstance(limit, fmodel.RangeLimit)
+        self.assertEqual(limit.ranges, (fmodel.DateRange(end=date(2025, 11, 2)),))
 
     def test_match_count_limits_date_ranges_reject_unknown_key(self) -> None:
         path = self._write(

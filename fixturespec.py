@@ -667,7 +667,9 @@ def _parse_match_count_date_ranges(
 ) -> tuple[fmodel.DateRange, ...]:
     """Parse a match_count_limits entry's optional 'date_ranges': a non-empty list
     of {start_date, end_date} mappings, each an inclusive fmodel.DateRange (which
-    enforces start on or before end)."""
+    enforces start on or before end). Either 'start_date' or 'end_date' may be
+    omitted for a range that's open-ended on that side (no earliest, or no latest,
+    date) -- but not both."""
     if not isinstance(value, list) or not value:
         raise SpecError(f"{context} must be a non-empty list")
     ranges: list[fmodel.DateRange] = []
@@ -681,10 +683,18 @@ def _parse_match_count_date_ranges(
                 f"{item_context}.{sorted(unsupported)} not supported (only "
                 "['end_date', 'start_date'] are)"
             )
-        if "start_date" not in item or "end_date" not in item:
-            raise SpecError(f"{item_context} needs both 'start_date' and 'end_date'")
-        start = _parse_date(item["start_date"], f"{item_context}.start_date")
-        end = _parse_date(item["end_date"], f"{item_context}.end_date")
+        if "start_date" not in item and "end_date" not in item:
+            raise SpecError(f"{item_context} needs 'start_date' and/or 'end_date'")
+        start = (
+            _parse_date(item["start_date"], f"{item_context}.start_date")
+            if "start_date" in item
+            else None
+        )
+        end = (
+            _parse_date(item["end_date"], f"{item_context}.end_date")
+            if "end_date" in item
+            else None
+        )
         try:
             ranges.append(fmodel.DateRange(start=start, end=end))
         except ValueError as e:
@@ -746,7 +756,9 @@ def _parse_match_count_limits(
       - 'max_matches_overrides' (optional): per-date replacements of 'max_matches'.
         Only allowed when 'time_window_days' is 1.
       - 'date_ranges' (optional): a non-empty list of {start_date, end_date}
-        inclusive ranges. When given, the rule applies to exactly those ranges
+        inclusive ranges. Either 'start_date' or 'end_date' may be omitted for a
+        range that's open-ended on that side (no earliest, or no latest, date),
+        but not both. When given, the rule applies to exactly those ranges
         instead of every rolling 'time_window_days' window. Allowed on both club
         and 'defaults' entries; not combinable with 'time_window_days' or
         'max_matches_overrides', nor (on a club entry) with 'override_key'. 'max_matches'
