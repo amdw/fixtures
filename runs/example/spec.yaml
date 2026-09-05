@@ -197,11 +197,13 @@ club_constraints:
       - override_key: weekly-gap
         apply_per: each_team
         time_window_days: 7
-        max_matches: 1
+        matches:
+          max: 1
       # Each club hosts at most two home matches a night (shared venue).
       - override_key: venue-capacity
         venue_scope: home
-        max_matches: 2
+        matches:
+          max: 2
   albany:
     home_dates:
       - "2025-09-01"
@@ -371,16 +373,18 @@ club_constraints:
       # take a third on 2025-11-13 only.
       - override_key: venue-capacity
         venue_scope: home
-        max_matches: 2
-        max_matches_overrides:
-          "2025-11-13": 3
+        matches:
+          max: 2
+          max_overrides:
+            "2025-11-13": 3
   harrow:
     match_count_limits:
       # Replaces the spec-wide per-team weekly gap
       - override_key: weekly-gap
         apply_per: each_team
         time_window_days: 14
-        max_matches: 1
+        matches:
+          max: 1
     home_dates:
       - "2025-09-11"
       - "2025-09-18"

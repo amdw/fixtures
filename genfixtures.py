@@ -165,7 +165,7 @@ _MATCH_COUNT_LIMITS: list[fmodel.MatchLimit] = []
 _MATCH_COUNT_LIMITS += [
     fmodel.RollingLimit(
         teams=club_teams,
-        match_cap=fmodel.Cap(1),
+        match_max=fmodel.Cap(1),
         window_days=_MIN_MATCH_GAP_DAYS,
         apply_per=fmodel.ApplyPer.EACH_TEAM,
     )
@@ -174,7 +174,7 @@ _MATCH_COUNT_LIMITS += [
 _MATCH_COUNT_LIMITS += [
     fmodel.RollingLimit(
         teams=club_teams,
-        match_cap=fmodel.Cap(2),
+        match_max=fmodel.Cap(2),
         venue_scope=fmodel.VenueScope.HOME,
     )
     for club_teams in _TEAMS_BY_CLUB.values()

@@ -81,12 +81,15 @@ club_constraints:
       - override_key: weekly-gap
         apply_per: each_team
         time_window_days: 7
-        max_matches: 1
+        matches:
+          max: 1
       - override_key: venue-capacity
         venue_scope: home
-        max_matches: 2
+        matches:
+          max: 2
       - override_key: no-play-dates
-        max_matches: 0
+        matches:
+          max: 0
         date_ranges:
           - start_date: 2025-12-22
             end_date: 2026-01-04
@@ -99,30 +102,37 @@ club_constraints:
       - override_key: weekly-gap
         apply_per: each_team
         time_window_days: 14
-        max_matches: 1
+        matches:
+          max: 1
       - override_key: venue-capacity
         venue_scope: home
-        max_matches: 3
+        matches:
+          max: 3
 
   hackney:
     home_dates: [2025-09-08, 2025-09-22]
     match_count_limits:
       - override_key: venue-capacity
         venue_scope: home
-        max_matches: 2
-        max_matches_overrides:
-          2025-09-08: 3
-      - max_matches: null
+        matches:
+          max: 2
+          max_overrides:
+            2025-09-08: 3
+      - matches:
+          max: null
+          max_overrides:
+            2025-09-22: 1
         venue_scope: all
-        max_matches_overrides:
-          2025-09-22: 1
       - teams: [hackney-1, hackney-5]
         time_window_days: 7
-        max_matches: 1
+        matches:
+          max: 1
         venue_scope: away
         exclude_dates: [2025-09-08]
       - teams: [hackney-1, hackney-5]
-        max_matches: 1
+        matches:
+          max: 1
+          min: 1
         date_ranges:
           - start_date: 2025-10-20
             end_date: 2025-10-26
