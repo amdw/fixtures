@@ -26,10 +26,6 @@
       "$ref": "#/$defs/date",
       "description": "Latest date allowed for a fixture between two teams of the same club (e.g. Hendon 1 v Hendon 2) -- useful for requiring 'derby' matches to be settled earlier in the season than the rest of the fixture list. Has no effect on fixtures between teams from different clubs. If omitted, no such cutoff is applied. Any 'fixed_fixtures' entry between two teams of the same club must not be dated after it."
     },
-    "earliest_match_date": {
-      "$ref": "#/$defs/date",
-      "description": "Excludes candidate dates before this one from newly scheduled fixtures -- e.g. so re-running the solver after some home dates have already passed doesn't place a fixture in the past. If omitted, defaults to today. A 'fixed_fixtures' entry dated before this cutoff is not rejected: fixed_fixtures records matches that are already committed (possibly already played), so an old date there is expected. If this date is in the past, a warning is logged (but solving still proceeds) -- pass a date on or before the spec's earliest home date to disable the cutoff entirely, e.g. for an old spec being re-solved for reference."
-    },
     "clubs": {
       "type": "object",
       "description": "Every club in the season, keyed by club ID (a stable key referenced from teams, club_constraints, fixed_fixtures and exclude_fixtures).",
@@ -72,7 +68,7 @@
     },
     "club_constraints": {
       "type": "object",
-      "description": "Every constraint that can vary by club -- home_dates, home_dates_used, latest_match_date and match_count_limits -- keyed by that club's own ID, alongside an optional 'defaults' entry. Dates a club (or one of its teams) can't play away, and dates a team can't host, are match_count_limits entries: 'matches: {max: 0}' with 'venue_scope: away' (or 'home'), a 'dates' list, and 'teams' where it isn't club-wide.",
+      "description": "Every constraint that can vary by club -- home_dates, home_dates_used and match_count_limits -- keyed by that club's own ID, alongside an optional 'defaults' entry. Dates a club (or one of its teams) can't play away, and dates a team can't host, are match_count_limits entries: 'matches: {max: 0}' with 'venue_scope: away' (or 'home'), a 'dates' list, and 'teams' where it isn't club-wide. A club whose season starts late or ends early uses the same 'matches: {max: 0}' shape with an open-ended 'date_ranges' ({start_date: ...} or {end_date: ...}); the spec-wide 'no play before the season starts' block is that shape as a 'defaults' entry, which a club can move or cancel through its 'override_key'.",
       "additionalProperties": { "$ref": "#/$defs/club_constraints_entry" },
       "properties": {
         "defaults": {
@@ -206,10 +202,6 @@
             }
           }
         },
-        "latest_match_date": {
-          "$ref": "#/$defs/date",
-          "description": "Latest date any fixture involving one of this club's teams -- home or away -- may be scheduled. Useful when a club's venue or players stop being available partway through the common season window (e.g. a hall booking that ends earlier than most). Omit for no cutoff. Distinct from the spec-wide 'latest_internal_match_date', which only limits same-club derby fixtures; this limits every match the club plays. Any 'fixed_fixtures' entry involving the club must not be dated after it."
-        },
         "match_count_limits": {
           "type": "array",
           "description": "The sole match-count constraint mechanism: each entry bounds how many matches involving a set of this club's teams may fall within a rolling window of consecutive days -- or, when the entry sets 'date_ranges' (or its 'dates' sugar), within each of a few explicit calendar ranges -- from above ('max'), below ('min'), or both. Covers a per-team weekly gap ('apply_per: each_team', 'matches: {max: 1}', 'time_window_days: 7'), a venue's concurrent-match capacity ('apply_per: across_teams', 'venue_scope: home', typically paired with 'playing_teams' to also cap distinct teams playing -- see 'match_count_limit_fields/playing_teams'), keeping adjacent-division teams apart ('teams: [...]', 'matches: {max: 1}'), a floor on activity ('matches: {min: 1}', e.g. at least one match in a congress fortnight), holding a club's load down over a named holiday week ('date_ranges: [...]', 'matches: {max: 1}'), and barring play outright on specific dates -- the dates a team can't host ('venue_scope: home', 'matches: {max: 0}', 'dates: [...]') or a club's teams can't travel ('venue_scope: away', 'matches: {max: 0}', 'dates: [...]'). Additive, with as many entries as needed; combined with any inherited from club_constraints.defaults -- an entry with an 'override_key' replaces the like-keyed default for this club instead.",
@@ -309,7 +301,7 @@
       "date_ranges": {
         "type": "array",
         "minItems": 1,
-        "description": "Restricts this rule to one or more explicit, inclusive calendar ranges instead of every rolling 'time_window_days' window: the bounds ('matches' and/or 'playing_teams') then apply to the counted matches whose date falls within each listed range, each range enforced independently. Use for a limit tied to specific weeks -- a school-holiday week, a congress fortnight -- that a rolling window cannot target. Allowed on club and 'defaults' entries alike; not combinable with 'time_window_days' or any '*_overrides' sub-key (all tied to a single date), nor (on a club entry) with 'override_key'. With 'date_ranges' set, 'matches.max' must be an integer >= 0 ('matches: {max: 0}' bars every counted match in the range; a whole-club 'defaults' entry with 'matches: {max: 0}' is the spec-wide 'nobody plays these dates' block).",
+        "description": "Restricts this rule to one or more explicit, inclusive calendar ranges instead of every rolling 'time_window_days' window: the bounds ('matches' and/or 'playing_teams') then apply to the counted matches whose date falls within each listed range, each range enforced independently. Use for a limit tied to specific weeks -- a school-holiday week, a congress fortnight -- that a rolling window cannot target. A range may be open-ended on one side (omit 'start_date' or 'end_date', not both): an open-ended 'matches: {max: 0}' range is how a season start ({end_date: <last pre-season date>}) or a club's early end of season ({start_date: <first unavailable date>}) is expressed. Allowed on club and 'defaults' entries alike; not combinable with 'time_window_days' or any '*_overrides' sub-key (all tied to a single date). A club entry may carry an 'override_key' alongside 'date_ranges' -- the club then replaces the like-keyed default with this ranged rule (e.g. starting its season later than the spec-wide 'season-start' block). With 'date_ranges' set, 'matches.max' must be an integer >= 0 ('matches: {max: 0}' bars every counted match in the range; a whole-club 'defaults' entry with 'matches: {max: 0}' is the spec-wide 'nobody plays these dates' block).",
         "items": {
           "type": "object",
           "additionalProperties": false,
@@ -342,7 +334,7 @@
       },
       "override_key": {
         "type": "string",
-        "description": "Names a club_constraints.defaults.match_count_limits entry (via its own 'override_key'). On a club entry, replaces that default for the club. Required and unique on every defaults entry; on a club entry it can't be combined with 'teams'."
+        "description": "Names a club_constraints.defaults.match_count_limits entry (via its own 'override_key'). On a club entry, replaces that default for the club -- the replacement may be a rolling rule, a 'date_ranges' rule, or (with nothing else on the entry) a bare cancel. Required and unique on every defaults entry; on a club entry it can't be combined with 'teams'."
       }
     },
     "match_count_limit_entry": {
@@ -384,7 +376,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["override_key"],
-      "description": "A club_constraints.defaults.match_count_limits entry: like a per-club match_count_limits entry but without 'teams' (defaults apply to every team of every club) and with a required, list-unique 'override_key'. A club's own entry naming that 'override_key' replaces this one for the club wholesale. A 'matches: {max: 0}' entry with 'date_ranges' (or its 'dates' sugar) is the spec-wide way to say no club plays on those dates (a club can opt back in by overriding the key). Needs a 'matches' and/or 'playing_teams' mapping carrying an actual bound -- either alone is fine -- unless 'date_ranges'/'dates', or a bare cancelling entry (only 'override_key'), is what's meant.",
+      "description": "A club_constraints.defaults.match_count_limits entry: like a per-club match_count_limits entry but without 'teams' (defaults apply to every team of every club) and with a required, list-unique 'override_key'. A club's own entry naming that 'override_key' replaces this one for the club wholesale. A 'matches: {max: 0}' entry with 'date_ranges' (or its 'dates' sugar) is the spec-wide way to say no club plays on those dates (a club can opt back in by overriding the key); an open-ended '{end_date: ...}' range is in turn the spec-wide 'no play before the season starts' block, which a club with pre-season fixed_fixtures moves earlier (or cancels) through its 'override_key'. Needs a 'matches' and/or 'playing_teams' mapping carrying an actual bound -- either alone is fine -- unless 'date_ranges'/'dates', or a bare cancelling entry (only 'override_key'), is what's meant.",
       "properties": {
         "matches": { "$ref": "#/$defs/match_count_limit_fields/matches" },
         "playing_teams": {

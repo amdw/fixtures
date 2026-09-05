@@ -96,7 +96,6 @@ club_constraints:
 
   albany:
     home_dates: [2025-09-01, 2025-09-15, 2025-09-29]
-    latest_match_date: 2026-04-30
     match_count_limits:
       - override_key: weekly-gap
         apply_per: each_team
@@ -111,6 +110,11 @@ club_constraints:
         matches:
           max: 0
         dates: [2025-12-25]
+      # End of season: no Albany fixture, home or away, from 2026-05-01 on.
+      - matches:
+          max: 0
+        date_ranges:
+          - start_date: 2026-05-01
 
   hackney:
     home_dates: [2025-09-08, 2025-09-22]

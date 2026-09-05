@@ -23,7 +23,6 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import itertools
-import logging
 from collections.abc import Mapping
 from datetime import date, datetime
 from pathlib import Path
@@ -32,8 +31,6 @@ from typing import Any
 import yaml
 
 import fmodel
-
-logger = logging.getLogger(__name__)
 
 
 class SpecError(ValueError):
@@ -349,7 +346,6 @@ def _parse_home_dates_used_value(
 _CLUB_CONSTRAINT_FIELD_KEYS = {
     "home_dates",
     "home_dates_used",
-    "latest_match_date",
     "match_count_limits",
 }
 
@@ -371,9 +367,8 @@ _MATCH_COUNT_MEASURE_FIELD_KEYS = {"max", "max_overrides", "min", "min_overrides
 _HOME_DATES_USED_FIELD_KEYS = {"min", "max"}
 
 # match_count_limits is the one constraint type accepted under 'defaults' (a
-# spec-wide list applied to every club). The rest (home_dates, home_dates_used,
-# latest_match_date) are inherently per-club and have no meaningful spec-wide
-# default.
+# spec-wide list applied to every club). The rest (home_dates, home_dates_used)
+# are inherently per-club and have no meaningful spec-wide default.
 _CLUB_CONSTRAINT_DEFAULTS_KEYS = {"match_count_limits"}
 
 _TOP_LEVEL_KEYS = {
@@ -381,7 +376,6 @@ _TOP_LEVEL_KEYS = {
     "is_final",
     "description",
     "latest_internal_match_date",
-    "earliest_match_date",
     "clubs",
     "teams",
     "divisions",
@@ -435,7 +429,6 @@ class _ParsedMatchCountLimit:
 @dataclasses.dataclass(frozen=True)
 class _ClubConstraints:
     home_dates: dict[str, list[date]]
-    club_latest_match_date: dict[str, date]
     home_dates_used: dict[str, fmodel.HomeDatesUsedBounds]
     match_count_limits: list[fmodel.MatchLimit]
 
@@ -446,13 +439,15 @@ def _parse_club_constraints(
     teams: Mapping[str, fmodel.Team],
     path: Path,
 ) -> _ClubConstraints:
-    """Parse the 'club_constraints' section: per-club home_dates, home_dates_used,
-    latest_match_date and match_count_limits, keyed directly by club ID.
+    """Parse the 'club_constraints' section: per-club home_dates, home_dates_used
+    and match_count_limits, keyed directly by club ID.
 
-    A club's optional 'latest_match_date' entry is the last date on which any fixture
-    involving one of that club's teams -- home or away -- may be scheduled (a
-    fixed_fixtures entry involving the club after it is an error). It has no spec-wide
-    default, so it isn't accepted under 'defaults'.
+    A club whose venue or players stop being available partway through the season
+    expresses that as a match_count_limits entry with 'matches: {max: 0}' and an
+    open-ended 'date_ranges' ({start_date: <first unavailable date>}); a spec-wide
+    "no play before the season starts" block is the same shape as a
+    club_constraints.defaults entry ({end_date: <last pre-season date>}), which an
+    individual club can move or cancel via its 'override_key'.
 
     An optional 'defaults' entry (a sibling of the club entries) supplies a spec-wide
     'match_count_limits' list applied to every club. Every defaults entry carries a
@@ -494,7 +489,6 @@ def _parse_club_constraints(
         )
 
     home_dates: dict[str, list[date]] = {}
-    club_latest_match_date: dict[str, date] = {}
     home_dates_used: dict[str, fmodel.HomeDatesUsedBounds] = {}
     club_limits: dict[str, list[_ParsedMatchCountLimit]] = {}
 
@@ -513,12 +507,6 @@ def _parse_club_constraints(
             club_spec.get("home_dates"),
             f"{path}: {section_name}[{club_id!r}].home_dates",
         )
-
-        if "latest_match_date" in club_spec:
-            club_latest_match_date[club_id] = _parse_date(
-                club_spec["latest_match_date"],
-                f"{path}: {section_name}[{club_id!r}].latest_match_date",
-            )
 
         if "home_dates_used" in club_spec:
             home_dates_used[club_id] = _parse_home_dates_used_value(
@@ -539,7 +527,6 @@ def _parse_club_constraints(
 
     return _ClubConstraints(
         home_dates=home_dates,
-        club_latest_match_date=club_latest_match_date,
         home_dates_used=home_dates_used,
         match_count_limits=match_count_limits,
     )
@@ -786,10 +773,14 @@ def _parse_match_count_limits(
         but not both. When given, the rule applies to exactly those ranges
         instead of every rolling 'time_window_days' window. Allowed on both club
         and 'defaults' entries; not combinable with 'time_window_days' or any
-        '*_overrides', nor (on a club entry) with 'override_key'. 'matches.max'
-        must then be a non-negative integer (0 bars every counted match in the
-        range -- a whole-club, all-teams 'defaults' entry with 'matches: {max: 0}'
-        is how a spec-wide "nobody plays these dates" block is expressed).
+        '*_overrides'. May carry an 'override_key' on a club entry -- the club
+        then replaces the like-keyed default with this ranged rule (e.g. a
+        club that starts its season later than the spec-wide 'season-start'
+        block). 'matches.max' must be a non-negative integer (0 bars every
+        counted match in the range -- a whole-club, all-teams 'defaults' entry
+        with 'matches: {max: 0}' is how a spec-wide "nobody plays these dates"
+        block, or an open-ended one a "no play before the season starts" block,
+        is expressed).
       - 'dates' (optional): a non-empty list of individual dates, sugar for a
         'date_ranges' list of one single-day range per date -- the tidy way to
         pin a scattered set of dates rather than a contiguous span (e.g. the
@@ -803,7 +794,10 @@ def _parse_match_count_limits(
         cap. Not combinable with 'date_ranges'/'dates'.
       - 'override_key': required for a 'defaults' entry (and unique within that
         list); optional for a club entry, where it names the default this one
-        replaces for the club wholesale.
+        replaces for the club wholesale. On a club entry it can't be combined
+        with 'teams' (an override replaces a spec-wide, all-teams default), but
+        the replacement may be a 'date_ranges' rule (or a bare 'override_key'
+        with nothing else, which just cancels the default).
     """
     if entries_spec is None:
         return []
@@ -982,13 +976,6 @@ def _parse_match_count_limits(
 
         date_ranges: tuple[fmodel.DateRange, ...] = ()
         if has_date_ranges:
-            if not is_defaults and override_key is not None:
-                raise SpecError(
-                    f"{entry_context}: a club entry can't combine {dr_key!r} "
-                    "with 'override_key' (an override_key names a rolling default "
-                    "to replace wholesale; on a defaults entry it is the entry's "
-                    f"own key and {dr_key!r} is fine)"
-                )
             if "time_window_days" in entry:
                 raise SpecError(
                     f"{entry_context}: {dr_key!r} and 'time_window_days' can't "
@@ -1436,8 +1423,6 @@ def load_spec(spec_path: str | Path) -> Spec:
     home_dates = club_constraints.home_dates
 
     kwargs: dict[str, Any] = {}
-    if club_constraints.club_latest_match_date:
-        kwargs["club_latest_match_date"] = club_constraints.club_latest_match_date
     if club_constraints.home_dates_used:
         kwargs["home_dates_used"] = club_constraints.home_dates_used
     if club_constraints.match_count_limits:
@@ -1476,31 +1461,6 @@ def load_spec(spec_path: str | Path) -> Spec:
                     "latest_internal_match_date"
                 )
         kwargs["latest_internal_match_date"] = latest_internal_match_date
-
-    if "earliest_match_date" in data:
-        earliest_match_date = _parse_date(
-            data["earliest_match_date"], f"{path}: 'earliest_match_date'"
-        )
-    else:
-        earliest_match_date = date.today()
-    if earliest_match_date < date.today():
-        logger.warning(
-            "%s: earliest_match_date %s is in the past",
-            path,
-            earliest_match_date.isoformat(),
-        )
-    kwargs["earliest_match_date"] = earliest_match_date
-
-    for sf in fixed_fixtures:
-        for team in (sf.fixture.home_team, sf.fixture.away_team):
-            cutoff = club_constraints.club_latest_match_date.get(team.club)
-            if cutoff is not None and sf.date > cutoff:
-                raise SpecError(
-                    f"{path}: fixed_fixtures entry {sf.fixture.home_team.name} vs "
-                    f"{sf.fixture.away_team.name} on {sf.date.isoformat()} is after "
-                    f"club_constraints[{team.club!r}].latest_match_date "
-                    f"({cutoff.isoformat()})"
-                )
 
     parameters = fmodel.Parameters(
         teams=list(teams.values()),

@@ -734,23 +734,6 @@ class Parameters:
     fixed_fixtures: Collection[ScheduledFixture] = ()
     excluded_fixtures: Collection[Fixture] = ()
     latest_internal_match_date: date | None = None
-    # Excludes candidate dates before this one from newly scheduled fixtures -- e.g.
-    # so re-running the solver after some home dates have already passed doesn't
-    # place a fixture in the past. Unlike latest_internal_match_date, a fixed_fixtures
-    # entry dated before this cutoff is *not* rejected: fixed_fixtures records matches
-    # that are already committed (possibly already played), so an old date there is
-    # expected, not an error, and must keep solving correctly however far into the
-    # season this is re-run.
-    earliest_match_date: date | None = None
-    # Per-club cutoff: no fixture involving one of a listed club's teams -- home or
-    # away -- may be scheduled after that club's date here. A club with no entry has
-    # no such cutoff. Unlike latest_internal_match_date this covers every match the
-    # club plays, not just same-club derbies; like it (and unlike earliest_match_date)
-    # a fixed_fixtures entry past a club's cutoff is a contradiction, rejected by
-    # fixturespec.load_spec().
-    club_latest_match_date: Mapping[ClubT, date] = dataclasses.field(
-        default_factory=dict
-    )
     # The one match-count / availability mechanism. Dates a club (or one of its
     # teams) can't play away, or a team can't host, are a `match_max=Cap(0)`
     # RangeLimit with the relevant `venue_scope` and `teams` -- see
@@ -804,11 +787,6 @@ class Parameters:
             )
             for number, division_teams in by_number.items()
         )
-
-    def latest_match_date_for(self, team: Team) -> date | None:
-        """The last date `team` may play any match, home or away: its club's
-        club_latest_match_date entry, or None if the club has no such cutoff."""
-        return self.club_latest_match_date.get(team.club)
 
 
 def date_windows(dates: Collection[date], window_days: int) -> list[frozenset[date]]:
@@ -1030,10 +1008,11 @@ def _add_fixed_fixtures_constraints(
                 "(check that the two teams are in the same division, that the date "
                 "is a home date for the home team's club, that no "
                 "match_count_limits entry bars it on that date (a club/team "
-                "away or home blackout, or a spec-wide no-play block), that the "
-                "fixture isn't also in excluded_fixtures, that the date isn't after "
-                "either club's latest_match_date, and -- if the two teams share a "
-                "club -- that the date isn't after latest_internal_match_date)"
+                "away or home blackout, a spec-wide no-play block, or an "
+                "open-ended date_ranges cutoff standing in for a season "
+                "start/end), that the fixture isn't also in excluded_fixtures, "
+                "and -- if the two teams share a club -- that the date isn't "
+                "after latest_internal_match_date)"
             )
         model.add(var == 1)
 
@@ -1045,7 +1024,6 @@ def _build_model(params: Parameters) -> tuple[cp_model.CpModel, _FixtureVars]:
     fixture_vars = _FixtureVars()
 
     excluded = set(params.excluded_fixtures)
-    fixed_fixture_keys = {(sf.fixture, sf.date) for sf in params.fixed_fixtures}
 
     required_fixtures = [
         fixture
@@ -1071,24 +1049,13 @@ def _build_model(params: Parameters) -> tuple[cp_model.CpModel, _FixtureVars]:
                 and match_date > params.latest_internal_match_date
             ):
                 continue
-            home_cutoff = params.latest_match_date_for(home_team)
-            away_cutoff = params.latest_match_date_for(away_team)
-            if home_cutoff is not None and match_date > home_cutoff:
-                continue
-            if away_cutoff is not None and match_date > away_cutoff:
-                continue
-            if (
-                params.earliest_match_date is not None
-                and match_date < params.earliest_match_date
-                and (fixture, match_date) not in fixed_fixture_keys
-            ):
-                continue
             # A match_count_limits entry with an effective cap of 0 over this date
-            # (e.g. a spec-wide "nobody plays these dates" block, or a club/team
-            # away or home blackout) makes the candidate a certain zero -- don't
-            # create a variable for it. Unlike earliest_match_date this is not
-            # waived for fixed_fixtures: a fixture pinned onto a barred date is a
-            # real contradiction, and _add_fixed_fixtures_constraints reports it
+            # (e.g. a spec-wide "nobody plays these dates" block, a club/team
+            # away or home blackout, or an open-ended date_ranges cutoff standing
+            # in for a season start/end) makes the candidate a certain zero --
+            # don't create a variable for it. This is not waived for
+            # fixed_fixtures: a fixture pinned onto a barred date is a real
+            # contradiction, and _add_fixed_fixtures_constraints reports it
             # clearly.
             forbidding = [
                 limit
@@ -1126,10 +1093,10 @@ def _build_model(params: Parameters) -> tuple[cp_model.CpModel, _FixtureVars]:
         raise ValueError(
             f"{len(unschedulable)} required fixture(s) have no schedulable date: "
             f"{shown}. For each, every home date of the home team's club is ruled "
-            "out for that fixture -- by a latest_match_date / "
-            "latest_internal_match_date / earliest_match_date cutoff, or a "
-            "match_count_limits entry barring all play on those dates (a club or "
-            "team away/home blackout, or a spec-wide no-play block). Add a usable "
+            "out for that fixture -- by the latest_internal_match_date cutoff, or "
+            "a match_count_limits entry barring all play on those dates (a club or "
+            "team away/home blackout, a spec-wide no-play block, or an open-ended "
+            "date_ranges cutoff standing in for a season start/end). Add a usable "
             "date, or exclude the fixture."
         )
 

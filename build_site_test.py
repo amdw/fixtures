@@ -25,7 +25,6 @@ import solve
 
 _SPEC = """
 name: "{name}"
-earliest_match_date: 2025-01-01
 
 clubs:
   albany:
@@ -74,7 +73,8 @@ def _make_run(run_dir: Path, name: str) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
     spec_path = run_dir / "spec.yaml"
     spec_path.write_text(_SPEC.format(name=name))
-    solve.solve(spec_path, run_dir)
+    # _SPEC's home dates are in the past; these fixtures are reference-only.
+    solve.solve(spec_path, run_dir, allow_past_matches=True)
 
 
 class TestFindRunSpecs(unittest.TestCase):

@@ -1,8 +1,8 @@
 # yaml-language-server: $schema=../../spec-schema.json
 name: "2025-26 Season"
-# This is a static reference example, not a live season, so its whole (long past)
-# season window is exempted from the default (today) earliest_match_date cutoff.
-earliest_match_date: "2025-01-01"
+# This is a static reference example, not a live season: it carries no
+# season-start block, so its (long past) home dates schedule freely. Re-solving
+# it needs "solve.py --allow-past-matches", since the schedule lands in the past.
 clubs:
   albany:
     name: Albany
