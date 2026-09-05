@@ -131,8 +131,18 @@ class TestCheckSchedule(unittest.TestCase):
         )
         self.assertEqual(problems, [f"a 1 vs b 1 on 2025-09-01 {_NOT_A_SLOT}"])
 
-    def test_fixture_before_earliest_match_date_is_not_a_slot(self) -> None:
-        params = _params(earliest_match_date=_D2)
+    def test_fixture_before_season_start_blackout_is_not_a_slot(self) -> None:
+        # A season-start block: matches: {max: 0} over a date_range open-ended at
+        # the start, the successor to the old earliest_match_date cutoff.
+        params = _params(
+            match_count_limits=[
+                fmodel.RangeLimit(
+                    teams=[_A1, _B1],
+                    match_max=fmodel.Cap(0),
+                    ranges=(fmodel.DateRange(end=date(2025, 9, 7)),),
+                )
+            ]
+        )
         problems = fmodel.check_schedule(params, _VALID)
         self.assertEqual(problems, [f"a 1 vs b 1 on 2025-09-01 {_NOT_A_SLOT}"])
 
@@ -205,7 +215,6 @@ class TestMatchesExpectation(unittest.TestCase):
 
 _SPEC = """
 name: "Validate Test Season"
-earliest_match_date: 2025-01-01
 
 clubs:
   albany:
@@ -256,7 +265,10 @@ class TestValidateCli(unittest.TestCase):
         self.dir = Path(self._tmpdir.name)
         self.spec_path = self.dir / "spec.yaml"
         self.spec_path.write_text(_SPEC)
-        self.solution_path = solve.solve(self.spec_path, self.dir)
+        # _SPEC's home dates are in the past; the schedule is for reference only.
+        self.solution_path = solve.solve(
+            self.spec_path, self.dir, allow_past_matches=True
+        )
 
     def test_freshly_solved_solution_validates(self) -> None:
         report = validate.validate(self.spec_path, self.solution_path)

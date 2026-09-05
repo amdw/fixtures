@@ -1,10 +1,12 @@
 # yaml-language-server: $schema=../../../spec-schema.json
 name: "2026-27 Season (attempt 2)"
 
-# Don't schedule matches before this, to make sure all clubs have time to raise teams.
-# Adam Cranston from Hammersmith expressed a preference to have a match on 2026-09-10 if possible
-# but I'd rather that be negotiated bilaterally rather than risk a second draft being rejected.
-earliest_match_date: "2026-09-14"
+# "Don't schedule matches before all clubs have time to raise teams" is now the
+# club_constraints.defaults 'season-start' entry below (a matches: {max: 0}
+# block over every date up to 2026-09-13), which Hendon cancels for its pinned
+# pre-season derbies. Adam Cranston from Hammersmith expressed a preference to
+# have a match on 2026-09-10 if possible, but I'd rather that be negotiated
+# bilaterally rather than risk a second draft being rejected.
 
 # Same-club "internal" fixtures (e.g. Hendon 1 v Hendon 2) must be settled by the
 # end of the calendar year, well before the rest of the fixture list.
@@ -17,9 +19,11 @@ latest_internal_match_date: "2026-12-31"
 # cut-off before 14th May, but the League Secretary (Colin Mackenzie) has
 # told Andrew (2026-09) he is fine with dates up to 30th June 2027 for this
 # season. Dates through 30th June are therefore acceptable; we still prefer
-# to schedule as early as reasonable, and any club unwilling to run that
-# late can be given its own latest_match_date (as Hendon has - 2027-06-04).
-# The reserve dates below (Hendon's are commented out) follow that pattern.
+# to schedule as early as reasonable, and any club unwilling to run that late
+# can be given its own end-of-season cut-off -- a match_count_limits entry with
+# matches: {max: 0} over an open-ended date_range (as Hendon has, from
+# 2027-06-05). The reserve dates below (Hendon's are commented out) follow that
+# pattern.
 # Metropolitan's and Kings Head's late-May / June dates are in use because
 # the spec is otherwise infeasible; they now sit inside the Secretary's
 # approved window rather than needing a separate sign-off.
@@ -210,7 +214,7 @@ teams:
 # The eleventh team gives Kings Head 3 a tenth match with no room for it in
 # its Oct-May calendar, so 2027-03-25 (Maundy Thursday) - one of Colin's
 # "possibly" dates - is freed for KH3 to make the season schedulable
-# without moving Hendon's 2027-06-04 latest_match_date; see the
+# without moving Hendon's 2027-06-05 end-of-season cut-off; see the
 # club_constraints.kings-head and kings-head-3 notes.
 #
 # Every division's team list is in alphabetical (team ID) order; for
@@ -290,9 +294,17 @@ club_constraints:
           max: 0
         date_ranges:
           - { start_date: "2026-12-21", end_date: "2027-01-03" }
+      # Season start: no club schedules a match before all clubs have had time
+      # to raise teams - a whole-club matches: {max: 0} block over every date up
+      # to 2026-09-13. Hendon replaces 'season-start' with an earlier cut-off so
+      # its pinned pre-season derbies (2026-09-10) stand; any other club with a
+      # pre-season fixture would do the same.
+      - override_key: season-start
+        matches:
+          max: 0
+        date_ranges:
+          - { end_date: "2026-09-13" }
   hendon:
-    # Hendon league matches must conclude before the start of the Club Championship.
-    latest_match_date: "2027-06-04"
     # Try to condense Hendon fixtures to as few match nights as possible.
     # This limit can be increased in order to make the spec feasible.
     home_dates_used:
@@ -331,6 +343,22 @@ club_constraints:
     # This date may be required for an Albany match
     # - '2027-05-27'
     match_count_limits:
+      # Season start: Hendon replaces the spec-wide 'season-start' block with an
+      # earlier cut-off, so its pinned pre-season derbies (Hendon 1 v Hendon 2
+      # and Hendon 4 v Hendon 5, both 2026-09-10) stand while every earlier date
+      # stays blocked for Hendon too.
+      - override_key: season-start
+        matches:
+          max: 0
+        date_ranges:
+          - { end_date: "2026-09-09" }
+      # Hendon league matches must conclude before the start of the Club
+      # Championship: no fixture involving a Hendon team, home or away, on or
+      # after 2027-06-05.
+      - matches:
+          max: 0
+        date_ranges:
+          - { start_date: "2027-06-05" }
       # Venue capacity: Hendon can host up to 3 team matches at once (replaces
       # the spec-wide one-a-night default).
       - override_key: venue-capacity
@@ -638,10 +666,10 @@ club_constraints:
     # date regardless since Adam's spreadsheet (2026-08-30) marks all 4 teams
     # unavailable that day for both home and away (see each team's home and away
     # blackouts below) - it's listed here for an accurate record even though
-    # every team's own unavailability already
-    # makes it unusable. (Any date this early is also excluded from new
-    # scheduling by the spec's earliest_match_date cutoff, which defaults to
-    # today when omitted, as it is here.)
+    # every team's own unavailability already makes it unusable. (Any date this
+    # early is also excluded from scheduling by the spec-wide 'season-start'
+    # block in club_constraints.defaults, which bars every match up to
+    # 2026-09-13; Hammersmith, unlike Hendon, does not override it.)
     #
     # Hammersmith run 4 teams across divisions 1-3 out of the same venue, and
     # per their availability spreadsheet (see the 'teams' sub-section below)

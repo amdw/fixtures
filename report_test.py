@@ -23,7 +23,6 @@ import solve
 
 _SPEC = """
 name: "Test Season"
-earliest_match_date: 2025-01-01
 
 clubs:
   albany:
@@ -75,7 +74,10 @@ class TestReport(unittest.TestCase):
         self.spec_path = self.dir / "spec.yaml"
         self.spec_path.write_text(_SPEC)
         self.output_dir = self.dir / "out"
-        self.solution_path = solve.solve(self.spec_path, self.output_dir)
+        # _SPEC's home dates are in the past; the schedule is for reference only.
+        self.solution_path = solve.solve(
+            self.spec_path, self.output_dir, allow_past_matches=True
+        )
 
     def test_regenerates_report_from_solution_alone(self) -> None:
         index_path = report.report(self.spec_path, self.solution_path, self.output_dir)

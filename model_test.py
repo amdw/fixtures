@@ -839,23 +839,38 @@ class TestLatestInternalMatchDate(unittest.TestCase):
         self.assertTrue(internal_dates)
 
 
-class TestClubLatestMatchDate(unittest.TestCase):
-    """Test cases for the per-club club_latest_match_date cutoff.
+class TestClubEndOfSeasonBlackout(unittest.TestCase):
+    """A club's start-late / end-early cutoff is a match_count_limits entry: a
+    match_max=Cap(0) RangeLimit over every one of the club's teams, across a
+    DateRange left open-ended on one side. venue_scope ALL makes it reach every
+    fixture an A team is in -- hosted by A or not -- and, unlike the removed
+    club_latest_match_date / earliest_match_date cutoffs, it does not exempt
+    fixed_fixtures.
 
     Division 1 here has 3 teams (A1, A2, B1). Club A hosts 4 mutually-conflicting
     fixtures (A1 v A2, A2 v A1, A1 v B1, A2 v B1 -- any two share a team), so club
     A's home_dates below has slack (6 dates) beyond that minimum of 4, leaving room
-    for a cutoff to remove some and still solve.
+    for the blackout to remove some and still solve.
     """
+
+    _A_TEAMS = [
+        fmodel.Team(division=1, club="A", index=1),
+        fmodel.Team(division=1, club="A", index=2),
+    ]
+
+    @classmethod
+    def _blackout_from(cls, start: date) -> fmodel.RangeLimit:
+        """A whole-club end-of-season blackout: no A fixture on or after `start`."""
+        return fmodel.RangeLimit(
+            teams=list(cls._A_TEAMS),
+            match_max=fmodel.Cap(0),
+            ranges=(fmodel.DateRange(start=start),),
+        )
 
     def _params(
         self, *, b_home_dates: list[date] | None = None, **kwargs: Any
     ) -> fmodel.Parameters:
-        teams = [
-            fmodel.Team(division=1, club="A", index=1),
-            fmodel.Team(division=1, club="A", index=2),
-            fmodel.Team(division=1, club="B", index=1),
-        ]
+        teams = [*self._A_TEAMS, fmodel.Team(division=1, club="B", index=1)]
         home_dates = {
             "A": [
                 date(2025, 1, 1),
@@ -875,8 +890,8 @@ class TestClubLatestMatchDate(unittest.TestCase):
             **kwargs,
         )
 
-    # B offers both early dates (playable within A's cutoff) and late ones, so the
-    # scenario stays feasible and the tests can check that A's cutoff pulls the
+    # B offers both early dates (playable within A's blackout) and late ones, so the
+    # scenario stays feasible and the tests can check that A's blackout pulls the
     # B-hosted fixtures against A onto the early dates.
     _B_EARLY_AND_LATE = [
         date(2025, 1, 15),
@@ -885,12 +900,12 @@ class TestClubLatestMatchDate(unittest.TestCase):
         date(2025, 6, 1),
     ]
 
-    def test_cutoff_limits_every_fixture_the_club_is_in(self) -> None:
-        """A cutoff on club A keeps every fixture involving an A team -- hosted by
-        A or not -- on or before it."""
+    def test_blackout_limits_every_fixture_the_club_is_in(self) -> None:
+        """A blackout on club A keeps every fixture involving an A team -- hosted by
+        A or not -- before it."""
         params = self._params(
             b_home_dates=self._B_EARLY_AND_LATE,
-            club_latest_match_date={"A": date(2025, 2, 8)},
+            match_count_limits=[self._blackout_from(date(2025, 2, 9))],
         )
         fixtures = list(fmodel.solve(params).fixtures)
         a_involved = [
@@ -900,46 +915,53 @@ class TestClubLatestMatchDate(unittest.TestCase):
         ]
         self.assertEqual(len(a_involved), 6)  # 4 A-hosted + B1 v A1 + B1 v A2
         for sf in a_involved:
-            self.assertLessEqual(sf.date, date(2025, 2, 8))
+            self.assertLess(sf.date, date(2025, 2, 9))
 
-    def test_cutoff_also_blocks_the_club_playing_away(self) -> None:
+    def test_blackout_also_blocks_the_club_playing_away(self) -> None:
         """B1 v A1 and B1 v A2 are hosted by B, which offers May/June dates, but
-        A's cutoff still forces them onto B's early dates."""
+        A's blackout still forces them onto B's early dates."""
         params = self._params(
             b_home_dates=self._B_EARLY_AND_LATE,
-            club_latest_match_date={"A": date(2025, 2, 8)},
+            match_count_limits=[self._blackout_from(date(2025, 2, 9))],
         )
         fixtures = list(fmodel.solve(params).fixtures)
         b_hosted = [sf for sf in fixtures if sf.fixture.home_team.club == "B"]
         self.assertEqual(len(b_hosted), 2)
         for sf in b_hosted:
-            self.assertLessEqual(sf.date, date(2025, 2, 8))
+            self.assertLess(sf.date, date(2025, 2, 9))
 
-    def test_cutoff_after_a_needed_away_date_makes_it_infeasible(self) -> None:
-        """With B hosting only after A's cutoff, B1 v A1 / B1 v A2 have no
+    def test_blackout_after_a_needed_away_date_makes_it_infeasible(self) -> None:
+        """With B hosting only after A's blackout, B1 v A1 / B1 v A2 have no
         schedulable date -- required fixtures, so solve() raises."""
-        params = self._params(club_latest_match_date={"A": date(2025, 2, 8)})
+        params = self._params(
+            match_count_limits=[self._blackout_from(date(2025, 2, 9))]
+        )
         with self.assertRaisesRegex(ValueError, "no schedulable date"):
             fmodel.solve(params)
 
     def test_other_clubs_unaffected(self) -> None:
-        """A cutoff on A doesn't constrain a fixture between two non-A teams."""
-        teams = [
-            fmodel.Team(division=1, club="A", index=1),
-            fmodel.Team(division=1, club="B", index=1),
-            fmodel.Team(division=1, club="C", index=1),
-        ]
+        """A blackout on A doesn't constrain a fixture between two non-A teams."""
         params = _params(
-            teams=teams,
+            teams=[
+                fmodel.Team(division=1, club="A", index=1),
+                fmodel.Team(division=1, club="B", index=1),
+                fmodel.Team(division=1, club="C", index=1),
+            ],
             home_dates={
                 "A": [date(2025, 1, 1), date(2025, 1, 15)],
                 # Early dates keep A's away legs at B/C schedulable within its
-                # cutoff; the late dates carry the B-C fixtures.
+                # blackout; the late dates carry the B-C fixtures.
                 "B": [date(2025, 1, 8), date(2025, 6, 1)],
                 "C": [date(2025, 1, 22), date(2025, 6, 8)],
             },
             min_gap_days=7,
-            club_latest_match_date={"A": date(2025, 2, 1)},
+            match_count_limits=[
+                fmodel.RangeLimit(
+                    teams=[fmodel.Team(division=1, club="A", index=1)],
+                    match_max=fmodel.Cap(0),
+                    ranges=(fmodel.DateRange(start=date(2025, 2, 2)),),
+                )
+            ],
         )
         fixtures = list(fmodel.solve(params).fixtures)
         bc = [
@@ -951,110 +973,44 @@ class TestClubLatestMatchDate(unittest.TestCase):
         for sf in bc:
             self.assertGreater(sf.date, date(2025, 2, 1))
 
-    def test_no_cutoff_by_default(self) -> None:
+    def test_no_blackout_by_default(self) -> None:
         params = self._params()
         fixtures = list(fmodel.solve(params).fixtures)
         self.assertTrue(any(sf.date > date(2025, 4, 1) for sf in fixtures))
 
-    def test_fixed_fixture_after_cutoff_rejected(self) -> None:
+    def test_open_ended_start_blackout_keeps_new_fixtures_after_it(self) -> None:
+        """The mirror case -- a season start: a blackout open-ended at the start
+        (no earliest date) keeps every A fixture on or after its end. Four of A's
+        six dates survive, the minimum needed (see class docstring)."""
+        params = self._params(
+            match_count_limits=[
+                fmodel.RangeLimit(
+                    teams=list(self._A_TEAMS),
+                    match_max=fmodel.Cap(0),
+                    ranges=(fmodel.DateRange(end=date(2025, 1, 31)),),
+                )
+            ],
+        )
+        fixtures = list(fmodel.solve(params).fixtures)
+        self.assertTrue(fixtures)
+        for sf in fixtures:
+            if "A" in (sf.fixture.home_team.club, sf.fixture.away_team.club):
+                self.assertGreater(sf.date, date(2025, 1, 31))
+
+    def test_fixed_fixture_in_blackout_rejected(self) -> None:
+        """Unlike the old cutoffs, a matches: {max: 0} blackout does not exempt a
+        pinned fixture that falls inside it."""
         a1 = fmodel.Team(division=1, club="A", index=1)
         a2 = fmodel.Team(division=1, club="A", index=2)
         fixed = fmodel.ScheduledFixture(
             fixture=fmodel.Fixture(home_team=a1, away_team=a2), date=date(2025, 3, 8)
         )
         params = self._params(
-            fixed_fixtures=[fixed], club_latest_match_date={"A": date(2025, 2, 8)}
+            fixed_fixtures=[fixed],
+            match_count_limits=[self._blackout_from(date(2025, 2, 9))],
         )
         with self.assertRaises(ValueError):
             fmodel.solve(params)
-
-
-class TestEarliestMatchDate(unittest.TestCase):
-    """Test cases for the earliest_match_date constraint.
-
-    Division 1 here has only 3 teams (A1, A2, B1), so every pair of the 4
-    fixtures that club A hosts (A1 v A2, A2 v A1, A1 v B1, A2 v B1) shares a
-    team -- with only 3 teams to draw from, any two of those 4 fixtures must
-    involve at least one of the same two teams. That means all 4 need distinct
-    dates regardless of max_concurrent_matches, so club A's home_dates
-    below deliberately has some slack (6 dates) beyond that minimum of 4, to
-    leave room for a cutoff to remove some of them and still solve.
-    """
-
-    def _params(self, **kwargs: Any) -> fmodel.Parameters:
-        teams = [
-            fmodel.Team(division=1, club="A", index=1),
-            fmodel.Team(division=1, club="A", index=2),
-            fmodel.Team(division=1, club="B", index=1),
-        ]
-        home_dates = {
-            "A": [
-                date(2025, 1, 1),
-                date(2025, 1, 8),
-                date(2025, 2, 1),
-                date(2025, 2, 8),
-                date(2025, 3, 1),
-                date(2025, 3, 8),
-            ],
-            "B": [date(2025, 5, 1), date(2025, 6, 1)],
-        }
-        return _params(
-            teams=teams,
-            home_dates=home_dates,
-            max_concurrent_matches={
-                "A": _home_limit(2),
-                "B": _home_limit(1),
-            },
-            min_gap_days=7,
-            **kwargs,
-        )
-
-    def test_new_fixtures_respect_the_cutoff(self) -> None:
-        """A cutoff that excludes some (but not all) of club A's dates still
-        leaves enough of them (4, the minimum -- see class docstring) to solve."""
-        params = self._params(earliest_match_date=date(2025, 2, 1))
-        fixtures = list(fmodel.solve(params).fixtures)
-        self.assertTrue(fixtures)
-        for sf in fixtures:
-            self.assertGreaterEqual(sf.date, date(2025, 2, 1))
-
-    def test_cutoff_after_all_of_a_clubs_home_dates_makes_the_solve_infeasible(
-        self,
-    ) -> None:
-        """A cutoff after all of club A's home dates makes every A-hosted fixture
-        unschedulable. Those fixtures are still required, so solve() raises rather
-        than returning a schedule that silently omits them -- an already-played
-        match belongs in fixed_fixtures (which bypass earliest_match_date), not
-        inferred from a truncated result."""
-        params = self._params(earliest_match_date=date(2025, 4, 1))
-        with self.assertRaisesRegex(ValueError, "no schedulable date"):
-            fmodel.solve(params)
-
-    def test_fixed_fixture_before_cutoff_still_solves(self) -> None:
-        """Unlike latest_internal_match_date, a fixed fixture dated before the cutoff
-        is not rejected: fixed_fixtures represents matches that are already
-        committed (possibly already played), so an old date there is expected --
-        this is what lets the solver be re-run after some home dates have passed
-        without breaking on fixtures already fixed to those dates.
-        """
-        a1 = fmodel.Team(division=1, club="A", index=1)
-        a2 = fmodel.Team(division=1, club="A", index=2)
-        fixed = fmodel.ScheduledFixture(
-            fixture=fmodel.Fixture(home_team=a1, away_team=a2), date=date(2025, 1, 1)
-        )
-        params = self._params(
-            fixed_fixtures=[fixed], earliest_match_date=date(2025, 2, 1)
-        )
-        fixtures = list(fmodel.solve(params).fixtures)
-        self.assertIn(fixed, fixtures)
-
-    def test_no_cutoff_by_default(self) -> None:
-        """Without earliest_match_date, all 6 fixtures solve as normal (the tight
-        4-distinct-A-dates requirement from the class docstring, with no cutoff
-        trimming club A's 6 candidate dates, is comfortably satisfiable)."""
-        params = self._params()
-        fixtures = list(fmodel.solve(params).fixtures)
-        self.assertEqual(len(fixtures), 6)
 
 
 class TestExcludedFixtures(unittest.TestCase):
