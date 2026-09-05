@@ -37,7 +37,7 @@ _SCHEMA_PATH = Path(__file__).parent / "spec-schema.json"
 # drift check that new fields added to one aren't forgotten in the other.
 _FULL_EXAMPLE = """
 name: "2025-26 Season"
-draft: false
+is_final: true
 description: "Final schedule; refer to ECF LMS for authoritative dates."
 latest_internal_match_date: 2025-12-31
 

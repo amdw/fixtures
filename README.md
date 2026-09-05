@@ -273,8 +273,10 @@ None of these files are committed: they're all build artifacts, derived from
 
 Venue name (not the address), start time and time limit on each match are
 always the *home* team's club's values. If the spec sets `name`, every HTML
-page shows it in a banner above the page title; if `draft: true` is also set,
-that banner is made prominent and prefixed "DRAFT". (The CSV files carry the
+page shows it in a banner above the page title. Unless the spec sets
+`is_final: true`, that banner is made prominent and prefixed "NOT FINAL" (and
+the page title gets a "(NOT FINAL)" suffix); set `is_final: true` once the
+fixture list is finalised to drop the warning. (The CSV files carry the
 fixture data only, with no such banner.)
 
 ## Development

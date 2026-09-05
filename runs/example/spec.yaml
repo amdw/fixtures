@@ -1,6 +1,5 @@
 # yaml-language-server: $schema=../../spec-schema.json
 name: "2025-26 Season"
-draft: true
 # This is a static reference example, not a live season, so its whole (long past)
 # season window is exempted from the default (today) earliest_match_date cutoff.
 earliest_match_date: "2025-01-01"

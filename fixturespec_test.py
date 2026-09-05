@@ -248,13 +248,13 @@ class TestLoadSpec(unittest.TestCase):
             )
             self.assertEqual(_cap_base(limit.match_max), 1)
         self.assertEqual(spec.name, "")
-        self.assertFalse(spec.draft)
+        self.assertFalse(spec.is_final)
 
-    def test_run_name_and_draft(self) -> None:
-        path = self._write(_MINIMAL_SPEC + '\nname: "2025-26 Season"\ndraft: true\n')
+    def test_run_name_and_is_final(self) -> None:
+        path = self._write(_MINIMAL_SPEC + '\nname: "2025-26 Season"\nis_final: true\n')
         spec = fixturespec.load_spec(path)
         self.assertEqual(spec.name, "2025-26 Season")
-        self.assertTrue(spec.draft)
+        self.assertTrue(spec.is_final)
 
     def test_description(self) -> None:
         path = self._write(
@@ -272,9 +272,9 @@ class TestLoadSpec(unittest.TestCase):
         spec = fixturespec.load_spec(path)
         self.assertEqual(spec.description, "")
 
-    def test_draft_must_be_a_boolean(self) -> None:
-        path = self._write(_MINIMAL_SPEC + "\ndraft: notabool\n")
-        with self.assertRaisesRegex(fixturespec.SpecError, "draft"):
+    def test_is_final_must_be_a_boolean(self) -> None:
+        path = self._write(_MINIMAL_SPEC + "\nis_final: notabool\n")
+        with self.assertRaisesRegex(fixturespec.SpecError, "is_final"):
             fixturespec.load_spec(path)
 
     def test_name_must_be_a_string(self) -> None:

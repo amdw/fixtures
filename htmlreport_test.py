@@ -39,7 +39,7 @@ def _generate(
     *,
     excluded_fixtures: Collection[fmodel.Fixture] = (),
     name: str = "",
-    draft: bool = False,
+    is_final: bool = True,
     description: str = "",
     division_schemes: Mapping[int, fmodel.FixtureScheme] | None = None,
     compliance_note: str = "",
@@ -57,7 +57,7 @@ def _generate(
         parameters=parameters,
         clubs=clubs,
         name=name,
-        draft=draft,
+        is_final=is_final,
         description=description,
     )
     return htmlreport.generate_report(
@@ -480,11 +480,11 @@ class TestGenerateReport(unittest.TestCase):
         content = (out2 / "club-lonely-fc.html").read_text()
         self.assertIn("No matches", content)
 
-    def test_no_name_or_draft_by_default(self) -> None:
+    def test_no_name_or_not_final_banner_for_final_runs(self) -> None:
         for filename in ["all-matches.html", "division-1.html", "club-harrow.html"]:
             content = (self.output_dir / filename).read_text()
             self.assertNotIn('class="banner"', content)
-            self.assertNotIn('class="draft-label"', content)
+            self.assertNotIn('class="not-final-label"', content)
         self.assertNotIn('class="banner"', self.index_path.read_text())
 
     def test_no_description_by_default(self) -> None:
@@ -493,7 +493,7 @@ class TestGenerateReport(unittest.TestCase):
             self.assertNotIn('class="description"', content)
         self.assertNotIn('class="description"', self.index_path.read_text())
 
-    def test_run_name_and_draft_shown_on_every_page(self) -> None:
+    def test_run_name_and_not_final_banner_shown_on_every_page(self) -> None:
         out2 = Path(self._tmpdir.name) / "out-named"
         index_path = _generate(
             fmodel.SolveResult(self.fixtures),
@@ -501,7 +501,7 @@ class TestGenerateReport(unittest.TestCase):
             self.clubs,
             out2,
             name="2025-26 Season",
-            draft=True,
+            is_final=False,
         )
         for filename in [
             "all-matches.html",
@@ -510,8 +510,8 @@ class TestGenerateReport(unittest.TestCase):
             index_path.name,
         ]:
             content = (out2 / filename).read_text()
-            self.assertIn('<div class="banner draft">', content)
-            self.assertIn('<span class="draft-label">DRAFT</span>', content)
+            self.assertIn('<div class="banner not-final">', content)
+            self.assertIn('<span class="not-final-label">NOT FINAL</span>', content)
             self.assertIn('<span class="run-name">2025-26 Season</span>', content)
 
     def test_description_shown_on_every_page(self) -> None:
@@ -563,7 +563,7 @@ class TestGenerateReport(unittest.TestCase):
             )
 
     def test_head_title_is_bare_page_title_without_a_run_name(self) -> None:
-        # setUp generates with no run name and draft=False.
+        # setUp generates with no run name and is_final=True.
         self.assertIn(
             "<title>All matches</title>",
             (self.output_dir / "all-matches.html").read_text(),
@@ -578,7 +578,7 @@ class TestGenerateReport(unittest.TestCase):
         )
         self.assertIn("<title>Fixtures</title>", self.index_path.read_text())
 
-    def test_head_title_carries_run_name_club_or_division_and_draft(self) -> None:
+    def test_head_title_carries_run_name_club_or_division_and_not_final(self) -> None:
         out2 = Path(self._tmpdir.name) / "out-head-title"
         index_path = _generate(
             fmodel.SolveResult(self.fixtures),
@@ -586,23 +586,25 @@ class TestGenerateReport(unittest.TestCase):
             self.clubs,
             out2,
             name="2025-26 Season",
-            draft=True,
+            is_final=False,
         )
-        self.assertIn("<title>2025-26 Season (DRAFT)</title>", index_path.read_text())
         self.assertIn(
-            "<title>2025-26 Season – All matches (DRAFT)</title>",
+            "<title>2025-26 Season (NOT FINAL)</title>", index_path.read_text()
+        )
+        self.assertIn(
+            "<title>2025-26 Season – All matches (NOT FINAL)</title>",
             (out2 / "all-matches.html").read_text(),
         )
         self.assertIn(
-            "<title>2025-26 Season – Division 1 (DRAFT)</title>",
+            "<title>2025-26 Season – Division 1 (NOT FINAL)</title>",
             (out2 / "division-1.html").read_text(),
         )
         self.assertIn(
-            "<title>2025-26 Season – Harrow (DRAFT)</title>",
+            "<title>2025-26 Season – Harrow (NOT FINAL)</title>",
             (out2 / "club-harrow.html").read_text(),
         )
 
-    def test_head_title_omits_draft_marker_for_non_draft_runs(self) -> None:
+    def test_head_title_omits_not_final_marker_for_final_runs(self) -> None:
         out2 = Path(self._tmpdir.name) / "out-head-title-final"
         index_path = _generate(
             fmodel.SolveResult(self.fixtures),
@@ -610,6 +612,7 @@ class TestGenerateReport(unittest.TestCase):
             self.clubs,
             out2,
             name="2025-26 Season",
+            is_final=True,
         )
         self.assertIn("<title>2025-26 Season</title>", index_path.read_text())
         self.assertIn(
@@ -625,7 +628,7 @@ class TestGenerateReport(unittest.TestCase):
             self.clubs,
             out2,
             name="2025-26 Season",
-            draft=True,
+            is_final=False,
         )
         content = index_path.read_text()
         self.assertIn(">All matches</a>", content)
