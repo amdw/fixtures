@@ -31,6 +31,7 @@ run all of CI's build steps locally and confirm they pass (see
 - `ruff format --check .`
 - `ruff check .`
 - `mypy .`
+- `vulture`
 - `python all_tests.py`
 
 Fix any failures (e.g. reformat with `ruff format .`) as part of finishing

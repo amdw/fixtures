@@ -64,7 +64,7 @@ class _NoAliasDumper(yaml.SafeDumper):
     needlessly hard to read and diff.
     """
 
-    def ignore_aliases(self, data: Any) -> bool:
+    def ignore_aliases(self, data: Any) -> bool:  # noqa: V105 (PyYAML calls this)
         return True
 
 

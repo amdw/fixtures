@@ -44,6 +44,10 @@ jobs:
         run: |
           uv run mypy .
 
+      - name: Dead code check with Vulture
+        run: |
+          uv run vulture
+
       - name: Run tests
         run: |
           uv run python all_tests.py --verbose
