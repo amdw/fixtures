@@ -15,12 +15,18 @@
 """Solve a YAML fixture specification and write its solution to a solution.yaml file.
 
 Usage:
-    python solve.py <spec.yaml> [output_dir]
+    python solve.py [--allow-past-matches] <spec.yaml> [output_dir]
 
 <output_dir> defaults to the spec file's own directory, so the usual layout keeps
 spec.yaml and solution.yaml side by side in the same run folder (e.g.
 runs/2025-26-season/). Re-running this overwrites the previous solution.yaml in
 place.
+
+By default the solve aborts without writing anything if any match in the solved
+schedule falls before today -- the spec no longer carries an implicit "no play in
+the past" cutoff, so this guards against re-solving a spec whose home dates have
+partly passed. Pass --allow-past-matches to write the solution anyway (e.g.
+re-solving a past season for reference).
 
 report.py can then (re)generate the HTML report from solution.yaml -- without
 needing to re-solve -- any time the report format changes.
@@ -30,6 +36,9 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
+from collections.abc import Collection
+from datetime import date
 from pathlib import Path
 
 import fixturesolution
@@ -37,14 +46,54 @@ import fixturespec
 import fmodel
 
 
-def solve(spec_path: Path, output_dir: Path) -> Path:
+class PastMatchError(Exception):
+    """Raised when a solved schedule contains a match before today and
+    --allow-past-matches was not given."""
+
+
+def _reject_past_matches(fixtures: Collection[fmodel.ScheduledFixture]) -> None:
+    """Raise PastMatchError if any scheduled fixture falls before today. Whether a
+    fixture was pinned via fixed_fixtures or newly scheduled makes no difference:
+    a solution.yaml is only ever written for a season still to be played."""
+    today = date.today()
+    past = sorted(
+        (sf for sf in fixtures if sf.date < today),
+        key=lambda sf: (
+            sf.date,
+            sf.fixture.home_team.name,
+            sf.fixture.away_team.name,
+        ),
+    )
+    if not past:
+        return
+    shown = ", ".join(
+        f"{sf.fixture.home_team.name} vs {sf.fixture.away_team.name} on "
+        f"{sf.date.isoformat()}"
+        for sf in past[:12]
+    )
+    if len(past) > 12:
+        shown += f", ... (+{len(past) - 12} more)"
+    raise PastMatchError(
+        f"{len(past)} scheduled match(es) fall before today "
+        f"({today.isoformat()}): {shown}. Re-run with --allow-past-matches to "
+        "write the solution anyway (e.g. re-solving a past season for reference)."
+    )
+
+
+def solve(
+    spec_path: Path, output_dir: Path, *, allow_past_matches: bool = False
+) -> Path:
     """Solve the given spec and write its solution.yaml into output_dir. Returns the
     path to the solution file.
+
+    Raises PastMatchError (before writing anything) if the solved schedule
+    contains a match before today and allow_past_matches is False.
     """
     spec = fixturespec.load_spec(spec_path)
     team_ids = fixturespec.load_team_ids(spec_path)
-    parameters = spec.parameters
-    result = fmodel.solve(parameters)
+    result = fmodel.solve(spec.parameters)
+    if not allow_past_matches:
+        _reject_past_matches(result.fixtures)
     output_dir.mkdir(parents=True, exist_ok=True)
     solution_path = output_dir / "solution.yaml"
     fixturesolution.save_solution(result, team_ids, solution_path)
@@ -62,12 +111,23 @@ def main() -> None:
         nargs="?",
         help="Directory to write solution.yaml into (default: the spec file's own directory)",
     )
+    parser.add_argument(
+        "--allow-past-matches",
+        action="store_true",
+        help="Write the solution even if it schedules a match before today",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 
     output_dir = args.output_dir if args.output_dir is not None else args.spec.parent
-    solution_path = solve(args.spec, output_dir)
+    try:
+        solution_path = solve(
+            args.spec, output_dir, allow_past_matches=args.allow_past_matches
+        )
+    except PastMatchError as e:
+        print(f"Not writing a solution: {e}", file=sys.stderr)
+        raise SystemExit(1) from e
 
     print(f"Wrote solution to {solution_path}")
 

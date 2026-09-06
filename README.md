@@ -191,13 +191,16 @@ entry is how a club (or, scoped with `teams: [...]`, one of its teams) says it
 can't play away on those dates; the `venue_scope: home` form says a team can't
 host; and a whole-club `matches: {max: 0}` `date_ranges` entry under `defaults`
 is how a spec-wide "nobody plays these dates" block (e.g. Christmas) is
-expressed. Every spec-wide default entry carries a unique `override_key`; a club
-entry repeating one replaces that default for the club, and a club entry with no
-`override_key` is additive.
+expressed. A `date_ranges` entry left open-ended on one side -- `{end_date:
+...}` or `{start_date: ...}` -- with `matches: {max: 0}` is in turn how a
+season start (as a `defaults` block) or a club's early end of season (a per-club
+entry) is set. Every spec-wide default entry carries a unique `override_key`; a
+club entry repeating one replaces that default for the club, and a club entry
+with no `override_key` is additive.
 
 That's only a fraction of what the format supports -- pinned and withheld
-fixtures, per-club match-date cutoffs, and more. For the full field-by-field
-reference, see:
+fixtures, season-boundary and per-club date cutoffs, and more. For the full
+field-by-field reference, see:
 
 - **[spec-schema.json](spec-schema.json)**, the JSON Schema every field is
   defined in (rendered to a browsable reference page at
