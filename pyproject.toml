@@ -16,6 +16,7 @@ dev = [
     "types-pyyaml",
     "jsonschema",
     "types-jsonschema",
+    "vulture",
     { include-group = "docs" },
 ]
 # Only needed to build the schema reference page (build_schema_docs.py) for the
@@ -105,6 +106,17 @@ no_implicit_optional = true
 [[tool.mypy.overrides]]
 module = ["json_schema_for_humans.*"]
 ignore_missing_imports = true
+
+[tool.vulture]
+# Dead-code detection (see issue #78). Run as `uv run vulture`.
+paths = ["."]
+exclude = [".venv/"]
+# Unused functions/methods/classes are only reported at 60% confidence (higher
+# tiers are just unused imports and unreachable-after-return), so the threshold
+# has to stay here to catch them. Suppress individual false positives with a
+# `# noqa: V1xx` comment on the offending line (V101 attribute, V102 class,
+# V103 function, V105 method, V106 property, V107 variable).
+min_confidence = 60
 
 [tool.pytest]
 # If pytest is installed, configure test discovery
