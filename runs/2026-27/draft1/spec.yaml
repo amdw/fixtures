@@ -27,7 +27,7 @@ clubs:
     home_venue_name: "Cumberland Lawn Tennis Club"
     home_venue_address: "25 Alvanley Gardens, London NW6 1JD"
     home_start_time: "19:30"
-    home_time_limit: 60+30
+    home_time_limit: 60+15
   west-london:
     name: West London
     home_venue_name: "Chiswick Town Hall"
