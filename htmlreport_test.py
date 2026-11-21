@@ -276,12 +276,57 @@ class TestGenerateReport(unittest.TestCase):
         # 3 distinct fixtures touch Harrow (incl. the Harrow 1 v Harrow 2 derby); the
         # consolidated table must list each exactly once, not twice for the derby.
         consolidated_table = harrow_page.split("<h2")[0]
-        self.assertEqual(consolidated_table.count("<tr>"), 4)  # header + 3 fixtures
+        self.assertEqual(consolidated_table.count("<tr"), 4)  # header + 3 fixtures
         self.assertIn('<h2 id="harrow-1">Harrow 1', harrow_page)
         self.assertIn('<h2 id="harrow-2">Harrow 2', harrow_page)
         # Harrow 1's own table should list all 3 of its fixtures (2 external + the derby)
         harrow1_section = harrow_page.split('<h2 id="harrow-1">')[1].split("<h2")[0]
-        self.assertEqual(harrow1_section.count("<tr>"), 4)  # header + 3 fixtures
+        self.assertEqual(harrow1_section.count("<tr"), 4)  # header + 3 fixtures
+
+    def test_club_consolidated_table_highlights_matches_at_its_own_venue(
+        self,
+    ) -> None:
+        harrow_page = (self.output_dir / "club-harrow.html").read_text()
+        consolidated_table = harrow_page.split("<h2")[0].split("<tbody>")[1]
+        rows = consolidated_table.split("</tr>")[:-1]
+        self.assertEqual(len(rows), 3)
+        # 1 Sep Harrow 1 v Ealing 1 (home), 8 Sep Ealing 1 v Harrow 1 (away),
+        # 15 Sep Harrow 1 v Harrow 2 (derby, at Harrow's venue).
+        self.assertIn('<tr class="at-home-venue"><td>Mon 01 Sep 2025', rows[0])
+        self.assertIn("<tr><td>Mon 08 Sep 2025", rows[1])
+        self.assertIn('<tr class="at-home-venue"><td>Mon 15 Sep 2025', rows[2])
+
+    def test_club_team_table_highlights_nominal_away_derby_at_own_venue(
+        self,
+    ) -> None:
+        harrow_page = (self.output_dir / "club-harrow.html").read_text()
+        harrow2_section = harrow_page.split('<h2 id="harrow-2">')[1].split("<h2")[0]
+        self.assertIn(
+            '<tr class="at-home-venue"><td>Mon 15 Sep 2025</td><td>Harrow 1</td>'
+            f"<td>Away</td><td>{htmlreport._HOME_ICON}Harrow Leisure Centre</td>",
+            harrow2_section,
+        )
+        harrow1_section = harrow_page.split('<h2 id="harrow-1">')[1].split("<h2")[0]
+        self.assertIn(
+            "<tr><td>Mon 08 Sep 2025</td><td>Ealing 1</td><td>Away</td>",
+            harrow1_section,
+        )
+
+    def test_club_page_explains_home_venue_highlighting(self) -> None:
+        harrow_page = (self.output_dir / "club-harrow.html").read_text()
+        header_part = harrow_page.split("<table>")[0]
+        self.assertIn(
+            f'<p class="home-venue-key">{htmlreport._HOME_ICON} marks matches hosted '
+            "by Harrow at Harrow Leisure Centre</p>",
+            header_part,
+        )
+
+    def test_home_venue_highlighting_only_on_club_pages(self) -> None:
+        for page in ("all-matches.html", "division-1.html", "index.html"):
+            content = (self.output_dir / page).read_text()
+            self.assertNotIn('<tr class="at-home-venue">', content, page)
+            self.assertNotIn('class="home-icon"', content, page)
+            self.assertNotIn('class="home-venue-key"', content, page)
 
     def test_team_heading_has_stable_anchor_id(self) -> None:
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
@@ -690,8 +735,9 @@ class TestExcludedFixturesInReport(unittest.TestCase):
         harrow_page = (self.output_dir / "club-harrow.html").read_text()
         harrow2_section = harrow_page.split('<h2 id="harrow-2">')[1].split("<h2")[0]
         expected_row = (
-            "<tr><td><strong>TBC</strong></td><td>Ealing 1</td><td>Home</td>"
-            "<td>Harrow Leisure Centre</td><td>19:30</td><td>75+15</td><td></td></tr>"
+            '<tr class="at-home-venue"><td><strong>TBC</strong></td><td>Ealing 1</td>'
+            "<td>Home</td>"
+            f"<td>{htmlreport._HOME_ICON}Harrow Leisure Centre</td><td>19:30</td><td>75+15</td><td></td></tr>"
         )
         self.assertIn(expected_row, harrow2_section)
 
@@ -730,6 +776,49 @@ class TestExcludedFixturesInReport(unittest.TestCase):
         self.assertIn("TBC", div2)
         self.assertIn("Hendon 1", div2)
         self.assertIn("Wembley 1", div2)
+
+
+class TestSharedVenueMarking(unittest.TestCase):
+    """Two clubs with the same home venue name: home-venue marking goes by home
+    club, not venue, so a match hosted by the other club isn't marked (keeping
+    it consistent with the home/away date summary)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.output_dir = Path(self._tmpdir.name) / "out"
+
+        clubs = {
+            "hammersmith": _club("Hammersmith", venue="MindSports"),
+            "kings-head": _club("Kings Head", venue="MindSports"),
+            "ealing": _club("Ealing", venue="Ealing Sports Hall"),
+        }
+        hammersmith1 = fmodel.Team(division=1, club="hammersmith", index=1)
+        kings_head1 = fmodel.Team(division=1, club="kings-head", index=1)
+        ealing1 = fmodel.Team(division=1, club="ealing", index=1)
+        fixtures = [
+            _sf(hammersmith1, kings_head1, date(2025, 9, 1)),
+            _sf(ealing1, kings_head1, date(2025, 9, 8)),
+        ]
+        _generate(
+            fmodel.SolveResult(fixtures),
+            [hammersmith1, kings_head1, ealing1],
+            clubs,
+            self.output_dir,
+        )
+
+    def test_match_hosted_by_venue_sharing_club_is_not_marked(self) -> None:
+        page = (self.output_dir / "club-kings-head.html").read_text()
+        self.assertNotIn('<tr class="at-home-venue">', page)
+        team_section = page.split('<h2 id="kings-head-1">')[1]
+        self.assertIn(
+            "<tr><td>Mon 01 Sep 2025</td><td>Hammersmith 1</td>"
+            "<td>Away</td><td>MindSports</td>",
+            team_section,
+        )
+        hammersmith_page = (self.output_dir / "club-hammersmith.html").read_text()
+        self.assertIn('<tr class="at-home-venue"><td>Mon 01 Sep 2025', hammersmith_page)
 
 
 class TestWriteRunsIndex(unittest.TestCase):
