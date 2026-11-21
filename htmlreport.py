@@ -54,6 +54,8 @@ _STYLE = """
     th, td { border: 1px solid #ccc; padding: 0.4rem 0.8rem; text-align: left; }
     th { background: #f0f0f0; }
     tr:nth-child(even) { background: #fafafa; }
+    .home-icon { display: inline-block; width: 1.5em; line-height: 1; }
+    .home-venue-key { margin-top: -1rem; margin-bottom: 1.5rem; color: #333; }
     a { color: #0645ad; }
     nav ul { list-style: none; padding: 0; }
     nav li { margin-bottom: 0.3rem; }
@@ -170,13 +172,52 @@ def _table_cell(cell: str) -> str:
     )
 
 
-def _table(headers: list[str], rows: list[list[str]]) -> str:
+@dataclasses.dataclass(frozen=True)
+class _Row:
+    """One table row's cell texts, plus whether the match it describes is at the
+    home venue of the club whose page it appears on (see _at_club_venue)."""
+
+    cells: list[str]
+    at_home_venue: bool = False
+
+
+def _at_club_venue(home_team: fmodel.Team, club_id: str | None) -> bool:
+    """Whether a match with this home team is played at club_id's own venue. Only
+    club pages pass a club_id; elsewhere (club_id None) no row is marked.
+
+    This goes by home club, not venue: a match hosted by another club that
+    happens to share this club's venue is not marked. That keeps the marking
+    consistent with the club page's home/away date summary (see
+    reportdata.club_date_counts). Venues have no identity of their own in the
+    spec yet (only a per-club name); once they do (see issue #109), consider
+    marking by venue instead."""
+    return club_id is not None and home_team.club == club_id
+
+
+_HOME_ICON = (
+    '<span class="home-icon" role="img" aria-label="Home venue">\U0001f3e0</span>'
+)
+
+
+def _table_row(row: _Row, venue_col: int | None) -> str:
+    """A <tr>, marked with a house icon leading its venue cell (and an
+    at-home-venue class) if the row is at_home_venue."""
+    if not row.at_home_venue:
+        return "<tr>" + "".join(_table_cell(cell) for cell in row.cells) + "</tr>\n"
+    cells = [
+        f"<td>{_HOME_ICON}{html.escape(cell)}</td>"
+        if i == venue_col
+        else _table_cell(cell)
+        for i, cell in enumerate(row.cells)
+    ]
+    return '<tr class="at-home-venue">' + "".join(cells) + "</tr>\n"
+
+
+def _table(headers: list[str], rows: list[_Row]) -> str:
     head_html = "".join(f"<th>{html.escape(h)}</th>" for h in headers)
     if rows:
-        body_html = "".join(
-            "<tr>" + "".join(_table_cell(cell) for cell in row) + "</tr>\n"
-            for row in rows
-        )
+        venue_col = headers.index("Venue") if "Venue" in headers else None
+        body_html = "".join(_table_row(row, venue_col) for row in rows)
         count_html = (
             f'<p class="match-count">Total matches: <strong>{len(rows)}</strong></p>\n'
         )
@@ -195,40 +236,47 @@ def _table(headers: list[str], rows: list[list[str]]) -> str:
 
 
 def _rows_with_division(
-    fixtures: Collection[fmodel.ScheduledFixture], clubs: Mapping[str, fmodel.Club]
-) -> list[list[str]]:
+    fixtures: Collection[fmodel.ScheduledFixture],
+    clubs: Mapping[str, fmodel.Club],
+    club_id: str | None = None,
+) -> list[_Row]:
     rows = []
     for sf in reportdata.by_date_home_away(fixtures, clubs, with_division=True):
         home_club = clubs[sf.fixture.home_team.club]
         rows.append(
-            [
-                _fmt_date(sf.date),
-                str(sf.fixture.home_team.division),
-                reportdata.team_name(sf.fixture.home_team, clubs),
-                reportdata.team_name(sf.fixture.away_team, clubs),
-                home_club.home_venue_name,
-                home_club.home_start_time,
-                home_club.home_time_limit,
-            ]
+            _Row(
+                [
+                    _fmt_date(sf.date),
+                    str(sf.fixture.home_team.division),
+                    reportdata.team_name(sf.fixture.home_team, clubs),
+                    reportdata.team_name(sf.fixture.away_team, clubs),
+                    home_club.home_venue_name,
+                    home_club.home_start_time,
+                    home_club.home_time_limit,
+                ],
+                _at_club_venue(sf.fixture.home_team, club_id),
+            )
         )
     return rows
 
 
 def _rows(
     fixtures: Collection[fmodel.ScheduledFixture], clubs: Mapping[str, fmodel.Club]
-) -> list[list[str]]:
+) -> list[_Row]:
     rows = []
     for sf in reportdata.by_date_home_away(fixtures, clubs, with_division=False):
         home_club = clubs[sf.fixture.home_team.club]
         rows.append(
-            [
-                _fmt_date(sf.date),
-                reportdata.team_name(sf.fixture.home_team, clubs),
-                reportdata.team_name(sf.fixture.away_team, clubs),
-                home_club.home_venue_name,
-                home_club.home_start_time,
-                home_club.home_time_limit,
-            ]
+            _Row(
+                [
+                    _fmt_date(sf.date),
+                    reportdata.team_name(sf.fixture.home_team, clubs),
+                    reportdata.team_name(sf.fixture.away_team, clubs),
+                    home_club.home_venue_name,
+                    home_club.home_start_time,
+                    home_club.home_time_limit,
+                ]
+            )
         )
     return rows
 
@@ -241,7 +289,7 @@ def _team_rows(
     team: fmodel.Team,
     fixtures: Collection[fmodel.ScheduledFixture],
     clubs: Mapping[str, fmodel.Club],
-) -> list[list[str]]:
+) -> list[_Row]:
     rows = []
     prev_date: date | None = None
     for sf in reportdata.by_date_opponent(team, fixtures, clubs):
@@ -249,55 +297,65 @@ def _team_rows(
         opponent = sf.fixture.away_team if is_home else sf.fixture.home_team
         home_club = clubs[sf.fixture.home_team.club]
         rows.append(
-            [
-                _fmt_date(sf.date),
-                reportdata.team_name(opponent, clubs),
-                "Home" if is_home else "Away",
-                home_club.home_venue_name,
-                home_club.home_start_time,
-                home_club.home_time_limit,
-                _days_since_previous(prev_date, sf.date),
-            ]
+            _Row(
+                [
+                    _fmt_date(sf.date),
+                    reportdata.team_name(opponent, clubs),
+                    "Home" if is_home else "Away",
+                    home_club.home_venue_name,
+                    home_club.home_start_time,
+                    home_club.home_time_limit,
+                    _days_since_previous(prev_date, sf.date),
+                ],
+                _at_club_venue(sf.fixture.home_team, team.club),
+            )
         )
         prev_date = sf.date
     return rows
 
 
 def _excluded_rows_with_division(
-    fixtures: Collection[fmodel.Fixture], clubs: Mapping[str, fmodel.Club]
-) -> list[list[str]]:
+    fixtures: Collection[fmodel.Fixture],
+    clubs: Mapping[str, fmodel.Club],
+    club_id: str | None = None,
+) -> list[_Row]:
     rows = []
     for f in reportdata.by_home_away(fixtures, clubs, with_division=True):
         home_club = clubs[f.home_team.club]
         rows.append(
-            [
-                "TBC",
-                str(f.home_team.division),
-                reportdata.team_name(f.home_team, clubs),
-                reportdata.team_name(f.away_team, clubs),
-                home_club.home_venue_name,
-                home_club.home_start_time,
-                home_club.home_time_limit,
-            ]
+            _Row(
+                [
+                    "TBC",
+                    str(f.home_team.division),
+                    reportdata.team_name(f.home_team, clubs),
+                    reportdata.team_name(f.away_team, clubs),
+                    home_club.home_venue_name,
+                    home_club.home_start_time,
+                    home_club.home_time_limit,
+                ],
+                _at_club_venue(f.home_team, club_id),
+            )
         )
     return rows
 
 
 def _excluded_rows(
     fixtures: Collection[fmodel.Fixture], clubs: Mapping[str, fmodel.Club]
-) -> list[list[str]]:
+) -> list[_Row]:
     rows = []
     for f in reportdata.by_home_away(fixtures, clubs, with_division=False):
         home_club = clubs[f.home_team.club]
         rows.append(
-            [
-                "TBC",
-                reportdata.team_name(f.home_team, clubs),
-                reportdata.team_name(f.away_team, clubs),
-                home_club.home_venue_name,
-                home_club.home_start_time,
-                home_club.home_time_limit,
-            ]
+            _Row(
+                [
+                    "TBC",
+                    reportdata.team_name(f.home_team, clubs),
+                    reportdata.team_name(f.away_team, clubs),
+                    home_club.home_venue_name,
+                    home_club.home_start_time,
+                    home_club.home_time_limit,
+                ]
+            )
         )
     return rows
 
@@ -306,7 +364,7 @@ def _excluded_team_rows(
     team: fmodel.Team,
     fixtures: Collection[fmodel.Fixture],
     clubs: Mapping[str, fmodel.Club],
-) -> list[list[str]]:
+) -> list[_Row]:
     rows = []
     for f in sorted(
         fixtures,
@@ -318,15 +376,18 @@ def _excluded_team_rows(
         opponent = f.away_team if is_home else f.home_team
         home_club = clubs[f.home_team.club]
         rows.append(
-            [
-                "TBC",
-                reportdata.team_name(opponent, clubs),
-                "Home" if is_home else "Away",
-                home_club.home_venue_name,
-                home_club.home_start_time,
-                home_club.home_time_limit,
-                "",
-            ]
+            _Row(
+                [
+                    "TBC",
+                    reportdata.team_name(opponent, clubs),
+                    "Home" if is_home else "Away",
+                    home_club.home_venue_name,
+                    home_club.home_start_time,
+                    home_club.home_time_limit,
+                    "",
+                ],
+                _at_club_venue(f.home_team, team.club),
+            )
         )
     return rows
 
@@ -362,6 +423,19 @@ def _venue_header(club: fmodel.Club) -> str:
     return (
         f'<p class="venue"><strong>{html.escape(club.home_venue_name)}</strong><br>\n'
         f"{html.escape(club.home_venue_address)}</p>\n"
+    )
+
+
+def _home_venue_key(club: fmodel.Club) -> str:
+    """A one-line key, under a club page's venue header, for the marking of rows
+    the club hosts (see _at_club_venue). Those rows are marked whichever side the
+    club's team is on: a derby between two of its own teams is "Away" for one of
+    them, but still played at home. The wording says "hosted by" rather than just
+    naming the venue, since a club sharing its venue with another doesn't get the
+    other club's home matches marked."""
+    return (
+        f'<p class="home-venue-key">{_HOME_ICON} marks matches hosted by '
+        f"{html.escape(club.name)} at {html.escape(club.home_venue_name)}</p>\n"
     )
 
 
@@ -594,11 +668,12 @@ def generate_report(
         club_name = clubs[club_id].name
         body = (
             _venue_header(clubs[club_id])
+            + _home_venue_key(clubs[club_id])
             + _table(
                 _MATCH_HEADERS_WITH_DIVISION,
-                _rows_with_division(fixtures_by_club.get(club_id, []), clubs)
+                _rows_with_division(fixtures_by_club.get(club_id, []), clubs, club_id)
                 + _excluded_rows_with_division(
-                    excluded_by_club.get(club_id, []), clubs
+                    excluded_by_club.get(club_id, []), clubs, club_id
                 ),
             )
             + _club_date_summary(club_id, fixtures_by_club.get(club_id, []))
